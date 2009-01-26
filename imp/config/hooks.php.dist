@@ -409,7 +409,7 @@ if (!empty($GLOBALS['conf']['kolab']['enabled'])) {
             case 'contact':
                 return $GLOBALS['registry']->get('webroot', 'turba');
 
-            case 'prefs':
+            case 'h-prefs':
                 return $GLOBALS['registry']->get('webroot', 'horde') . '/services/prefs.php?app=horde';
 
             default:
@@ -463,7 +463,7 @@ if (!empty($GLOBALS['conf']['kolab']['enabled'])) {
                     );
                     break;
 
-                case 'prefs':
+                case 'h-prefs':
                     $icons[$name] = array(
                         'icon' => 'prefs.png',
                         'icondir' => $GLOBALS['registry']->getImageDir('horde'),
@@ -474,6 +474,13 @@ if (!empty($GLOBALS['conf']['kolab']['enabled'])) {
             }
 
             return $icons;
+        }
+    }
+    if (!function_exists('_imp_hook_display_folder')) {
+        function _imp_hook_display_folder($mailbox)
+        {
+            $type = Kolab::getMailboxType($mailbox);
+            return empty($type) || $type == 'mail';
         }
     }
 }

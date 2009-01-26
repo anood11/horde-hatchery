@@ -1,0 +1,8 @@
+From: Gunnar Wrobel <p@rdus.de>
+Subject: [PATCH] t/imp/HK/GW/Hide_groupware_folders
+
+Allow to hide the Kolab groupware folders within IMP and DIMP.
+
+Submitted as http://bugs.horde.org/ticket/7831
+
+Signed-off-by: Gunnar Wrobel <p@rdus.de>
