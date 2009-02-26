@@ -1,0 +1,173 @@
+/*************************************************/
+/*                  PAGE ELEMENTS                */
+/*************************************************/
+
+body
+{
+  font-family: Arial, Helvetica, Futura, sans-serif;
+  color: black;
+  margin: 0;
+  padding: 0;
+  font-size: 0.95em;
+  width: 100%;
+  max-width:1400px;
+  }
+
+h1
+{ 
+  font-size: 2em; 
+  margin-top: .3em;
+  text-align: right;
+  padding-top: .3em;
+  padding-right: 0.7em;
+  }
+
+/*************************************************/
+/*                      MENU                     */
+/*************************************************/
+
+#menubase
+{
+  width:100%;
+  height:68px;
+  clear:both;
+}
+
+#submenu_base
+{
+  width:575px;
+  padding-top:9px;
+  margin-right:auto;
+  margin-left:auto;
+  display:block;
+  }
+
+.menuentry a
+{ 
+  background-image:url(/static/img/button_inactive.png);
+  color: #6c6c6c;
+  }
+
+.menuentryselected a, .menuentry a:hover
+{ 
+  background-image:url(/static/img/button_active.png);
+  color: #285c5c;
+  }
+
+.menuentryselected a
+{ 
+  color: #000000;
+  }
+
+.menuentry, .menuentryselected
+{ 
+  width:100px;
+  height:26px;
+  float:left;
+  margin-left:15px;
+  }
+
+#menubase a
+{
+  width:100px;
+  height:19px;
+  display:block;
+  margin-right:auto;
+  margin-left:auto;
+  text-align:center;
+  text-decoration: none;
+  padding-top: 7px;
+  font-weight:bold;
+  font-size:9pt;
+}
+
+/*************************************************/
+/*                   HEADER                      */
+/*************************************************/
+
+#h0
+{ 
+  width:100%;
+  padding:0px;
+  margin:0px;
+  position:absolute;
+  top:15px;
+  min-width:680px;
+  max-width:1400px;
+ }
+
+#h1
+{ 
+  width:100%;
+  padding:0px;
+  margin:0px;
+  float:left;
+ }
+
+#h11
+{ 
+  width:100%;
+  padding:0px;
+  margin:0px;
+  float:left;
+ }
+
+#h12 
+{ 
+  width:100%;
+  padding:0px;
+  margin:0px;
+  float:left;
+  }
+
+#h11i
+{ 
+  width:13.7%;
+  padding:0px;
+  margin:0px;
+  float:left;
+ }
+
+
+#h2 
+{
+  width:100%;
+  padding:0px;
+  margin:0px;
+  float:left;
+  }
+
+#h21i
+{ 
+  width:100%;
+  padding:0px;
+  margin:0px;
+  float:left;
+ }
+
+#h4
+{ 
+  width:100%;
+  height:75px;
+  padding:0px;
+  margin:0px;
+  float:left;
+ }
+
+#topmenu
+{ 
+  width:100%;
+  padding:0px;
+  margin:0px;
+  position:absolute;
+  top:0px;
+  min-width:680px;
+  max-width:1400px;
+ }
+
+#topbg
+{
+  width:100%;
+  height:68px;
+  background-image:url(/static/img/menubase_bg.png);
+}
