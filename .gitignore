@@ -10,7 +10,6 @@ run-tests.log
 .#*
 *.orig
 *.rej
-*/lib/base.local.php
 
 # Don't store compressed JS files in git
 */js/*.js
