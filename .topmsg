@@ -1,0 +1,6 @@
+From: Gunnar Wrobel <p@rdus.de>
+Subject: [PATCH] t/HEAD/Configuration
+
+The configuration for the HEAD version of the Kolab web client.
+
+Signed-off-by: Gunnar Wrobel <p@rdus.de>
