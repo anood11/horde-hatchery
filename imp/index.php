@@ -9,17 +9,9 @@
  * @package IMP
  */
 
-@define('IMP_BASE', dirname(__FILE__));
-$imp_configured = (is_readable(IMP_BASE . '/config/conf.php') &&
-                   is_readable(IMP_BASE . '/config/mime_drivers.php') &&
-                   is_readable(IMP_BASE . '/config/prefs.php') &&
-                   is_readable(IMP_BASE . '/config/servers.php'));
+// Will redirect to login page if not authenticated.
+require_once dirname(__FILE__) . '/lib/Application.php';
+new IMP_Application(array('init' => true));
 
-if (!$imp_configured) {
-    require IMP_BASE . '/../lib/Test.php';
-    Horde_Test::configFilesMissing('IMP', IMP_BASE,
-        array('conf.php', 'mime_drivers.php', 'prefs.php'),
-        array('servers.php' => 'This file controls the default settings for IMP, and also defines the list of available servers if you are using the server list.'));
-}
-
-require IMP_BASE . '/redirect.php';
+// Load initial page as defined by view mode & preferences.
+require IMP_Auth::getInitialPage();

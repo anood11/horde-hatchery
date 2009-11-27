@@ -27,7 +27,7 @@ if (!is_file($fullname . ',v')) {
 $root = escapeShellCmd($VC->sourceroot());
 $file = escapeShellCmd($where . ',v');
 
-if (Util::getFormData('show_image')) {
+if (Horde_Util::getFormData('show_image')) {
     // Pipe out the actual image.
     $args = array('c' => $conf['paths']['cvsgraph_conf'],
                   'r' => $root);
@@ -48,7 +48,7 @@ if (Util::getFormData('show_image')) {
     passthru($conf['paths']['cvsgraph'] . ' ' . $argstr . ' ' . $file);
 } else {
     // Display the wrapper page for the image.
-    $title = sprintf(_("Graph for %s"), Text::htmlAllSpaces($where));
+    $title = sprintf(_("Graph for %s"), Horde_Text_Filter::filter($where, 'space2html', array('charset' => Horde_Nls::getCharset(), 'encode' => true, 'encode_all' => true)));
     $extraLink = Chora::getFileViews($where, 'cvsgraph');
 
     require CHORA_TEMPLATES . '/common-header.inc';

@@ -1,6 +1,6 @@
-*/config/*.local.php
 .DS_Store
-libs
+/lib/
+/libs/
 .cache
 .project
 .settings
@@ -10,20 +10,34 @@ run-tests.log
 .#*
 *.orig
 *.rej
+
+# Ignore locally defined HORDE_BASE config
+*/config/*.local.php
 */lib/base.local.php
 
-# Don't store compressed JS files in git
-*/js/*.js
-
 # Application specific patterns
+ansel/config/*.php
 chora/config/*.php
+gollem/config/*.php
+imp/config/*.php
+imp/config/*.txt
+ingo/config/*.php
+jeta/config/*.php
+kronolith/config/*.php
+nag/config/*.php
+turba/config/*.php
+vilma/config/*.php
+
 framework/Rdo/examples/Horde/Rdo/conf.php
 iPhoto2Ansel/build/
 iPhoto2Ansel/iPhoto2Ansel.xcodeproj/*.pbxuser
 !iPhoto2Ansel/iPhoto2Ansel.xcodeproj/default.pbxuser
 iPhoto2Ansel/iPhoto2Ansel.xcodeproj/*.perspectivev3
 iPhoto2Ansel/*.pbxproject
-imp/config/*.php
-ingo/config/*.php
-jeta/config/*.php
-kronolith/config/*.php
+iPhoto2Ansel/Installer/*.pkg
+ApertureToAnselExportPlugin/build/
+ApertureToAnselExportPlugin/ApertureToAnselExportPlugin.xcodeproj/*.pbxuser
+!ApertureToAnselExportPlugin/ApertureToAnselExportPlugin.xcodeproj/default.pbxuser
+ApertureToAnselExportPlugin/ApertureToAnselExportPlugin.xcodeproj/*.perspectivev3
+ApertureToAnselExportPlugin/*.pbxproject
+ApertureToAnselExportPlugin/Installer/*.pkg

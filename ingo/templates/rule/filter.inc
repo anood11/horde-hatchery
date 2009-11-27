@@ -1,7 +1,7 @@
  <tr style="vertical-align:top">
 <?php if ($cond_num > 0): ?>
   <td>
-   <strong><?php echo ($rule['combine'] == INGO_STORAGE_COMBINE_ALL) ? _("and") : _("or") ?></strong>
+   <strong><?php echo ($rule['combine'] == Ingo_Storage::COMBINE_ALL) ? _("and") : _("or") ?></strong>
   </td>
 <?php elseif (($cond_num == 0) && !$lastfield): ?>
   <td>&nbsp;</td>
@@ -30,7 +30,7 @@
   </td>
 <?php endif; ?>
 <?php if (!$lastfield): ?>
-  <td><?php echo Horde::link('javascript:delete_condition(' . (int)$cond_num . ');', _("Delete Condition")) . Horde::img('delete.png', _("Delete Condition"), null, $registry->getImageDir('horde')) ?></a></td>
+  <td><?php echo Horde::link('javascript:IngoRule.delete_condition(' . (int)$cond_num . ');', _("Delete Condition")) . Horde::img('delete.png', _("Delete Condition"), null, $registry->getImageDir('horde')) ?></a></td>
 <?php elseif ($cond_num != 0): ?>
   <td>&nbsp;</td>
 <?php endif; ?>

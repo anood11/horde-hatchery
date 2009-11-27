@@ -18,7 +18,7 @@ if ($atdir) {
 }
 
 /* Should we pretty-print this output or not? */
-$plain = Util::getFormData('p', 0);
+$plain = Horde_Util::getFormData('p', 0);
 
 /* Create the VC_File object and populate it. */
 try {
@@ -28,7 +28,7 @@ try {
 }
 
 /* Get the revision number. */
-$r = Util::getFormData('r');
+$r = Horde_Util::getFormData('r');
 
 /* If no revision is specified, default to HEAD.  If a revision is
  * specified, it's safe to cache for a long time. */
@@ -75,7 +75,7 @@ if (!$plain) {
     );
     if ($VC->hasFeature('snapshots')) {
         $snapdir = dirname($file->queryPath());
-        $views[] = Horde::widget(Chora::url('browsedir', $snapdir == '.' ? '' : $snapdir, array('rev' => $r)), _("Snapshot"), 'widget', '', '', _("_Snapshot"));
+        $views[] = Horde::widget(Chora::url('browsedir', $snapdir == '.' ? '' : $snapdir . '/', array('onb' => $r)), _("Snapshot"), 'widget', '', '', _("_Snapshot"));
     }
     $extraLink = _("View:") . ' ' . implode(' | ', $views);
 
@@ -85,8 +85,7 @@ if (!$plain) {
     $log_print = Chora::formatLogMessage($log->queryLog());
     $author = Chora::showAuthorName($log->queryAuthor(), true);
 
-    Horde::addScriptFile('prototype.js', 'horde', true);
-    Horde::addScriptFile('stripe.js', 'horde', true);
+    Horde::addScriptFile('stripe.js', 'horde');
     require CHORA_TEMPLATES . '/common-header.inc';
     require CHORA_TEMPLATES . '/menu.inc';
     require CHORA_TEMPLATES . '/headerbar.inc';

@@ -17,13 +17,13 @@ if (!$atdir) {
     exit;
 }
 
-$rev = $VC->hasFeature('snapshots')
-    ? Util::getFormData('rev')
+$onb = $VC->hasFeature('snapshots')
+    ? Horde_Util::getFormData('onb')
     : null;
 
 try {
     $atticFlags = (bool)$acts['sa'];
-    $dir = $VC->getDirObject($where, array('quicklog' => true, 'rev' => $rev, 'showattic' => $atticFlags));
+    $dir = $VC->getDirObject($where, array('quicklog' => true, 'rev' => $onb, 'showattic' => $atticFlags));
     $dir->applySort($acts['sbt'], $acts['ord']);
     $dirList = $dir->queryDirList();
     $fileList = $dir->queryFileList($atticFlags);
@@ -37,7 +37,7 @@ $title = ($where == '')
     : sprintf(_("Source Directory of /%s"), $where);
 
 $extraLink = $VC->hasFeature('deleted')
-    ? Horde::widget(Chora::url('browsedir', $where . '/', array('sa' => ($acts['sa'] ? 0 : 1))), $acts['sa'] ? _("Hide Deleted Files") : _("Show Deleted Files"), 'widget', '', '', $acts['sa'] ? _("Hide _Deleted Files") : _("Show _Deleted Files"))
+    ? Horde::widget(Chora::url('browsedir', $where . '/', array('onb' => $onb, 'sa' => ($acts['sa'] ? 0 : 1))), $acts['sa'] ? _("Hide Deleted Files") : _("Show Deleted Files"), 'widget', '', '', $acts['sa'] ? _("Hide _Deleted Files") : _("Show _Deleted Files"))
     : '';
 
 $umap = array(
@@ -52,19 +52,22 @@ foreach ($umap as $key => $val) {
     if ($acts['sbt'] == $val) {
         $arg['ord'] = !$acts['ord'];
     }
-    $url[$key] = Chora::url('browsedir', $where . '/', $arg);
+    $url[$key] = Chora::url('browsedir', $where . '/', $arg, array('onb' => $onb));
 }
 
+$branches = array();
 if ($VC->hasFeature('branches')) {
     $branches = $dir->getBranches();
+    if (is_null($onb)) {
+        $onb = $VC->getDefaultBranch();
+    }
 }
 
 /* Print out the directory header. */
 $printAllCols = count($fileList);
 $sortdirclass = $acts['sbt'] ? 'sortdown' : 'sortup';
 
-Horde::addScriptFile('prototype.js', 'horde', true);
-Horde::addScriptFile('tables.js', 'horde', true);
+Horde::addScriptFile('tables.js', 'horde');
 require CHORA_TEMPLATES . '/common-header.inc';
 require CHORA_TEMPLATES . '/menu.inc';
 require CHORA_TEMPLATES . '/headerbar.inc';
@@ -72,7 +75,7 @@ require CHORA_TEMPLATES . '/directory/header.inc';
 
 /* Unless we're at the top, display the 'back' bar. */
 if ($where != '') {
-    $url = Chora::url('browsedir', preg_replace('|[^/]+$|', '', $where));
+    $url = Chora::url('browsedir', preg_replace('|[^/]+$|', '', $where), array('onb' => $onb));
     require CHORA_TEMPLATES . '/directory/back.inc';
 }
 
@@ -83,8 +86,8 @@ if ($dirList) {
         if ($conf['hide_restricted'] && Chora::isRestricted($currentDir)) {
             continue;
         }
-        $url = Chora::url('browsedir', $where . '/' . $currentDir . '/');
-        $currDir = Text::htmlAllSpaces($currentDir);
+        $url = Chora::url('browsedir', $where . '/' . $currentDir . '/', array('onb' => $onb));
+        $currDir = Horde_Text_Filter::filter($currentDir, 'space2html', array('charset' => Horde_Nls::getCharset(), 'encode' => true, 'encode_all' => true));
         require CHORA_TEMPLATES . '/directory/dir.inc';
     }
     echo '</tbody>';
@@ -111,14 +114,11 @@ if ($fileList) {
         $log = $lg->queryLog();
         $attic = $currFile->isDeleted();
         $fileName = $where . ($attic ? '/' . 'Attic' : '') . '/' . $realname;
-        $name = Text::htmlAllSpaces($realname);
-        $url = Chora::url('browsefile', $fileName);
+        $name = Horde_Text_Filter::filter($realname, 'space2html', array('charset' => Horde_Nls::getCharset(), 'encode' => true, 'encode_all' => true));
+        $url = Chora::url('browsefile', $fileName, array('onb' => $onb));
         $readableDate = Chora::readableTime($date);
         if ($log) {
-            $shortLog = str_replace("\n", ' ', trim(substr($log, 0, $conf['options']['shortLogLength'] - 1)));
-            if (strlen($log) > 80) {
-                $shortLog .= '...';
-            }
+            $shortLog = Horde_String::truncate(str_replace("\n", ' ', trim($log)), $conf['options']['shortLogLength']);
         }
         require CHORA_TEMPLATES . '/directory/file.inc';
     }

@@ -6,8 +6,6 @@ $block_name = _("Upcoming Events");
  * Horde_Block_Kronolith_monthlist:: Implementation of the Horde_Block API
  * to display a list of calendar items grouped by month.
  *
- * $Horde: kronolith/lib/Block/monthlist.php,v 1.57 2008/10/13 23:00:16 jan Exp $
- *
  * @package Horde_Block
  */
 class Horde_Block_Kronolith_monthlist extends Horde_Block {
@@ -26,7 +24,10 @@ class Horde_Block_Kronolith_monthlist extends Horde_Block {
                                             'default' => 2),
                         'maxevents' => array('name' => _("Maximum number of events to display (0 = no limit)"),
                                              'type' => 'int',
-                                             'default' => 0));
+                                             'default' => 0),
+                        'alarms' => array('name' => _("Show only events that have an alarm set?"),
+                                          'type' => 'checkbox',
+                                          'default' => 0));
         $params['calendar']['values']['__all'] = _("All Visible");
         foreach (Kronolith::listCalendars() as $id => $cal) {
             $params['calendar']['values'][$id] = $cal->get('name');
@@ -48,7 +49,7 @@ class Horde_Block_Kronolith_monthlist extends Horde_Block {
         } else {
             $url_params = array();
         }
-        return Horde::link(Horde::url(Util::addParameter($registry->getInitialPage(), $url_params), true)) . _("Upcoming Events") . '</a>';
+        return Horde::link(Horde::url(Horde_Util::addParameter($registry->getInitialPage(), $url_params), true)) . _("Upcoming Events") . '</a>';
     }
 
     /**
@@ -59,13 +60,12 @@ class Horde_Block_Kronolith_monthlist extends Horde_Block {
     function _content()
     {
         // @TODO Remove this hack when maintenance is refactored.
-        $from_block = true;
+        $no_maint = true;
         require_once dirname(__FILE__) . '/../base.php';
-        require_once KRONOLITH_BASE . '/lib/Day.php';
 
         global $registry, $prefs;
 
-        Horde::addScriptFile('tooltip.js', 'horde', true);
+        Horde::addScriptFile('tooltips.js', 'horde');
 
         $now = new Horde_Date($_SERVER['REQUEST_TIME']);
         $today = date('j');
@@ -76,7 +76,7 @@ class Horde_Block_Kronolith_monthlist extends Horde_Block {
 
         if (isset($this->_params['calendar']) && $this->_params['calendar'] != '__all') {
             $calendar = $GLOBALS['kronolith_shares']->getShare($this->_params['calendar']);
-            if (!is_a($calendar, 'PEAR_Error') && !$calendar->hasPermission(Auth::getAuth(), PERMS_SHOW)) {
+            if (!is_a($calendar, 'PEAR_Error') && !$calendar->hasPermission(Horde_Auth::getAuth(), Horde_Perms::SHOW)) {
                 return _("Permission Denied");
             }
             $all_events = Kronolith::listEvents($startDate, $endDate, array($this->_params['calendar']), true, false, false);
@@ -123,7 +123,7 @@ class Horde_Block_Kronolith_monthlist extends Horde_Block {
                     $event->end = $tomorrow;
                 }
                 if (($event->end->compareDate($now) < 0 && !$event->isAllDay()) ||
-                    ($prefs->getValue('summary_alarms') && !$event->alarm)) {
+                    (!empty($this->_params['alarms']) && !$event->alarm)) {
                     continue;
                 }
 

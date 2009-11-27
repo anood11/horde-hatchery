@@ -18,8 +18,6 @@
  *      'type' => 'implicit'
  *  );
  *
- * $Horde: incubator/letter/lib/Friends/letter.php,v 1.9 2009/01/06 17:50:52 jan Exp $
- *
  * Copyright 2007-2009 The Horde Project (http://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (GPL). If you
@@ -103,10 +101,10 @@ class Folks_Friends_prefs extends Folks_Friends {
     private function _lists($type, $user = null)
     {
         if (empty($user)) {
-            $user = Auth::getAuth();
+            $user = Horde_Auth::getAuth();
         }
 
-        $u_prefs = Prefs::singleton($GLOBALS['conf']['prefs']['driver'], $GLOBALS['registry']->getApp(), $user);
+        $u_prefs = Horde_Prefs::singleton($GLOBALS['conf']['prefs']['driver'], $GLOBALS['registry']->getApp(), $user);
         $u_prefs->retrieve();
 
         $list = $u_prefs->getValue($type);
@@ -161,6 +159,6 @@ class Folks_Friends_prefs extends Folks_Friends {
      */
     public function getGroups()
     {
-        return array('whitelist' => _("Whitelist"));
+        return array('whitelist' => _("Friends"));
     }
 }

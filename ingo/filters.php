@@ -15,7 +15,7 @@ require_once dirname(__FILE__) . '/lib/base.php';
 /* Get the list of filter rules. */
 $filters = &$ingo_storage->retrieve(Ingo_Storage::ACTION_FILTERS);
 if (is_a($filters, 'PEAR_Error')) {
-    Horde::fatal($filters, __FILE__, __LINE__);
+    throw new Horde_Exception($filters);
 }
 
 /* Load the Ingo_Script:: driver. */
@@ -25,12 +25,12 @@ $ingo_script = Ingo::loadIngoScript();
 $on_demand = $ingo_script->performAvailable();
 
 /* Get web parameter data. */
-$actionID = Util::getFormData('actionID');
-$id = Util::getFormData('rulenumber');
+$actionID = Horde_Util::getFormData('actionID');
+$id = Horde_Util::getFormData('rulenumber');
 
 /* Get permissions. */
-$edit_allowed = Ingo::hasPermission('shares', PERMS_EDIT);
-$delete_allowed = Ingo::hasPermission('shares', PERMS_DELETE);
+$edit_allowed = Ingo::hasSharePermission(Horde_Perms::EDIT);
+$delete_allowed = Ingo::hasSharePermission(Horde_Perms::DELETE);
 
 /* Perform requested actions. */
 switch ($actionID) {
@@ -52,50 +52,59 @@ case 'rule_enable':
             header('Location: ' . Horde::applicationUrl('filters.php', true));
             exit;
         }
+
+        $tmp = $filters->getFilter($id);
         if ($filters->deleteRule($id)) {
-            $notification->push(_("Rule Deleted"), 'horde.success');
+            $notification->push(sprintf(_("Rule \"%s\" deleted."), $tmp['name']), 'horde.success');
         }
         break;
 
     case 'rule_copy':
-        if (!Ingo::hasPermission('allow_rules')) {
-            $message = @htmlspecialchars(_("You are not allowed to create or edit custom rules."), ENT_COMPAT, NLS::getCharset());
-            if (!empty($conf['hooks']['permsdenied'])) {
-                $message = Horde::callHook('_perms_hook_denied', array('ingo:allow_rules'), 'horde', $message);
+        if (!$GLOBALS['perms']->hasAppPermission('allow_rules')) {
+            try {
+                $message = Horde::callHook('perms_denied', array('ingo:allow_rules'));
+            } catch (Horde_Exception_HookNotSet $e) {
+                $message = @htmlspecialchars(_("You are not allowed to create or edit custom rules."), ENT_COMPAT, Horde_Nls::getCharset());
             }
             $notification->push($message, 'horde.error', array('content.raw'));
             break 2;
-        } elseif (Ingo::hasPermission('max_rules') !== true &&
-                  Ingo::hasPermission('max_rules') <= count($filters->getFilterList())) {
-            $message = @htmlspecialchars(sprintf(_("You are not allowed to create more than %d rules."), Ingo::hasPermission('max_rules')), ENT_COMPAT, NLS::getCharset());
-            if (!empty($conf['hooks']['permsdenied'])) {
-                $message = Horde::callHook('_perms_hook_denied', array('ingo:max_rules'), 'horde', $message);
+        } elseif ($GLOBALS['perms']->hasAppPermission('max_rules') !== true &&
+                  $GLOBALS['perms']->hasAppPermission('max_rules') <= count($filters->getFilterList())) {
+            try {
+                $message = Horde::callHook('perms_denied', array('ingo:max_rules'));
+            } catch (Horde_Exception_HookNotSet $e) {
+                $message = @htmlspecialchars(sprintf(_("You are not allowed to create more than %d rules."), $GLOBALS['perms']->hasAppPermission('max_rules')), ENT_COMPAT, Horde_Nls::getCharset());
             }
             $notification->push($message, 'horde.error', array('content.raw'));
             break 2;
-        } elseif ($filters->copyRule($id)) {
-            $notification->push(_("Rule Copied"), 'horde.success');
+        } else {
+            $tmp = $filters->getFilter($id);
+            if ($filters->copyRule($id)) {
+                $notification->push(sprintf(_("Rule \"%s\" copied."), $tmp['name']), 'horde.success');
+            }
         }
         break;
 
     case 'rule_up':
-        $steps = Util::getFormData('steps', 1);
+        $steps = Horde_Util::getFormData('steps', 1);
         $filters->ruleUp($id, $steps);
         break;
 
     case 'rule_down':
-        $steps = Util::getFormData('steps', 1);
+        $steps = Horde_Util::getFormData('steps', 1);
         $filters->ruleDown($id, $steps);
         break;
 
     case 'rule_disable':
+        $tmp = $filters->getFilter($id);
         $filters->ruleDisable($id);
-        $notification->push(_("Rule Disabled"), 'horde.success');
+        $notification->push(sprintf(_("Rule \"%s\" disabled."), $tmp['name']), 'horde.success');
         break;
 
     case 'rule_enable':
+        $tmp = $filters->getFilter($id);
         $filters->ruleEnable($id);
-        $notification->push(_("Rule Enabled"), 'horde.success');
+        $notification->push(sprintf(_("Rule \"%s\" enabled."), $tmp['name']), 'horde.success');
         break;
     }
 
@@ -112,8 +121,8 @@ case 'settings_save':
         header('Location: ' . Horde::applicationUrl('filters.php', true));
         exit;
     }
-    $prefs->setValue('show_filter_msg', Util::getFormData('show_filter_msg'));
-    $prefs->setValue('filter_seen', Util::getFormData('filter_seen'));
+    $prefs->setValue('show_filter_msg', Horde_Util::getFormData('show_filter_msg'));
+    $prefs->setValue('filter_seen', Horde_Util::getFormData('filter_seen'));
     $notification->push(_("Settings successfully updated."), 'horde.success');
     break;
 
@@ -123,18 +132,17 @@ case 'apply_filters':
         header('Location: ' . Horde::applicationUrl('filters.php', true));
         exit;
     }
-    if ($ingo_script->canApply()) {
-        $ingo_script->apply();
-    }
+    $ingo_script->apply();
     break;
 }
 
 /* Get the list of rules now. */
 $filter_list = $filters->getFilterList();
 
-Horde::addScriptFile('prototype.js', 'horde', true);
-Horde::addScriptFile('tooltip.js', 'horde', true);
-Horde::addScriptFile('stripe.js', 'horde', true);
+Horde::addScriptFile('tooltips.js', 'horde');
+Horde::addScriptFile('stripe.js', 'horde');
+Horde::addScriptFile('filters.js', 'ingo');
+Ingo::prepareMenu();
 $title = _("Filter Rules");
 require INGO_TEMPLATES . '/common-header.inc';
 require INGO_TEMPLATES . '/menu.inc';
@@ -163,7 +171,7 @@ if (count($filter_list) == 0) {
 
         $entry = array();
         $entry['number'] = ++$i;
-        $url = Util::addParameter($filters_url, 'rulenumber', $rule_number);
+        $url = Horde_Util::addParameter($filters_url, 'rulenumber', $rule_number);
         $copyurl = $delurl = $editurl = $name = null;
 
         switch ($filter['action']) {
@@ -198,9 +206,9 @@ if (count($filter_list) == 0) {
             break;
 
         default:
-            $editurl = Util::addParameter($rule_url, array('edit' => $rule_number, 'actionID' => 'rule_edit'));
-            $delurl  = Util::addParameter($url, 'actionID', 'rule_delete');
-            $copyurl = Util::addParameter($url, 'actionID', 'rule_copy');
+            $editurl = Horde_Util::addParameter($rule_url, array('edit' => $rule_number, 'actionID' => 'rule_edit'));
+            $delurl  = Horde_Util::addParameter($url, 'actionID', 'rule_delete');
+            $copyurl = Horde_Util::addParameter($url, 'actionID', 'rule_copy');
             $entry['filterimg'] = false;
             $name = $filter['name'];
             break;
@@ -208,7 +216,7 @@ if (count($filter_list) == 0) {
 
         /* Create description. */
         if (!$edit_allowed) {
-            $entry['descriplink'] = @htmlspecialchars($name, ENT_COMPAT, NLS::getCharset());
+            $entry['descriplink'] = @htmlspecialchars($name, ENT_COMPAT, Horde_Nls::getCharset());
         } elseif (!empty($filter['conditions'])) {
             $descrip = '';
             $condition_size = count($filter['conditions']) - 1;
@@ -237,14 +245,13 @@ if (count($filter_list) == 0) {
                 $descrip .= "\n[stop]";
             }
 
-            $entry['descriplink'] = Horde::linkTooltip($editurl, sprintf(_("Edit %s"), $name), null, null, null, $descrip) . @htmlspecialchars($name, ENT_COMPAT, NLS::getCharset()) . '</a>';
+            $entry['descriplink'] = Horde::linkTooltip($editurl, sprintf(_("Edit %s"), $name), null, null, null, $descrip) . @htmlspecialchars($name, ENT_COMPAT, Horde_Nls::getCharset()) . '</a>';
         } else {
-            $entry['descriplink'] = Horde::link($editurl, sprintf(_("Edit %s"), $name)) . @htmlspecialchars($name, ENT_COMPAT, NLS::getCharset()) . '</a>';
+            $entry['descriplink'] = Horde::link($editurl, sprintf(_("Edit %s"), $name)) . @htmlspecialchars($name, ENT_COMPAT, Horde_Nls::getCharset()) . '</a>';
         }
 
         /* Create edit link. */
         $entry['editlink'] = Horde::link($editurl, sprintf(_("Edit %s"), $name));
-        $entry['editimg'] = Horde::img('edit.png', sprintf(_("Edit %s"), $name), '', $registry->getImageDir('horde'));
 
         /* Create delete link. */
         if (!is_null($delurl)) {
@@ -257,8 +264,8 @@ if (count($filter_list) == 0) {
         /* Create copy link. */
         if (!is_null($copyurl) &&
             (!empty($conf['hooks']['permsdenied']) ||
-             Ingo::hasPermission('max_rules') === true ||
-             Ingo::hasPermission('max_rules') > count($filter_list))) {
+             $GLOBALS['perms']->hasAppPermission('max_rules') === true ||
+             $GLOBALS['perms']->hasAppPermission('max_rules') > count($filter_list))) {
             $entry['copylink'] = Horde::link($copyurl, sprintf(_("Copy %s"), $name));
             $entry['copyimg'] = Horde::img('copy.png', sprintf(_("Copy %s"), $name));
         } else {
@@ -266,14 +273,14 @@ if (count($filter_list) == 0) {
         }
 
         /* Create up/down arrow links. */
-        $entry['upurl'] = Util::addParameter($url, 'actionID', 'rule_up');
-        $entry['downurl'] = Util::addParameter($url, 'actionID', 'rule_down');
+        $entry['upurl'] = Horde_Util::addParameter($url, 'actionID', 'rule_up');
+        $entry['downurl'] = Horde_Util::addParameter($url, 'actionID', 'rule_down');
         $entry['uplink'] = ($i > 1) ? Horde::link($entry['upurl'], _("Move Rule Up")) : false;
         $entry['downlink'] = ($i < $rule_count) ? Horde::link($entry['downurl'], _("Move Rule Down")) : false;
 
         if (empty($filter['disable'])) {
             if ($edit_allowed) {
-                $entry['disablelink'] = Horde::link(Util::addParameter($url, 'actionID', 'rule_disable'), sprintf(_("Disable %s"), $name));
+                $entry['disablelink'] = Horde::link(Horde_Util::addParameter($url, 'actionID', 'rule_disable'), sprintf(_("Disable %s"), $name));
                 $entry['disableimg'] = Horde::img('enable.png', sprintf(_("Disable %s"), $name));
             } else {
                 $entry['disableimg'] = Horde::img('enable.png');
@@ -283,7 +290,7 @@ if (count($filter_list) == 0) {
             $entry['enableimg'] = false;
         } else {
             if ($edit_allowed) {
-                $entry['enablelink'] = Horde::link(Util::addParameter($url, 'actionID', 'rule_enable'), sprintf(_("Enable %s"), $name));
+                $entry['enablelink'] = Horde::link(Horde_Util::addParameter($url, 'actionID', 'rule_enable'), sprintf(_("Enable %s"), $name));
                 $entry['enableimg'] = Horde::img('disable.png', sprintf(_("Enable %s"), $name));
             } else {
                 $entry['enableimg'] = Horde::img('disable.png');
@@ -297,7 +304,7 @@ if (count($filter_list) == 0) {
     }
 
     /* Output the template. */
-    $template = new Ingo_Template();
+    $template = new Horde_Template();
     $template->set('down_img', $down_img);
     $template->set('up_img', $up_img);
     $template->set('filter', $display, true);
@@ -310,9 +317,9 @@ if (count($filter_list) == 0) {
 $actions = $ingo_script->availableActions();
 $createrule = (!empty($actions) &&
                (!empty($conf['hooks']['permsdenied']) ||
-                (Ingo::hasPermission('allow_rules') &&
-                 (Ingo::hasPermission('max_rules') === true ||
-                  Ingo::hasPermission('max_rules') > count($filter_list)))));
+                ($GLOBALS['perms']->hasAppPermission('allow_rules') &&
+                 ($GLOBALS['perms']->hasAppPermission('max_rules') === true ||
+                  $GLOBALS['perms']->hasAppPermission('max_rules') > count($filter_list)))));
 $canapply = $ingo_script->canApply();
 require INGO_TEMPLATES . '/filters/footer.inc';
 if ($on_demand && $edit_allowed) {

@@ -32,6 +32,15 @@ class IMP_Contents
     const RENDER_INLINE_DISP_NO = 4;
     const RENDER_INFO = 8;
     const RENDER_INLINE_AUTO = 16;
+    const RENDER_RAW = 32;
+
+    /**
+     * Flag to indicate whether the last call to getBodypart() returned
+     * decoded data.
+     *
+     * @var string
+     */
+    public $lastBodyPartDecode = null;
 
     /**
      * Singleton instances
@@ -41,11 +50,19 @@ class IMP_Contents
     static protected $_instances = array();
 
     /**
-     * The IMAP index of the message.
+     * Internal counter for ensuring Horde_Mime_Part objects passed to
+     * singleton() are given unique objects.
      *
      * @var integer
      */
-    protected $_index = null;
+    static protected $_mimepartid = 1;
+
+    /**
+     * The IMAP UID of the message.
+     *
+     * @var integer
+     */
+    protected $_uid = null;
 
     /**
      * The mailbox of the current message.
@@ -69,12 +86,11 @@ class IMP_Contents
     protected $_build = false;
 
     /**
-     * The status cache.
-     * NOT CURRENTLY USED
+     * The list of MIME IDs that consist of embedded data.
      *
      * @var array
      */
-    protected $_statuscache = array();
+    protected $_embedded = array();
 
     /**
      * Attempts to return a reference to a concrete IMP_Contents instance.
@@ -83,7 +99,7 @@ class IMP_Contents
      * Ensures that only one IMP_Contents instance for any given message is
      * available at any one time.
      *
-     * @param mixed $in  Either an index string (see IMP_Contents::singleton()
+     * @param mixed $in  Either a uid string (see IMP_Contents::singleton()
      *                   for the format) or a Horde_Mime_Part object.
      *
      * @return IMP_Contents  The IMP_Contents object.
@@ -91,8 +107,8 @@ class IMP_Contents
      */
     static public function singleton($in)
     {
-        $sig = is_a($in, 'Horde_Mime_Part')
-            ? hash('md5', serialize($in))
+        $sig = ($in instanceof Horde_Mime_Part)
+            ? 'horde_mime_part_' . self::$_mimepartid++
             : $in;
 
         if (empty(self::$_instances[$sig])) {
@@ -105,37 +121,42 @@ class IMP_Contents
     /**
      * Constructor.
      *
-     * @param mixed $in  Either an index string (see IMP_Contents::singleton()
+     * @param mixed $in  Either a uid string (see IMP_Contents::singleton()
      *                   for the format) or a Horde_Mime_Part object.
      * @throws Horde_Exception
      */
     protected function __construct($in)
     {
-        if (is_a($in, 'Horde_Mime_Part')) {
+        if ($in instanceof Horde_Mime_Part) {
             $this->_message = $in;
         } else {
-            list($this->_index, $this->_mailbox) = explode(IMP::IDX_SEP, $in);
+            list($this->_uid, $this->_mailbox) = explode(IMP::IDX_SEP, $in);
 
-            /* Get the Horde_Mime_Part object for the given index. */
+            /* Get the Horde_Mime_Part object for the given UID. */
             try {
-                $ret = $GLOBALS['imp_imap']->ob->fetch($this->_mailbox, array(
+                $ret = $GLOBALS['imp_imap']->ob()->fetch($this->_mailbox, array(
                     Horde_Imap_Client::FETCH_STRUCTURE => array('parse' => true)
-                ), array('ids' => array($this->_index)));
-                $this->_message = $ret[$this->_index]['structure'];
+                ), array('ids' => array($this->_uid)));
             } catch (Horde_Imap_Client_Exception $e) {
                 throw new Horde_Exception('Error displaying message.');
             }
+
+            if (!isset($ret[$this->_uid]['structure'])) {
+                throw new Horde_Exception('Error displaying message.');
+            }
+
+            $this->_message = $ret[$this->_uid]['structure'];
         }
     }
 
     /**
-     * Returns the IMAP index for the current message.
+     * Returns the IMAP UID for the current message.
      *
-     * @return integer  The message index.
+     * @return integer  The message UID.
      */
-    public function getIndex()
+    public function getUid()
     {
-        return $this->_index;
+        return $this->_uid;
     }
 
     /**
@@ -151,19 +172,26 @@ class IMP_Contents
     /**
      * Returns the entire body of the message.
      *
-     * @return string  The text of the body of the message.
+     * @param array $options  Additional options:
+     * <pre>
+     * 'stream' - (boolean) If true, return a stream.
+     *            DEFAULT: No
+     * </pre>
+     *
+     * @return mixed  The text of the part, or a stream resource if 'stream'
+     *                is true.
      */
-    public function getBody()
+    public function getBody($options = array())
     {
         if (is_null($this->_mailbox)) {
-            return $this->_message->toString();
+            return $this->_message->toString(array('headers' => true, 'stream' => !empty($options['stream'])));
         }
 
         try {
-            $res = $GLOBALS['imp_imap']->ob->fetch($this->_mailbox, array(
-                Horde_Imap_Client::FETCH_BODYTEXT => array(array('peek' => true))
-            ), array('ids' => array($this->_index)));
-            return $res[$this->_index]['bodytext'][0];
+            $res = $GLOBALS['imp_imap']->ob()->fetch($this->_mailbox, array(
+                Horde_Imap_Client::FETCH_BODYTEXT => array(array('peek' => true, 'stream' => !empty($options['stream'])))
+            ), array('ids' => array($this->_uid)));
+            return $res[$this->_uid]['bodytext'][0];
         } catch (Horde_Imap_Client_Exception $e) {
             return '';
         }
@@ -175,14 +203,30 @@ class IMP_Contents
      * @param integer $id     The ID of the MIME part.
      * @param array $options  Additional options:
      * <pre>
+     * 'decode' - (boolean) Attempt to decode the bodypart on the remote
+     *            server. If successful, sets self::$lastBodyPartDecode to
+     *            the content-type of the decoded data.
+     *            DEFAULT: No
+     * 'length' - (integer) If set, only download this many bytes of the
+     *            bodypart from the server.
+     *            DEFAULT: All data is retrieved.
      * 'mimeheaders' - (boolean) Include the MIME headers also?
      *                 DEFAULT: No
+     * 'stream' - (boolean) If true, return a stream.
+     *            DEFAULT: No
      * </pre>
      *
-     * @return string  The text of the part.
+     * @return mixed  The text of the part or a stream resource if 'stream'
+     *                is true.
      */
     public function getBodyPart($id, $options = array())
     {
+        $this->lastBodyPartDecode = null;
+
+        if (empty($id)) {
+            return '';
+        }
+
         if (is_null($this->_mailbox)) {
             // TODO: Include MIME headers?
             $ob = $this->getMIMEPart($id, array('nocontents' => true));
@@ -192,41 +236,70 @@ class IMP_Contents
         }
 
         $query = array(
-            Horde_Imap_Client::FETCH_BODYPART => array(array('id' => $id, 'peek' => true))
+            Horde_Imap_Client::FETCH_BODYPART => array(array('decode' => !empty($options['decode']), 'id' => $id, 'peek' => true, 'stream' => !empty($options['stream'])))
         );
+        if (!empty($options['length'])) {
+            $query[Horde_Imap_Client::FETCH_BODYPART][0]['start'] = 0;
+            $query[Horde_Imap_Client::FETCH_BODYPART][0]['length'] = $options['length'];
+        }
         if (!empty($options['mimeheaders'])) {
             $query[Horde_Imap_Client::FETCH_MIMEHEADER] = array(array('id' => $id, 'peek' => true));
         }
 
         try {
-            $res = $GLOBALS['imp_imap']->ob->fetch($this->_mailbox, $query, array('ids' => array($this->_index)));
-            return empty($options['mimeheaders'])
-                ? $res[$this->_index]['bodypart'][$id]
-                : $res[$this->_index]['mimeheader'][$id] . $res[$this->_index]['bodypart'][$id];
+            $res = $GLOBALS['imp_imap']->ob()->fetch($this->_mailbox, $query, array('ids' => array($this->_uid)));
+            if (empty($options['mimeheaders'])) {
+                if (!empty($res[$this->_uid]['bodypartdecode'][$id])) {
+                    $this->lastBodyPartDecode = $res[$this->_uid]['bodypartdecode'][$id];
+                }
+                return $res[$this->_uid]['bodypart'][$id];
+            } elseif (empty($options['stream'])) {
+                return $res[$this->_uid]['mimeheader'][$id] . $res[$this->_uid]['bodypart'][$id];
+            } else {
+                $swrapper = new Horde_Support_CombineStream(array($res[$this->_uid]['mimeheader'][$id], $res[$this->_uid]['bodypart'][$id]));
+                return $swrapper->fopen();
+            }
         } catch (Horde_Imap_Client_Exception $e) {
-            return '';
+            return empty($options['stream'])
+                ? ''
+                : fopen('php://temp', 'r+');
         }
     }
 
     /**
      * Returns the full message text.
      *
-     * @return string  The full message text.
+     * @param array $options  Additional options:
+     * <pre>
+     * 'stream' - (boolean) If true, return a stream for bodytext.
+     *            DEFAULT: No
+     * </pre>
+     *
+     * @return mixed  The full message text or a stream resource if 'stream'
+     *                is true.
      */
-    public function fullMessageText()
+    public function fullMessageText($options = array())
     {
         if (is_null($this->_mailbox)) {
-            return $this->_message->toString(true);
+            return $this->_message->toString();
         }
 
         try {
-            $res = $GLOBALS['imp_imap']->ob->fetch($this->_mailbox, array(
+            $res = $GLOBALS['imp_imap']->ob()->fetch($this->_mailbox, array(
                 Horde_Imap_Client::FETCH_HEADERTEXT => array(array('peek' => true)),
-                Horde_Imap_Client::FETCH_BODYTEXT => array(array('peek' => true))
-            ), array('ids' => array($this->_index)));
-            return $res[$this->_index]['headertext'][0] . $res[$this->_index]['bodytext'][0];
+                Horde_Imap_Client::FETCH_BODYTEXT => array(array('peek' => true, 'stream' => !empty($options['stream'])))
+            ), array('ids' => array($this->_uid)));
+
+            if (empty($options['stream'])) {
+                return $res[$this->_uid]['headertext'][0] . $res[$this->_uid]['bodytext'][0];
+            }
+
+            $swrapper = new Horde_Support_CombineStream(array($res[$this->_uid]['headertext'][0], $res[$this->_uid]['bodytext'][0]));
+            return $swrapper->fopen();
         } catch (Horde_Imap_Client_Exception $e) {
-            return '';
+            return empty($options['stream'])
+                ? ''
+                : fopen('php://temp', 'r+');
         }
     }
 
@@ -242,10 +315,10 @@ class IMP_Contents
         }
 
         try {
-            $res = $GLOBALS['imp_imap']->ob->fetch($this->_mailbox, array(
+            $res = $GLOBALS['imp_imap']->ob()->fetch($this->_mailbox, array(
                 Horde_Imap_Client::FETCH_HEADERTEXT => array(array('parse' => true, 'peek' => true))
-            ), array('ids' => array($this->_index)));
-            return $res[$this->_index]['headertext'][0];
+            ), array('ids' => array($this->_uid)));
+            return $res[$this->_uid]['headertext'][0];
         } catch (Horde_Imap_Client_Exception $e) {
             return new Horde_Mime_Headers();
         }
@@ -267,10 +340,11 @@ class IMP_Contents
      * @param integer $id     The MIME index of the part requested.
      * @param array $options  Additional options:
      * <pre>
-     * 'nocontents' - (boolean) TODO
-     *              DEFAULT: TODO
-     * 'nodecode' - (boolean) TODO
-     *            DEFAULT: TODO
+     * 'length' - (integer) If set, only download this many bytes of the
+     *            bodypart from the server.
+     *            DEFAULT: All data is retrieved.
+     * 'nocontents' - (boolean) If true, don't add the contents to the part
+     *              DEFAULT: Contents are added to the part
      * </pre>
      *
      * @return Horde_Mime_Part  The raw MIME part asked for (reference).
@@ -281,21 +355,16 @@ class IMP_Contents
 
         $part = $this->_message->getPart($id);
 
-        if (!is_null($part) &&
+        /* Don't download contents of entire body if ID == 0 (indicating the
+         * body of the main multipart message).  I'm pretty sure we never
+         * want to download the body of that part here. */
+        if (!empty($id) &&
+            !is_null($part) &&
             empty($options['nocontents']) &&
             !is_null($this->_mailbox) &&
-            !$part->getContents()) {
-            $contents = $this->getBodyPart($id);
-            if (($part->getPrimaryType() == 'text') &&
-                (String::upper($part->getCharset()) == 'US-ASCII') &&
-                Horde_Mime::is8bit($contents)) {
-                $contents = String::convertCharset($contents, 'US-ASCII');
-            }
-            $part->setContents($contents);
-
-            if (empty($options['nodecode'])) {
-                $part->transferDecodeContents();
-            }
+            !$part->getContents(array('stream' => true))) {
+            $body = $this->getBodyPart($id, array('decode' => true, 'length' => empty($options['length']) ? null : $options['length'], 'stream' => true));
+            $part->setContents($body, array('encoding' => $this->lastBodyPartDecode, 'usestream' => true));
         }
 
         return $part;
@@ -309,14 +378,24 @@ class IMP_Contents
      * @param array $options   Additional options:
      * <pre>
      * 'mime_part' - (Horde_Mime_Part) The MIME part to render.
-     * 'params' - (array) Additional params to set.
+     * 'params' - (array) Additional params to set. Special params:
+     *            'raw' - The calling code wants display of the raw data,
+     *            without any additional formatting.
      * 'type' - (string) Use this MIME type instead of the MIME type
      *          identified in the MIME part.
      * </pre>
      *
-     * @return array  See Horde_Mime_Viewer_Driver::render(). Additionally,
-     *                a entry in the base array labeled 'name' will be present
-     *                which contains the MIME name information.
+     * @return array  See Horde_Mime_Viewer_Driver::render(). The following
+     *                fields may also be present in addition to the fields
+     *                defined in Horde_Mime_Viewer_Driver:
+     *                'attach' - (boolean) Force display of this part as an
+     *                           attachment.
+     *                'js' - (array) A list of javascript commands to run
+     *                       after the content is displayed on screen.
+     *                'name' - (string) Contains the MIME name information.
+     *                'wrap' - (string) If present, indicates that this
+     *                         part, and all child parts, will be wrapped
+     *                         in a DIV with the given class name.
      */
     public function renderMIMEPart($mime_id, $mode, $options = array())
     {
@@ -325,7 +404,11 @@ class IMP_Contents
         $mime_part = empty($options['mime_part'])
             ? $this->getMIMEPart($mime_id)
             : $options['mime_part'];
-        $viewer = Horde_Mime_Viewer::factory($mime_part, empty($options['type']) ? null : $options['type']);
+        $type = empty($options['type'])
+            ? $mime_part->getType()
+            : $options['type'];
+
+        $viewer = Horde_Mime_Viewer::factory($mime_part, $type);
         $viewer->setParams(array('contents' => $this));
         if (!empty($options['params'])) {
             $viewer->setParams($options['params']);
@@ -341,20 +424,30 @@ class IMP_Contents
         case self::RENDER_INLINE_DISP_NO:
             $textmode = 'inline';
             $limit = $viewer->getConfigParam('limit_inline_size');
+
             if ($limit && ($mime_part->getBytes() > $limit)) {
+                $data = '';
+                $status = array(
+                    _("This message part cannot be viewed because it is too large."),
+                    sprintf(_("Click %s to download the data."), $this->linkView($mime_part, 'download_attach', _("HERE")))
+                );
+
+                if (method_exists($viewer, 'overLimitText')) {
+                    $data = $viewer->overLimitText();
+                    $status[] = _("The initial portion of this text part is displayed below.");
+                }
+
                 return array(
                     $mime_id => array(
-                        'data' => '',
+                        'data' => $data,
                         'name' => '',
                         'status' => array(
                             array(
-                                'text' => array(
-                                    _("This message part cannot be viewed because it is too large."),
-                                    sprintf(_("Click %s to download the data."), $this->linkView($mime_part, 'download_attach', _("HERE")))
-                                )
+                                'icon' => Horde::img('alerts/warning.png', _("Warning"), null, $GLOBALS['registry']->getImageDir('horde')),
+                                'text' => $status
                             )
                         ),
-                        'type' => 'text/html; charset=' . NLS::getCharset()
+                        'type' => 'text/html; charset=' . Horde_Nls::getCharset()
                     )
                 );
             }
@@ -362,6 +455,10 @@ class IMP_Contents
 
         case self::RENDER_INFO:
             $textmode = 'info';
+            break;
+
+        case self::RENDER_RAW:
+            $textmode = 'raw';
             break;
         }
 
@@ -377,20 +474,29 @@ class IMP_Contents
             $ret[$mime_id]['name'] = $mime_part->getName(true);
         }
 
-        if (isset($this->_statuscache[$mime_id])) {
-            $ret[$mime_id]['status'] = array_merge($this->_statuscache[$mime_id], $ret[$mime_id]['status']);
-        }
-
-        /* If this is a text/* part, AND the browser does not support UTF-8,
-         * give the user a link to open the part in a new window with the
-         * correct character set. */
-        if (($mode != 'full') && ($mime_part->getPrimaryType() == 'text')) {
-            $default_charset = String::upper(NLS::getCharset());
+        if (($textmode == 'inline') &&
+            !strlen($ret[$mime_id]['data']) &&
+            $this->isAttachment($type)) {
+            if (empty($ret[$mime_id]['status'])) {
+                $ret[$mime_id]['status'] = array(
+                    array(
+                        'text' => array(
+                            _("This inline viewable part is empty.")
+                        )
+                    )
+                );
+            }
+        } elseif (!in_array($textmode, array('full', 'raw')) &&
+                  ($mime_part->getPrimaryType() == 'text')) {
+            /* If this is a text/* part, AND the browser does not support
+             * UTF-8, give the user a link to open the part in a new window
+             * with the correct character set. */
+            $default_charset = Horde_String::upper(Horde_Nls::getCharset());
             if ($default_charset !== 'UTF-8') {
-                $charset_upper = String::upper($mime_part->getCharset());
+                $charset_upper = Horde_String::upper($mime_part->getCharset());
                 if (($charset_upper != 'US-ASCII') &&
                     ($charset_upper != $default_charset)) {
-                    $ret['status'][] = array(
+                    $ret[$mime_id]['status'][] = array(
                         'text' => array(
                             sprintf(_("This message was written in a character set (%s) other than your own."), htmlspecialchars($charset_upper)),
                             sprintf(_("If it is not displayed correctly, %s to open it in a new window."), $this->linkViewJS($mime_part, 'view_attach', _("click here")))
@@ -428,31 +534,38 @@ class IMP_Contents
      */
     public function generatePreview()
     {
-        if (($mimeid = $this->findBody()) === null) {
-            return array('cut' => false, 'text' => '');
-        }
+        // For preview generation, don't go through overhead of scanning for
+        // embedded parts. Necessary evil, or else very large parts (e.g
+        // 5 MB+ text parts) will take ages to scan.
+        $oldbuild = $this->_build;
+        $this->_build = true;
+        $mimeid = $this->findBody();
 
-        $pmime = $this->getMIMEPart($mimeid);
-        $ptext = $pmime->getContents();
-        $ptext = String::convertCharset($ptext, $pmime->getCharset());
-        if ($pmime->getType() == 'text/html') {
-            require_once 'Horde/Text/Filter.php';
-            $ptext = Text_Filter::filter($ptext, 'html2text',
-                                         array('charset' => NLS::getCharset()));
+        if (is_null($mimeid)) {
+            $this->_build = $oldbuild;
+            return array('cut' => false, 'text' => '');
         }
 
         $maxlen = empty($GLOBALS['conf']['msgcache']['preview_size'])
             ? $GLOBALS['prefs']->getValue('preview_maxlen')
             : $GLOBALS['conf']['msgcache']['preview_size'];
 
-        if (String::length($ptext) > $maxlen) {
-            $ptext = String::substr($ptext, 0, $maxlen) . ' ...';
-            $cut = true;
-        } else {
-            $cut = false;
+        // Retrieve 3x the size of $maxlen of bodytext data. This should
+        // account for any content-encoding & HTML tags.
+        $pmime = $this->getMIMEPart($mimeid, array('length' => $maxlen * 3));
+        $ptext = $pmime->getContents();
+        $ptext = Horde_String::convertCharset($ptext, $pmime->getCharset());
+        if ($pmime->getType() == 'text/html') {
+            $ptext = Horde_Text_Filter::filter($ptext, 'html2text', array('charset' => Horde_Nls::getCharset()));
         }
 
-        return array('cut' => $cut, 'text' => $ptext);
+        $this->_build = $oldbuild;
+
+        if (Horde_String::length($ptext) > $maxlen) {
+            return array('cut' => true, 'text' => Horde_String::truncate($ptext, $maxlen));
+        }
+
+        return array('cut' => false, 'text' => $ptext);
     }
 
     /**
@@ -496,7 +609,7 @@ class IMP_Contents
      */
     public function getSummary($id, $mask = 0)
     {
-        $download_zip = (($mask & self::SUMMARY_DOWNLOAD_ZIP) && Util::extensionExists('zlib'));
+        $download_zip = (($mask & self::SUMMARY_DOWNLOAD_ZIP) && Horde_Util::extensionExists('zlib'));
         $param_array = array();
 
         $this->_buildMessage();
@@ -530,16 +643,6 @@ class IMP_Contents
             $download_zip ||
             ($mask & self::SUMMARY_SIZE)) {
             $part['bytes'] = $size = $mime_part->getBytes();
-
-            if ($part['bytes'] &&
-                ($mime_part->getCurrentEncoding() == 'base64')) {
-                /* From RFC 2045 [6.8]: "...the encoded data are consistently
-                 * only about 33 percent larger than the unencoded data."
-                 * Thus, adding 33% to the byte size is a good estimate for
-                 * our purposes. */
-                $size *= 1.33;
-            }
-
             $part['size'] = ($size > 1048576)
                 ? sprintf(_("%s MB"), number_format($size / 1048576, 1))
                 : sprintf(_("%s KB"), max(round($size / 1024), 1));
@@ -588,7 +691,7 @@ class IMP_Contents
         if (($mask && self::SUMMARY_IMAGE_SAVE) &&
             $GLOBALS['registry']->hasMethod('images/selectGalleries') &&
             ($mime_part->getPrimaryType() == 'image')) {
-            $part['img_save'] = Horde::link('#', _("Save Image in Gallery"), 'saveImgAtc', null, IMP::popupIMPString('saveimage.php', array('index' => ($this->_index . IMP::IDX_SEP . $this->_mailbox), 'id' => $id), 450, 200) . "return false;") . '</a>';
+            $part['img_save'] = Horde::link('#', _("Save Image in Gallery"), 'saveImgAtc', null, Horde::popupJs(Horde::applicationUrl('saveimage.php'), array('params' => array('muid' => ($this->_uid . IMP::IDX_SEP . $this->_mailbox), 'id' => $id), 'height' => 200, 'width' => 450)) . 'return false;') . '</a>';
         }
 
         /* Strip Attachment? Allow stripping of base parts other than the
@@ -597,9 +700,9 @@ class IMP_Contents
             ($id != 0) &&
             (intval($id) != 1) &&
             (strpos($id, '.') === false)) {
-            $url = Util::removeParameter(Horde::selfUrl(true), array('actionID', 'imapid', 'index'));
-            $url = Util::addParameter($url, array('actionID' => 'strip_attachment', 'imapid' => $id, 'index' => $this->_index, 'message_token' => IMP::getRequestToken('imp.impcontents')));
-            $part['strip'] = Horde::link($url, _("Strip Attachment"), 'stripAtc', null, "return window.confirm('" . addslashes(_("Are you sure you wish to PERMANENTLY delete this attachment?")) . "');") . '</a>';
+            $url = Horde_Util::removeParameter(Horde::selfUrl(true), array('actionID', 'imapid', 'uid'));
+            $url = Horde_Util::addParameter($url, array('actionID' => 'strip_attachment', 'imapid' => $id, 'uid' => $this->_uid, 'message_token' => Horde::getRequestToken('imp.impcontents')));
+            $part['strip'] = Horde::link($url, _("Strip Attachment"), 'deleteImg', null, "return window.confirm('" . addslashes(_("Are you sure you wish to PERMANENTLY delete this attachment?")) . "');") . '</a>';
         }
 
         return $part;
@@ -624,7 +727,7 @@ class IMP_Contents
         $params = $this->_urlViewParams($mime_part, $actionID, isset($options['params']) ? $options['params'] : array());
 
         return empty($options['dload'])
-            ? Util::addParameter(Horde::applicationUrl('view.php'), $params)
+            ? Horde_Util::addParameter(Horde::applicationUrl('view.php', true), $params)
             : Horde::downloadUrl($mime_part->getName(true), $params);
     }
 
@@ -646,7 +749,7 @@ class IMP_Contents
         ));
 
         if (!is_null($this->_mailbox)) {
-            $params['index'] = $this->_index;
+            $params['uid'] = $this->_uid;
             $params['mailbox'] = $this->_mailbox;
         }
 
@@ -665,7 +768,7 @@ class IMP_Contents
      * 'dload' - (boolean) Should we generate a download link?
      * 'jstext' - (string) The JS text to use.
      * 'params' - (array) A list of any additional parameters that need to be
-     *              passed to view.php.
+     *            passed to view.php.
      * </pre>
      *
      * @return string  A HTML href link to view.php.
@@ -678,7 +781,7 @@ class IMP_Contents
             'params' => array()
         ), $options);
 
-        return Horde::link($this->urlView($mime_part, $actionID, $options), $options['jstext'], $options['class'], empty($options['dload']) ? null : 'view_' . hash('md5', $mime_part->getMIMEId() . $this->_mailbox . $this->_index)) . $text . '</a>';
+        return Horde::link($this->urlView($mime_part, $actionID, $options), $options['jstext'], $options['class'], empty($options['dload']) ? null : 'view_' . hash('md5', $mime_part->getMIMEId() . $this->_mailbox . $this->_uid)) . $text . '</a>';
     }
 
     /**
@@ -710,7 +813,7 @@ class IMP_Contents
             $options['jstext'] = sprintf(_("View %s"), $mime_part->getDescription(true));
         }
 
-        $url = IMP::popupIMPString('view.php', $this->_urlViewParams($mime_part, $actionID, isset($options['params']) ? $options['params'] : array())) . 'return false;';
+        $url = Horde::popupJs(Horde::applicationUrl('view.php'), array('menu' => true, 'params' => $this->_urlViewParams($mime_part, $actionID, isset($options['params']) ? $options['params'] : array()), 'urlencode' => true)) . 'return false;';
 
         return empty($options['widget'])
             ? Horde::link('#', $options['jstext'], empty($options['css']) ? null : $options['css'], null, $url) . $text . '</a>'
@@ -779,18 +882,12 @@ class IMP_Contents
                 $mime_part = $this->getMIMEPart($id);
                 $viewer->setMIMEPart($mime_part);
                 $viewer->setParams(array('contents' => $this));
-                $new_parts = $viewer->getEmbeddedMimeParts();
-                if (!is_null($new_parts)) {
-                    foreach (array_keys($new_parts) as $key) {
-                        if ($first_id === $key) {
-                            $this->_message = $new_parts[$key];
-                            $this->_build = false;
-                            return $this->_buildMessage();
-                        }
-
-                        $this->_message->alterPart($key, $new_parts[$key]);
-                        $to_process = array_merge($to_process, array_keys($new_parts[$key]->contentTypeMap()));
-                    }
+                $new_part = $viewer->getEmbeddedMimeParts();
+                if (!is_null($new_part)) {
+                    $this->_embedded[] = $id;
+                    $mime_part->addPart($new_part);
+                    $mime_part->buildMimeIds($id);
+                    $to_process = array_merge($to_process, array_keys($new_part->contentTypeMap()));
                     $last_id = $id;
                 }
             }
@@ -820,6 +917,10 @@ class IMP_Contents
 
         if ($mask & self::RENDER_INLINE_AUTO) {
             $mask |= self::RENDER_INLINE | self::RENDER_INFO;
+        }
+
+        if (($mask & self::RENDER_RAW) && $viewer->canRender('raw')) {
+            return self::RENDER_RAW;
         }
 
         if (($mask & self::RENDER_FULL) && $viewer->canRender('full')) {
@@ -855,18 +956,6 @@ class IMP_Contents
     {
         $this->_buildMessage();
         return $this->_message->contentTypeMap();
-    }
-
-    /**
-     * Sets additional status information for a part.
-     * NOT CURRENTLY USED
-     *
-     * @param string $id    The MIME ID
-     * @param array $entry  The status entry.
-     */
-    public function setStatusCache($id, $entry)
-    {
-        $this->_statuscache[$id][] = $entry;
     }
 
     /**
@@ -910,13 +999,31 @@ class IMP_Contents
                 if (($key != 0) &&
                     ($val != 'message/rfc822') &&
                     (strpos($val, 'multipart/') === false)) {
-                    $part = $this->getMIMEPart($key, array('nodecode' => true));
+                    $part = $this->getMIMEPart($key);
                     $message->alterPart($key, $part);
                 }
             }
         }
 
         return $message;
+    }
+
+    /**
+     * Determines if a given MIME part ID is a part of embedded data.
+     *
+     * @param string $mime_id  The MIME ID.
+     *
+     * @return boolean  True if the MIME ID is part of embedded data.
+     */
+    public function isEmbedded($mime_id)
+    {
+        foreach ($this->_embedded as $val) {
+            if (Horde_Mime::isChild($val, $mime_id)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 }

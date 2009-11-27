@@ -10,7 +10,7 @@
  * @author  Michael Slusarz <slusarz@curecanti.org>
  * @package Jeta
  */
-class Jeta_Applet
+abstract class Jeta_Applet
 {
     /**
      * Parameters used by the class.
@@ -51,9 +51,7 @@ class Jeta_Applet
      *
      * @return string  The HTML needed to load the applet.
      */
-    abstract public function generateAppletCode()
-    {
-    }
+    abstract public function generateAppletCode();
 
     /**
      * Generate the HTML param tags.

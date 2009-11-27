@@ -4,7 +4,7 @@
 <!-- location -->
 <tr>
  <td class="rightAlign"><strong><?php echo _("Location") ?>&nbsp;&nbsp;</strong></td>
- <td><?php echo empty($location) ? '&nbsp;' : Text_Filter::filter($location, 'text2html', array('parselevel' => TEXT_HTML_MICRO, 'class' => 'text')) ?> </td>
+ <td><?php echo empty($location) ? '&nbsp;' : Horde_Text_Filter::filter($location, 'text2html', array('parselevel' => Horde_Text_Filter_Text2html::MICRO, 'class' => 'text')) ?> </td>
 </tr>
 <?php endif; ?>
 
@@ -18,7 +18,7 @@
 <!-- owner -->
 <tr>
  <td class="rightAlign"><strong><?php echo _("Owner") ?>&nbsp;&nbsp;</strong></td>
- <td><?php echo @htmlspecialchars($owner, ENT_COMPAT, NLS::getCharset()) ?> </td>
+ <td><?php echo @htmlspecialchars($owner, ENT_COMPAT, Horde_Nls::getCharset()) ?> </td>
 </tr>
 <?php endif; ?>
 
@@ -66,14 +66,14 @@ if ($this->event->isInitialized() && $this->event->alarm > 0):
 <?php if (isset($created)): ?>
 <tr>
   <td class="nowrap rightAlign"><strong><?php echo _("Created") ?></strong>&nbsp;&nbsp;</td>
-  <td class="nowrap"><?php  echo $created->strftime($dateFormat) . ' ' . $created->format($timeFormat) . ' ' . @htmlspecialchars($createdby, ENT_COMPAT, NLS::getCharset()) ?></td>
+  <td class="nowrap"><?php  echo $created->strftime($dateFormat) . ' ' . $created->format($timeFormat) . ' ' . @htmlspecialchars($createdby, ENT_COMPAT, Horde_Nls::getCharset()) ?></td>
 </tr>
 <?php endif; ?>
 
 <?php if (isset($modified)): ?>
 <tr>
   <td class="nowrap rightAlign"><strong><?php echo _("Last Modified") ?></strong>&nbsp;&nbsp;</td>
-  <td class="nowrap"><?php echo $modified->strftime($dateFormat) . ' ' . $modified->format($timeFormat) . ' ' . @htmlspecialchars($modifiedby, ENT_COMPAT, NLS::getCharset()) ?></td>
+  <td class="nowrap"><?php echo $modified->strftime($dateFormat) . ' ' . $modified->format($timeFormat) . ' ' . @htmlspecialchars($modifiedby, ENT_COMPAT, Horde_Nls::getCharset()) ?></td>
 </tr>
 <?php endif; ?>
 
@@ -141,7 +141,7 @@ if ($this->event->isInitialized() && $this->event->alarm > 0):
  <td colspan="2" class="control"><strong><?php echo _("Description") ?></strong></td>
 </tr>
 <tr>
- <td colspan="2" class="description"><?php require_once 'Horde/Text/Filter.php'; echo Text_Filter::filter($description, 'text2html', array('parselevel' => TEXT_HTML_MICRO, 'class' => 'text')) ?></td>
+ <td colspan="2" class="description"><?php echo Horde_Text_Filter::filter($description, 'text2html', array('parselevel' => Horde_Text_Filter_Text2html::MICRO, 'class' => 'text')) ?></td>
 </tr>
 <?php endif; ?>
 
@@ -165,5 +165,21 @@ if ($this->event->isInitialized() && $this->event->alarm > 0):
   <td><?php echo Kronolith::responseToString($status['response']) ?></td>
  </tr>
  <?php endforeach; ?>
+ <!-- Resources -->
+ <tr>
+  <td colspan="3" class="control"><strong><?php echo _("Resources") ?></strong></td>
+ </tr>
+ <tr class="item leftAlign">
+  <th width="50%"><?php echo _("Resource") ?></th>
+  <th width="25%"><?php echo _("Attendance") ?></th>
+  <th width="25%"><?php echo _("Response") ?></th>
+ </tr>
+<?php foreach ($resources as $id => $resource):?>
+<tr>
+ <td class="nowrap"><?php echo htmlspecialchars($resource['name'])?></td>
+ <td><?php echo Kronolith::partToString($resource['attendance']) ?></td>
+ <td><?php echo Kronolith::responseToString($resource['response']) ?></td>
+</tr>
+<?php endforeach;?>
 </table>
 <?php endif; ?>

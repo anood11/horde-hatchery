@@ -3,9 +3,10 @@
  * Horde_Service_Facebook class abstracts communication with Facebook's
  * rest interface.
  *
- * Code is basically a refactored version of Facebook's
- * facebookapi_php5_restclient.php library, completely ripped apart and put
- * back together in a Horde friendly way.
+ * This code was originally a Hordified version of Facebook's official PHP
+ * client. However, since that client was very buggy and incomplete, very little
+ * of the original code or design is left. I left the original copyright notice
+ * intact below.
  *
  * Copyright 2009 The Horde Project (http://www.horde.org)
  *
@@ -49,20 +50,6 @@
 class Horde_Service_Facebook
 {
     /**
-     * The application's API Key
-     *
-     * @var stirng
-     */
-    public $api_key;
-
-    /**
-     * The API Secret Key
-     *
-     * @var string
-     */
-    public $secret;
-
-    /**
      * Use only ssl resource flag
      *
      * @var boolean
@@ -70,11 +57,25 @@ class Horde_Service_Facebook
     public $useSslResources = false;
 
     /**
+     * The application's API Key
+     *
+     * @var string
+     */
+    protected $_apiKey;
+
+    /**
+     * The API Secret Key
+     *
+     * @var string
+     */
+    protected $_secret;
+
+    /**
      * Holds the batch object when building a batch request.
      *
      * @var Horde_Service_Facebook_Batch
      */
-    public $batchRequest;
+    protected $_batchRequest;
 
     /**
      * Holds an optional logger object
@@ -101,14 +102,37 @@ class Horde_Service_Facebook
      */
     protected $_context;
 
-    static protected $_objCache = array();
+    /**
+     * Return format
+     *
+     * @var Horde_Service_Facebook::DATA_FORMAT_* constant
+     */
+    public $dataFormat = self::DATA_FORMAT_ARRAY;
 
-    // TODO: Implement some kind of instance array for these types of classes...
-    protected $_auth = null; // H_S_Facebook_Auth
+    /**
+     * Data format used internally if DATA_FORMAT_OBJECT is specified.
+     * ('json' or 'xml'). Needed to overcome some current bugs in Facebook's
+     * JSON implementation.
+     */
+    protected $_internalFormat = self::DATA_FORMAT_JSON;
+
+    /**
+     * Cache for the various objects we lazy load in __get()
+     *
+     * @var hash of Horde_Service_Facebook_* objects
+     */
+     protected $_objCache = array();
 
 
     const API_VALIDATION_ERROR = 1;
     const REST_SERVER_ADDR = 'http://api.facebook.com/restserver.php';
+
+    /**
+     * Data format returned to client code.
+     */
+    const DATA_FORMAT_JSON = 'json';
+    const DATA_FORMAT_XML = 'xml';
+    const DATA_FORMAT_ARRAY = 'array';
 
     /**
      * Const'r
@@ -119,13 +143,11 @@ class Horde_Service_Facebook
      *  <pre>
      *      http_client - required
      *      http_response - required
-     *      login_redirect_callback - optional
      *      logger
      *      no_resolve - set to true to prevent attempting to obtain a session
      *                   from an auth_token. Useful if client code wants to
      *                   handle this.
      * </pre>
-     * @param session_key
      */
     public function __construct($api_key, $secret, $context)
     {
@@ -153,7 +175,7 @@ class Horde_Service_Facebook
 
         $this->_logDebug('Initializing Horde_Service_Facebook');
 
-        $this->api_key = $api_key;
+        $this->_apiKey = $api_key;
         $this->secret = $secret;
 
         if (!empty($context['use_ssl'])) {
@@ -162,15 +184,6 @@ class Horde_Service_Facebook
 
         // Save the rest
         $this->_context = $context;
-    }
-
-    /**
-     * Initialize the object - check to see if we have a valid FB
-     * session, verify the signature etc...
-     */
-    public function validateSession()
-    {
-        return $this->auth->validateSession(empty($this->_context['no_resolve']));
     }
 
     /**
@@ -183,53 +196,28 @@ class Horde_Service_Facebook
      */
     public function __get($value)
     {
+        // First, see if it's an allowed protected value.
+        switch ($value) {
+        case 'internalFormat':
+            return $this->_internalFormat;
+        case 'apiKey':
+            return $this->_apiKey;
+        case 'secret':
+            return $this->_secret;
+        }
+
+        // If not, assume it's a method/action class...
         $class = 'Horde_Service_Facebook_' . ucfirst($value);
-        if (!empty(self::$_objCache[$class])) {
-            return self::$_objCache[$class];
+        if (!empty($this->_objCache[$class])) {
+            return $this->_objCache[$class];
         }
 
         if (!class_exists($class)) {
             throw new Horde_Service_Facebook_Exception(sprintf("%s class not found", $class));
         }
 
-        self::$_objCache[$class] = new $class($this, $this->_request);
-        return self::$_objCache[$class];
-    }
-
-    /**
-     * Either redirect to the FB login page, or call a callback function to let
-     * the client code handle the redirect.
-     *
-     * @param string $url  The URL to redirect to.
-     *
-     * @return void
-     */
-    protected function _redirect($url)
-    {
-        // If we have a callback, call it then return.
-        if (!empty($this->_context['login_redirect_callback'])) {
-            call_user_func($this->_context['login_redirect_callback'], $url);
-            return;
-        }
-
-        if (preg_match('/^https?:\/\/([^\/]*\.)?facebook\.com(:\d+)?/i', $url)) {
-            // make sure facebook.com url's load in the full frame so that we don't
-            // get a frame within a frame.
-            echo "<script type=\"text/javascript\">\ntop.location.href = \"$url\";\n</script>";
-        } else {
-            header('Location: ' . $url);
-        }
-        exit;
-    }
-
-    /**
-     * Return the current request's url
-     *
-     * @return string
-     */
-    protected function _current_url()
-    {
-        return sprintf("%s/%s", $this->_request->getHost(), $this->_request->getUri());
+        $this->_objCache[$class] = new $class($this, $this->_request);
+        return $this->_objCache[$class];
     }
 
     /**
@@ -237,20 +225,9 @@ class Horde_Service_Facebook
      *
      * @return string
      */
-    public static function get_facebook_url($subdomain = 'www')
+    public static function getFacebookUrl($subdomain = 'www')
     {
         return 'http://' . $subdomain . '.facebook.com';
-    }
-
-    /**
-     *  Return a valid FB login URL with necessary GET parameters appended.
-     *
-     *  @return string
-     */
-    public function get_login_url($next)
-    {
-        return self::get_facebook_url() . '/login.php?v=1.0&api_key='
-            . $this->api_key . ($next ? '&next=' . urlencode($next)  : '');
     }
 
     /**
@@ -258,13 +235,13 @@ class Horde_Service_Facebook
      */
     public function batchBegin()
     {
-        if ($this->batchRequest !== null) {
+        if ($this->_batchRequest !== null) {
             $code = Horde_Service_Facebook_ErrorCodes::API_EC_BATCH_ALREADY_STARTED;
             $description = Horde_Service_Facebook_ErrorCodes::$api_error_descriptions[$code];
             throw new Horde_Service_Facebook_Exception($description, $code);
         }
 
-        $this->batchRequest = new Horde_Service_FacebookbatchRequest($this, $this->_http);
+        $this->_batchRequest = new Horde_Service_Facebook_BatchRequest($this, $this->_http);
     }
 
     /**
@@ -272,320 +249,31 @@ class Horde_Service_Facebook
      */
     public function batchEnd()
     {
-        if ($this->batchRequest === null) {
+        if ($this->_batchRequest === null) {
             $code = Horde_Service_Facebook_ErrorCodes::API_EC_BATCH_NOT_STARTED;
             $description = Horde_Service_Facebook_ErrorCodes::$api_error_descriptions[$code];
             throw new Horde_Service_Facebook_Exception($description, $code);
         }
 
-        $this->batchRequest->run();
-        $this->batchRequest = null;
+        $this->_batchRequest->run();
+        $this->_batchRequest = null;
     }
 
     /**
-     * Returns groups according to the filters specified.
+     * Setter for the internal data format. Returns the previously used
+     * format to make it easier for methods that need a certain format to
+     * reset the old format when done.
      *
-     * @param int $uid     (Optional) User associated with groups.  A null
-     *                     parameter will default to the session user.
-     * @param string $gids (Optional) Comma-separated group ids to query. A null
-     *                     parameter will get all groups for the user.
+     * @param Horde_Service_Facebook::DATA_FORMAT_* constant $format
      *
-     * @return array  An array of group objects
+     * @return Horde_Service_Facebook::DATA_FORMAT_* constant
      */
-    public function &groups_get($uid, $gids)
+    public function setInternalFormat($format)
     {
-        return $this->call_method('facebook.groups.get',
-            array('uid' => $uid, 'gids' => $gids));
-    }
+        $old = $this->_internalFormat;
+        $this->_internalFormat = $format;
 
-    /**
-     * Returns the membership list of a group.
-     *
-     * @param int $gid  Group id
-     *
-     * @return array  An array with four membership lists, with keys 'members',
-     *                'admins', 'officers', and 'not_replied'
-     */
-    public function &groups_getMembers($gid)
-    {
-        return $this->call_method('facebook.groups.getMembers', array('gid' => $gid));
-    }
-
-    /**
-     * Retrieves links posted by the given user.
-     *
-     * @param int    $uid      The user whose links you wish to retrieve
-     * @param int    $limit    The maximimum number of links to retrieve
-     * @param array $link_ids (Optional) Array of specific link
-     *                          IDs to retrieve by this user
-     *
-     * @return array  An array of links.
-     */
-    public function &links_get($uid, $limit, $link_ids = null)
-    {
-        return $this->call_method('links.get',
-            array('uid' => $uid,
-                  'limit' => $limit,
-                  'link_ids' => json_encode($link_ids)));
-    }
-
-    /**
-     * Posts a link on Facebook.
-     *
-     * @param string $url     URL/link you wish to post
-     * @param string $comment (Optional) A comment about this link
-     * @param int    $uid     (Optional) User ID that is posting this link;
-     *                        defaults to current session user
-     *
-     * @return bool
-     */
-    public function &links_post($url, $comment='', $uid = null)
-    {
-        return $this->call_method('links.post',
-            array('uid' => $uid,
-                  'url' => $url,
-                  'comment' => $comment));
-    }
-
-
-    /**
-     * Creates a note with the specified title and content.
-     *
-     * @param string $title   Title of the note.
-     * @param string $content Content of the note.
-     * @param int    $uid     (Optional) The user for whom you are creating a
-     *                        note; defaults to current session user
-     *
-     * @return int   The ID of the note that was just created.
-     */
-    public function &notes_create($title, $content, $uid = null)
-    {
-        return $this->call_method('notes.create',
-            array('uid' => $uid,
-                  'title' => $title,
-                  'content' => $content));
-    }
-
-    /**
-     * Deletes the specified note.
-     *
-     * @param int $note_id  ID of the note you wish to delete
-     * @param int $uid      (Optional) Owner of the note you wish to delete;
-     *                      defaults to current session user
-     *
-     * @return bool
-     */
-    public function &notes_delete($note_id, $uid = null)
-    {
-        return $this->call_method('notes.delete',
-            array('uid' => $uid,
-                  'note_id' => $note_id));
-    }
-
-    /**
-    * Edits a note, replacing its title and contents with the title
-    * and contents specified.
-    *
-    * @param int    $note_id  ID of the note you wish to edit
-    * @param string $title    Replacement title for the note
-    * @param string $content  Replacement content for the note
-    * @param int    $uid      (Optional) Owner of the note you wish to edit;
-    *                         defaults to current session user
-    *
-    * @return bool
-    */
-    public function &notes_edit($note_id, $title, $content, $uid = null) {
-        return $this->call_method('notes.edit',
-            array('uid' => $uid,
-                  'note_id' => $note_id,
-                  'title' => $title,
-                  'content' => $content));
-    }
-
-    /**
-     * Retrieves all notes by a user. If note_ids are specified,
-     * retrieves only those specific notes by that user.
-     *
-     * @param int    $uid      User whose notes you wish to retrieve
-     * @param array  $note_ids (Optional) List of specific note
-     *                         IDs by this user to retrieve
-     *
-     * @return array A list of all of the given user's notes, or an empty list
-     *               if the viewer lacks permissions or if there are no visible
-     *               notes.
-     */
-    public function &notes_get($uid, $note_ids = null)
-    {
-        return $this->call_method('notes.get',
-            array('uid' => $uid,
-                  'note_ids' => json_encode($note_ids)));
-    }
-
-    /**
-     * Adds a tag with the given information to a photo. See the wiki for details:
-     *
-     *  http://wiki.developers.facebook.com/index.php/Photos.addTag
-     *
-     * @param int $pid          The ID of the photo to be tagged
-     * @param int $tag_uid      The ID of the user being tagged. You must specify
-     *                          either the $tag_uid or the $tag_text parameter
-     *                          (unless $tags is specified).
-     * @param string $tag_text  Some text identifying the person being tagged.
-     *                          You must specify either the $tag_uid or $tag_text
-     *                          parameter (unless $tags is specified).
-     * @param float $x          The horizontal position of the tag, as a
-     *                          percentage from 0 to 100, from the left of the
-     *                          photo.
-     * @param float $y          The vertical position of the tag, as a percentage
-     *                          from 0 to 100, from the top of the photo.
-     * @param array $tags       (Optional) An array of maps, where each map
-     *                          can contain the tag_uid, tag_text, x, and y
-     *                          parameters defined above.  If specified, the
-     *                          individual arguments are ignored.
-     * @param int $owner_uid    (Optional)  The user ID of the user whose photo
-     *                          you are tagging. If this parameter is not
-     *                          specified, then it defaults to the session user.
-     *
-     * @return bool  true on success
-     */
-    public function &photos_addTag($pid, $tag_uid, $tag_text, $x, $y, $tags, $owner_uid = 0)
-    {
-        return $this->call_method('facebook.photos.addTag',
-            array('pid' => $pid,
-                  'tag_uid' => $tag_uid,
-                  'tag_text' => $tag_text,
-                  'x' => $x,
-                  'y' => $y,
-                  'tags' => (is_array($tags)) ? json_encode($tags) : null,
-                  'owner_uid' => $this->get_uid($owner_uid)));
-    }
-
-    /**
-     * Creates and returns a new album owned by the specified user or the current
-     * session user.
-     *
-     * @param string $name         The name of the album.
-     * @param string $description  (Optional) A description of the album.
-     * @param string $location     (Optional) A description of the location.
-     * @param string $visible      (Optional) A privacy setting for the album.
-     *                             One of 'friends', 'friends-of-friends',
-     *                             'networks', or 'everyone'.  Default 'everyone'.
-     * @param int $uid             (Optional) User id for creating the album; if
-     *                             not specified, the session user is used.
-     *
-     * @return array  An album object
-     */
-    public function &photos_createAlbum($name, $description='', $location='', $visible='', $uid=0)
-    {
-        return $this->call_method('facebook.photos.createAlbum',
-            array('name' => $name,
-                  'description' => $description,
-                'location' => $location,
-                'visible' => $visible,
-                'uid' => $this->get_uid($uid)));
-    }
-
-    /**
-     * Returns photos according to the filters specified.
-     *
-     * @param int $subj_id  (Optional) Filter by uid of user tagged in the photos.
-     * @param int $aid      (Optional) Filter by an album, as returned by
-     *                      photos_getAlbums.
-     * @param string $pids   (Optional) Restrict to a comma-separated list of pids
-     *
-     * Note that at least one of these parameters needs to be specified, or an
-     * error is returned.
-     *
-     * @return array  An array of photo objects.
-     */
-    public function &photos_get($subj_id, $aid, $pids)
-    {
-        return $this->call_method('facebook.photos.get',
-            array('subj_id' => $subj_id, 'aid' => $aid, 'pids' => $pids));
-    }
-
-    /**
-     * Returns the albums created by the given user.
-     *
-     * @param int $uid      (Optional) The uid of the user whose albums you want.
-     *                       A null will return the albums of the session user.
-     * @param string $aids  (Optional) A comma-separated list of aids to restricti
-     *                       the query.
-     *
-     * Note that at least one of the (uid, aids) parameters must be specified.
-     *
-     * @returns an array of album objects.
-     */
-    public function &photos_getAlbums($uid, $aids)
-    {
-        return $this->call_method('facebook.photos.getAlbums',
-            array('uid' => $uid,
-                  'aids' => $aids));
-    }
-
-    /**
-     * Returns the tags on all photos specified.
-     *
-     * @param string $pids  A list of pids to query
-     *
-     * @return array  An array of photo tag objects, which include pid,
-     *                subject uid, and two floating-point numbers (xcoord, ycoord)
-     *                for tag pixel location.
-     */
-    public function &photos_getTags($pids)
-    {
-        return $this->call_method('facebook.photos.getTags', array('pids' => $pids));
-    }
-
-    /**
-     * Uploads a photo.
-     *
-     * @param string $file     The location of the photo on the local filesystem.
-     * @param int $aid         (Optional) The album into which to upload the
-     *                         photo.
-     * @param string $caption  (Optional) A caption for the photo.
-     * @param int uid          (Optional) The user ID of the user whose photo you
-     *                         are uploading
-     *
-     * @return array  An array of user objects
-     */
-    public function photos_upload($file, $aid = null, $caption = null, $uid = null)
-    {
-        return $this->call_upload_method('facebook.photos.upload',
-                                     array('aid' => $aid,
-                                           'caption' => $caption,
-                                           'uid' => $uid),
-                                     $file);
-    }
-
-
-    /**
-     * Uploads a video.
-     *
-     * @param  string $file        The location of the video on the local filesystem.
-     * @param  string $title       (Optional) A title for the video. Titles over 65 characters in length will be truncated.
-     * @param  string $description (Optional) A description for the video.
-     *
-     * @return array  An array with the video's ID, title, description, and a link to view it on Facebook.
-     */
-    public function video_upload($file, $title = null, $description = null)
-    {
-        return $this->call_upload_method('facebook.video.upload',
-            array('title' => $title,
-                  'description' => $description),
-            $file, self::get_facebook_url('api-video') . '/restserver.php');
-    }
-
-    /**
-     * Returns an array with the video limitations imposed on the current session's
-     * associated user. Maximum length is measured in seconds; maximum size is
-     * measured in bytes.
-     *
-     * @return array  Array with "length" and "size" keys
-     */
-    public function &video_getUploadLimits()
-    {
-        return $this->call_method('facebook.video.getUploadLimits');
+        return $old;
     }
 
     /**
@@ -598,14 +286,15 @@ class Horde_Service_Facebook
      *                'delayed returns' when in a batch context.
      *     See: http://wiki.developers.facebook.com/index.php/Using_batching_API
      */
-    public function &call_method($method, $params = array())
+    public function &callMethod($method, $params = array())
     {
-        if ($this->batchRequest === null) {
+        if ($this->_batchRequest === null) {
             $request = new Horde_Service_Facebook_Request($this, $method, $this->_http, $params);
             $results = &$request->run();
         } else {
-            $results = &$this->batchRequest->add($method, $params);
+            $results = &$this->_batchRequest->add($method, $params);
         }
+
         return $results;
     }
 
@@ -618,96 +307,27 @@ class Horde_Service_Facebook
      *
      * @return array A dictionary representing the response.
      */
-    public function call_upload_method($method, $params, $file, $server_addr = null)
+    public function callUploadMethod($method, $params, $file)
     {
-        if ($this->batch_queue === null) {
+        if ($this->_batchRequest === null) {
             if (!file_exists($file)) {
                 $code = Horde_Service_Facebook_ErrorCodes::API_EC_PARAM;
                 $description = Horde_Service_Facebook_ErrorCodes::$api_error_descriptions[$code];
                 throw new Horde_Service_Facebook_Exception($description, $code);
             }
-        }
-
-        $json = $this->post_upload_request($method, $params, $file, $server_addr);
-        $result = json_decode($json, true);
-        if (is_array($result) && isset($result['error_code'])) {
-            throw new Horde_Service_Facebook_Exception($result['error_msg'], $result['error_code']);
         } else {
             $code = Horde_Service_Facebook_ErrorCodes::API_EC_BATCH_METHOD_NOT_ALLOWED_IN_BATCH_MODE;
             $description = Horde_Service_Facebook_ErrorCodes::$api_error_descriptions[$code];
             throw new Horde_Service_Facebook_Exception($description, $code);
         }
-
-        return $result;
-    }
-
-    private function post_upload_request($method, $params, $file, $server_addr = null)
-    {
-        // Ensure we ask for JSON
-        $params['format'] = 'json';
-        $server_addr = $server_addr ? $server_addr : self::REST_SERVER_ADDR;
-        $this->finalize_params($method, $params);
-        $result = $this->run_multipart_http_transaction($method, $params, $file, $server_addr);
-        return $result;
-    }
-
-    private function run_http_post_transaction($content_type, $content, $server_addr)
-    {
-        $user_agent = 'Facebook API PHP5 Client 1.1 (non-curl) ' . phpversion();
-        $content_length = strlen($content);
-        $context =
-            array('http' => array('method' => 'POST',
-                                  'user_agent' => $user_agent,
-                                  'header' => 'Content-Type: ' . $content_type . "\r\n" . 'Content-Length: ' . $content_length,
-                                  'content' => $content));
-        $context_id = stream_context_create($context);
-        $sock = fopen($server_addr, 'r', false, $context_id);
-        $result = '';
-        if ($sock) {
-          while (!feof($sock)) {
-            $result .= fgets($sock, 4096);
-          }
-          fclose($sock);
+        $request = new Horde_Service_Facebook_UploadRequest($this, $method, $this->_http, $file, $params);
+        $result = $request->run();
+        $result = json_decode($result, true);
+        if (is_array($result) && isset($result['error_code'])) {
+            throw new Horde_Service_Facebook_Exception($result['error_msg'], $result['error_code']);
         }
-        return $result;
-    }
 
-    /**
-     * TODO: This will probably be replace
-     * @param $method
-     * @param $params
-     * @param $file
-     * @param $server_addr
-     * @return unknown_type
-     */
-    private function run_multipart_http_transaction($method, $params, $file, $server_addr)
-    {
-        // the format of this message is specified in RFC1867/RFC1341.
-        // we add twenty pseudo-random digits to the end of the boundary string.
-        $boundary = '--------------------------FbMuLtIpArT' .
-                    sprintf("%010d", mt_rand()) .
-                    sprintf("%010d", mt_rand());
-        $content_type = 'multipart/form-data; boundary=' . $boundary;
-        // within the message, we prepend two extra hyphens.
-        $delimiter = '--' . $boundary;
-        $close_delimiter = $delimiter . '--';
-        $content_lines = array();
-        foreach ($params as $key => &$val) {
-            $content_lines[] = $delimiter;
-            $content_lines[] = 'Content-Disposition: form-data; name="' . $key . '"';
-            $content_lines[] = '';
-            $content_lines[] = $val;
-        }
-        // now add the file data
-        $content_lines[] = $delimiter;
-        $content_lines[] = 'Content-Disposition: form-data; filename="' . $file . '"';
-        $content_lines[] = 'Content-Type: application/octet-stream';
-        $content_lines[] = '';
-        $content_lines[] = file_get_contents($file);
-        $content_lines[] = $close_delimiter;
-        $content_lines[] = '';
-        $content = implode("\r\n", $content_lines);
-        return $this->run_http_post_transaction($content_type, $content, $server_addr);
+        return $result;
     }
 
     protected function _logDebug($message)

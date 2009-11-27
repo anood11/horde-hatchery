@@ -2,6 +2,14 @@
 v3.0-git
 --------
 
+[jan] Manage holidays like any other calendar driver.
+[mjr] Add support for resource scheduling.
+[jan] Integrate tasks into Ajax interface (Gonçalo Queirós
+      <mail@goncaloqueiros.net>).
+[mjr] Extend listTimeObjects API to include optional links and icons.
+[jan] Allow searching of any type of calendar and improve searching of
+      recurring events.
+[cjh] With only SHOW permissions, display event titles as "busy".
 [mjr] Replace categories and keywords by tags.
 [jan] Set colors per calendar (Request #7480).
 [jan] Add individual notification methods for single events (Alfonso Marín
@@ -14,14 +22,62 @@ v3.0-git
 
 
 ----------
-v2.3.1-cvs
+v2.3.3-cvs
 ----------
 
+[jan] Fix editing URLs of remote calendars.
+[gwr] Fixed recurring weekly events with fixed number of occurences but
+      multiple incidences per week (kolab/issue3846).
+[gwr] Fixed recurring weekly events with intervals > 1 (Bug #8546).
+[jan] Optimize event link generation (patrick.abiven@apitech.fr).
+[jan] Fix Oracle SQL scripts.
+[jan] Fix charset of ajax responses.
+[jan] Add Croatian translation (Matej Vela <matej.vela@carnet.hr>).
+[jan] Speed up listing alarms (patrick.abiven@apitech.fr, Request #8638).
+[jan] Simplify and improve portability of listing events without date limits
+      in the SQL driver (Bug #8590).
+[mjr] Fix issue that caused the default alarm time to be applied to
+      listTimeObjects events (Bug #8588).
+
+
+------
+v2.3.2
+------
+
+[mms] Upgrade prototype.js to v1.6.1.
+[jan] Allow to add address lists as attendees through the address book popup
+      (Bug #7834).
+[jan] Fix exporting certain weekday recurrence rules to iCalendar
+      (lst_hoe02@kwsoft.de, Bug #8501).
+[jan] Export recurrence end dates as date-time values in iCalendar data to
+      improve compatibility with external clients (Bug #7846).
+[jan] Fix synchronization with output compression enabled (Bug #7769).
+[jan] Add configuration whether to show user drop down list or text field in
+      permissions dialog (requires Horde 3.3.5).
+[jan] Propagate the 'modified' API method (Request #8274).
+[cjh] Fix the signature of the kronolith/import API method
+      (rpolli@babel.it, Bug #8309).
+[jan] Correctly create all-day events if using the all-day link in the day
+      view (stpierre@nebrwesleyan.edu, Bug #8220).
+[jan] Fix rendering of all-day events (Bug #8176).
+
+
+------
+v2.3.1
+------
+
+[jan] Render contact autocompletion list on top of free/busy blocks (Bug #7273).
+[jan] Save recurrence exceptions when copying events (Bug #7689).
+[jan] Prevent warnings if trying to add address lists as attendees (Bug #7834).
+[jan] Fix start and end time calculation of multi-day events (Bug #7788).
+[jan] Wrap URL in calendar information in IE7 (almarin@um.es, Bug #8043).
 [jan] Fix "Date-string has wrong format" error with holidays (Bug #7961).
-[jan] Use improved translation support in Date_Holidays (Bug #7272).
+[jan] Use improved translation support in Date_Holidays (requires 0.21.0 now,
+      Bug #7272).
 [jan] Empty view cache when changing calendar selection
       (stpierre@nebrwesleyan.edu, Bug #7879).
 [mjr] Fix category CSS being included on embedded widgets.
+[cjh] Work around BC break with Horde versions before 3.2 (Bug #7820).
 [jan] Allow to manually change attendee responses (paul@carnie.com.au,
       Request #7443).
 [jan] Fix linking to last week across certain year boundaries (Bug #7827).
@@ -32,6 +88,7 @@ v2.3.1-cvs
       reminders through Kronolith (develop@kristov.de, Bug #7038).
 [cjh] Add a PostgreSQL-specific upgrade script for 2.2 to 2.3
       (michael.menge@zdv.uni-tuebingen.de, Bug #7454).
+[mms] Upgrade prototype.js to v1.6.0.3.
 
 
 ----

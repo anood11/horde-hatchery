@@ -10,16 +10,10 @@
  * @author Duck <duck@obala.net>
  * @package Folks
  */
-define('HORDE_BASE', dirname(__FILE__) . '/..');
-require_once HORDE_BASE . '/lib/base.php';
-require_once 'Horde/Loader.php';
-
-if (!Auth::isAuthenticated()) {
-    Horde::authenticationFailureRedirect();
-}
+require_once dirname(__FILE__) . '/../lib/base.php';
 
 $layout = array();
-$params = Util::getPost('params');
+$params = Horde_Util::getPost('params');
 foreach ($_POST as $column => $rows) {
     if (substr($column, 0, 11) != 'widget_col_') {
         continue;

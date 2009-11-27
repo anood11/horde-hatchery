@@ -7,6 +7,7 @@ CREATE TABLE kronolith_events (
     event_location TEXT,
     event_status INT DEFAULT 0,
     event_attendees TEXT,
+    event_resources TEXT,
     event_exceptions TEXT,
     event_title VARCHAR(255),
     event_recurtype SMALLINT DEFAULT 0,
@@ -30,8 +31,8 @@ CREATE INDEX kronolith_uid_idx ON kronolith_events (event_uid);
 
 
 CREATE TABLE kronolith_storage (
-    vfb_owner      VARCHAR(255) DEFAULT NULL,
-    vfb_email      VARCHAR(255) DEFAULT '' NOT NULL,
+    vfb_owner      VARCHAR(255),
+    vfb_email      VARCHAR(255) NOT NULL,
     vfb_serialized TEXT NOT NULL
 );
 
@@ -43,10 +44,10 @@ CREATE TABLE kronolith_shares (
     share_id INT NOT NULL,
     share_name VARCHAR(255) NOT NULL,
     share_owner VARCHAR(255) NOT NULL,
-    share_flags SMALLINT NOT NULL DEFAULT 0,
-    perm_creator SMALLINT NOT NULL DEFAULT 0,
-    perm_default SMALLINT NOT NULL DEFAULT 0,
-    perm_guest SMALLINT NOT NULL DEFAULT 0,
+    share_flags SMALLINT DEFAULT 0 NOT NULL,
+    perm_creator SMALLINT DEFAULT 0 NOT NULL,
+    perm_default SMALLINT DEFAULT 0 NOT NULL,
+    perm_guest SMALLINT DEFAULT 0 NOT NULL,
     attribute_name VARCHAR(255) NOT NULL,
     attribute_desc VARCHAR(255),
     attribute_color VARCHAR(7),
@@ -78,3 +79,18 @@ CREATE TABLE kronolith_shares_users (
 CREATE INDEX kronolith_shares_users_share_id_idx ON kronolith_shares_users (share_id);
 CREATE INDEX kronolith_shares_users_user_uid_idx ON kronolith_shares_users (user_uid);
 CREATE INDEX kronolith_shares_users_perm_idx ON kronolith_shares_users (perm);
+
+CREATE TABLE kronolith_resources (
+    resource_id INT NOT NULL,
+    resource_name VARCHAR(255),
+    resource_calendar VARCHAR(255),
+    resource_description TEXT,
+    resource_response_type INT,
+    resource_type VARCHAR(255) NOT NULL,
+    resource_members TEXT,
+    
+    PRIMARY KEY (resource_id)
+);
+
+CREATE INDEX kronolith_resources_type_idx ON kronolith_resources (resource_type);
+CREATE INDEX kronolith_resources_calendar_idx ON kronolith_resources (resource_calendar);

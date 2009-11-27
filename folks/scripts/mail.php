@@ -2,8 +2,6 @@
 /**
  * Send mail to a user that has new messages
  *
- * $Horde: incubator/folks/scripts/notify.php,v 1.4 2008/10/07 00:00:05 duck Exp $
- *
  * Copyright 2008-2009 The Horde Project (http://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (GPL). If you
@@ -13,29 +11,24 @@
  * @package Folks
  */
 
-$no_compress = true;
-define('AUTH_HANDLER', true);
-define('FOLKS_BASE', dirname(__FILE__) . '/..');
-
 // Do CLI checks and environment setup first.
-require_once 'Horde/CLI.php';
+require_once 'Horde/Cli.php';
 
 // Make sure no one runs this from the web.
-if (!Horde_CLI::runningFromCLI()) {
+if (!Horde_Cli::runningFromCLI()) {
     exit("Must be run from the command line\n");
 }
 
 // Load the CLI environment.
-Horde_CLI::init();
-$cli = &Horde_CLI::singleton();
+Horde_Cli::init();
+$cli = Horde_Cli::singleton();
 
 // Load Folks.
-require_once FOLKS_BASE . '/lib/base.php';
-require_once FOLKS_BASE . '/lib/version.php';
-require_once 'Horde/MIME/Mail.php';
+$folks_authentication = 'none';
+$no_compress = true;
+require_once dirname(__FILE__) . '/../lib/base.php';
 
 // We accept the user name on the command-line.
-require_once 'Console/Getopt.php';
 $ret = Console_Getopt::getopt(Console_Getopt::readPHPArgv(), 'h:u:p:dt:f:c:',
                               array('help', 'username=', 'password=', 'time=', 'from=', 'count='));
 
@@ -83,7 +76,7 @@ foreach ($opts as $opt) {
 
 // Login to horde if username & password are set.
 if (!empty($username) && !empty($password)) {
-    $auth = Auth::singleton($conf['auth']['driver']);
+    $auth = Horde_Auth::singleton($conf['auth']['driver']);
     if (!$auth->authenticate($username, array('password' => $password))) {
         $error = _("Login is incorrect.");
         Horde::logMessage($error, __FILE__, __LINE__, PEAR_LOG_ERR);
@@ -96,7 +89,7 @@ if (!empty($username) && !empty($password)) {
 }
 
 // Only admins can run this operation
-if (!Auth::isAdmin('folks:admin')) {
+if (!Horde_Auth::isAdmin('folks:admin')) {
     $cli->fatal('ADMIN ONLY');
 }
 
@@ -128,8 +121,8 @@ while ($row =& $res->fetchRow()) {
     $body2 = sprintf($body, $row[0], $registry->get('name', 'horde'), Folks::getUrlFor('user', $row[0], true, -1));
 
     // Send mail
-    $mail = new MIME_Mail($subject, $body2, $row[1], $conf['support'], NLS::getCharset());
-    $mail->addHeader('User-Agent', 'Folks' . FOLKS_VERSION);
+    $mail = new MIME_Mail($subject, $body2, $row[1], $conf['support'], Horde_Nls::getCharset());
+    $mail->addHeader('User-Agent', 'Folks' . $registry->getVersion());
     $sent = $mail->send($conf['mailer']['type'], $conf['mailer']['params']);
     if ($sent instanceof PEAR_Error) {
         $cli->message($sent, 'cli.warning');

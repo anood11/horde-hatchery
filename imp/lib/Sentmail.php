@@ -43,8 +43,7 @@ class IMP_Sentmail
             $params = Horde::getDriverConfig('sentmail', $driver);
         }
 
-        $driver = basename($driver);
-        $class = 'IMP_Sentmail_' . $driver;
+        $class = 'IMP_Sentmail_' . ucfirst(basename($driver));
 
         if (class_exists($class)) {
             try {
@@ -60,7 +59,7 @@ class IMP_Sentmail
      *
      * @throws Horde_Exception
      */
-    public function __construct($params = array())
+    protected function __construct($params = array())
     {
         $this->_params = $params;
     }
@@ -86,8 +85,6 @@ class IMP_Sentmail
                 $this->_log($action, $message_id, $recipient, $success);
             }
         }
-
-        $this->gc();
     }
 
     /**
@@ -135,14 +132,11 @@ class IMP_Sentmail
     }
 
     /**
-     * Garbage collect log entries with a probability of 1%.
+     * Garbage collect log entries.
      */
     public function gc()
     {
-        /* A 1% chance we will run garbage collection during a call. */
-        if (rand(0, 99) == 0) {
-            $this->_deleteOldEntries(time() - $this->_params['threshold'] * 86400);
-        }
+        $this->_deleteOldEntries(time() - ((isset($this->_params['threshold']) ? $this->_params['threshold'] : 0) * 86400));
     }
 
     /**
@@ -150,7 +144,6 @@ class IMP_Sentmail
      *
      * @param integer $before  Unix timestamp before that all log entries
      *                         should be deleted.
-     * @throws Horde_Exception
      */
     protected function _deleteOldEntries($before)
     {

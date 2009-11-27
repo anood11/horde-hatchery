@@ -1,5 +1,6 @@
 <?php
 
+$mimp_render = new Horde_Mobile();
 $mimp_render->set('title', $title);
 $c = &$mimp_render->add(new Horde_Mobile_card('m', $title));
 $c->softkey('#o', _("Menu"));
@@ -25,13 +26,13 @@ foreach ($rows as $val) {
     $t->set('linebreaks', true);
 }
 
-$menu = &new Horde_Mobile_card('o', _("Menu"));
+$menu = new Horde_Mobile_card('o', _("Menu"));
 $mset = &$menu->add(new Horde_Mobile_linkset());
 $mset->add(new Horde_Mobile_link(_("Refresh"), $selfurl));
 if ($subscribe) {
     $mset->add(new Horde_Mobile_link($sub_text, $sub_link));
 }
-MIMP::addMIMPMenu($mset, 'folders');
+IMP_Mimp::addMIMPMenu($mset, 'folders');
 
 $mimp_render->add($menu);
 $mimp_render->display();

@@ -19,12 +19,12 @@ try {
 }
 
 /* Retrieve the desired revision from the GET variable. */
-$rev = Util::getFormData('rev');
+$rev = Horde_Util::getFormData('rev');
 if (!$rev || !$VC->isValidRevision($rev)) {
     Chora::fatal(sprintf(_("Revision %s not found"), $rev ? $rev : _("NONE")), '404 Not Found');
 }
 
-switch (Util::getFormData('actionID')) {
+switch (Horde_Util::getFormData('actionID')) {
 case 'log':
     $log = $fl->queryLogs($rev);
     if (!is_null($log)) {
@@ -41,16 +41,15 @@ try {
     Chora::fatal($e);
 }
 
-$title = sprintf(_("Source Annotation of %s (revision %s)"), Text::htmlAllSpaces($where), $rev);
+$title = sprintf(_("Source Annotation of %s (revision %s)"), Horde_Text_Filter::filter($where, 'space2html', array('charset' => Horde_Nls::getCharset(), 'encode' => true, 'encode_all' => true)), $rev);
 $extraLink = sprintf('<a href="%s">%s</a> | <a href="%s">%s</a>',
                      Chora::url('co', $where, array('r' => $rev)), _("View"),
                      Chora::url('co', $where, array('r' => $rev, 'p' => 1)), _("Download"));
 
-Horde::addScriptFile('prototype.js', 'chora', true);
-Horde::addScriptFile('annotate.js', 'chora', true);
+Horde::addScriptFile('annotate.js', 'chora');
 
 $js_vars = array(
-    'ANNOTATE_URL' => Util::addParameter(Horde::applicationUrl('annotate.php'), array('actionID' => 'log', 'f' => $where, 'rev' => ''), null, false),
+    'ANNOTATE_URL' => Horde_Util::addParameter(Horde::applicationUrl('annotate.php'), array('actionID' => 'log', 'f' => $where, 'rev' => ''), null, false),
     'loading_text' => _("Loading...")
 );
 
@@ -72,7 +71,7 @@ while (list(,$line) = each($lines)) {
     }
     $prev = $fl->queryPreviousRevision($rev);
 
-    $line = Text::htmlAllSpaces($line['line']);
+    $line = Horde_Text_Filter::filter($line['line'], 'space2html', array('charset' => Horde_Nls::getCharset(), 'encode' => true, 'encode_all' => true));
     include CHORA_TEMPLATES . '/annotate/line.inc';
 }
 

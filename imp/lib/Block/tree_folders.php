@@ -17,11 +17,10 @@ class Horde_Block_imp_tree_folders extends Horde_Block
 
     function _buildTree(&$tree, $indent = 0, $parent = null)
     {
-        $GLOBALS['authentication'] = 'none';
-        require_once dirname(__FILE__) . '/../base.php';
-
-        /* Abort immediately if we're not currently logged in. */
-        if (!IMP::checkAuthentication(true)) {
+        require_once dirname(__FILE__) . '/../Application.php';
+        try {
+            new IMP_Application(array('init' => array('authentication' => 'throw')));
+        } catch (Horde_Exception $e) {
             return;
         }
 
@@ -45,20 +44,20 @@ class Horde_Block_imp_tree_folders extends Horde_Block
         $tree->addNode($parent . 'search', $parent, _("Search"),
                        $indent, false,
                        array('icon' => 'search.png',
-                             'icondir' => $GLOBALS['registry']->getImageDir('horde'),
+                             'icondir' => $image_dir,
                              'url' => Horde::applicationUrl('search.php')));
 
         if ($_SESSION['imp']['protocol'] == 'pop') {
             return;
         }
 
-        $name_url = Util::addParameter(Horde::applicationUrl('mailbox.php'), 'no_newmail_popup', 1);
+        $name_url = Horde_Util::addParameter(Horde::applicationUrl('mailbox.php'), 'no_newmail_popup', 1);
 
         /* Initialize the IMP_Tree object. */
-        $imaptree = &IMP_IMAP_Tree::singleton();
-        $mask = IMP_IMAP_Tree::NEXT_SHOWCLOSED;
+        $imaptree = IMP_Imap_Tree::singleton();
+        $mask = IMP_Imap_Tree::NEXT_SHOWCLOSED;
         if ($GLOBALS['prefs']->getValue('subscribe')) {
-            $mask |= IMP_IMAP_Tree::NEXT_SHOWSUB;
+            $mask |= IMP_Imap_Tree::NEXT_SHOWSUB;
         }
 
         $unseen = 0;
@@ -82,7 +81,7 @@ class Horde_Block_imp_tree_folders extends Horde_Block
                 'icon' => $val['icon'],
                 'icondir' => $val['icondir'],
                 'iconopen' => $val['iconopen'],
-                'url' => ($val['container']) ? null : Util::addParameter($name_url, 'mailbox', $val['value']),
+                'url' => ($val['container']) ? null : Horde_Util::addParameter($name_url, 'mailbox', $val['value']),
             );
             $tree->addNode($parent . $val['value'],
                            ($val['level']) ? $parent . $val['parent'] : $parent,

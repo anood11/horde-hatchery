@@ -1,7 +1,4 @@
 <?php
-
-require_once 'Horde/Variables.php';
-
 /**
  * News search form
  *
@@ -30,7 +27,7 @@ class News_Search extends Horde_Form {
                    News::LOCKED => _("Locked"));
         $this->addVariable(_("Status"), 'status', 'enum', false, false, false, array($s, _("-- select --")));
 
-        $allowed_cats = $GLOBALS['news_cat']->getAllowed(PERMS_DELETE);
+        $allowed_cats = $GLOBALS['news_cat']->getAllowed(Horde_Perms::DELETE);
         $this->addVariable(_("Category"), 'category', 'enum', false, false, false, array($allowed_cats, _("-- select --")));
 
         $sources = $GLOBALS['news']->getSources();
@@ -52,7 +49,7 @@ class News_Search extends Horde_Form {
         $this->addVariable(_("Unpublish"), 'unpublish', 'datetime', false, false, false, $GLOBALS['news']->datetimeParams());
         $this->addVariable(_("User"), 'user', 'text', false, false, false);
 
-        if (Auth::isAdmin()) {
+        if (Horde_Auth::isAdmin()) {
             $this->addVariable(_("Editor"), 'editor', 'text', false, false, false);
         }
 
@@ -63,8 +60,8 @@ class News_Search extends Horde_Form {
      */
     public function getPager($info, $count, $url)
     {
-        $pager = new Horde_UI_Pager('news_page',
-                                    Variables::getDefaultVariables(),
+        $pager = new Horde_Ui_Pager('news_page',
+                                    Horde_Variables::getDefaultVariables(),
                                     array('num' => $count,
                                           'url' => $url,
                                           'page_count' => 10,
@@ -85,7 +82,7 @@ class News_Search extends Horde_Form {
     /**
      * Fetch the field values of the submitted form.
      *
-     * @param Variables $vars  A Variables instance, optional since Horde 3.2.
+     * @param Horde_Variables $vars  A Horde_Variables instance, optional since Horde 3.2.
      * @param array $info      Array to be filled with the submitted field
      *                         values.
      */
@@ -101,7 +98,7 @@ class News_Search extends Horde_Form {
      *
      * @param array  $variables  An array of Horde_Form_Variable objects to
      *                           fetch from.
-     * @param object $vars       The Variables object.
+     * @param object $vars       The Horde_Variables object.
      * @param array  $info       The array to be filled with the submitted
      *                           field values.
      */

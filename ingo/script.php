@@ -27,7 +27,7 @@ if ($scriptor) {
 
 /* Activate/deactivate script if requested.
    activateScript() does its own $notification->push() on error. */
-$actionID = Util::getFormData('actionID');
+$actionID = Horde_Util::getFormData('actionID');
 switch ($actionID) {
 case 'action_activate':
     if (!empty($script)) {
@@ -49,6 +49,7 @@ case 'show_active':
 }
 
 $title = _("Filter Script Display");
+Ingo::prepareMenu();
 require INGO_TEMPLATES . '/common-header.inc';
 require INGO_TEMPLATES . '/menu.inc';
 require INGO_TEMPLATES . '/script/header.inc';

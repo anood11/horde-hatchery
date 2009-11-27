@@ -28,9 +28,8 @@ foreach ($fl->queryLogs() as $lg) {
 }
 arsort($stats);
 
-$title = sprintf(_("Statistics for %s"), Text::htmlallspaces($where));
-Horde::addScriptFile('prototype.js', 'horde', true);
-Horde::addScriptFile('tables.js', 'horde', true);
+$title = sprintf(_("Statistics for %s"), Horde_Text_Filter::filter($where, 'space2html', array('charset' => Horde_Nls::getCharset(), 'encode' => true, 'encode_all' => true)));
+Horde::addScriptFile('tables.js', 'horde');
 require CHORA_TEMPLATES . '/common-header.inc';
 require CHORA_TEMPLATES . '/menu.inc';
 require CHORA_TEMPLATES . '/headerbar.inc';

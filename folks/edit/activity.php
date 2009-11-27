@@ -18,8 +18,8 @@ require_once 'tabs.php';
 
 $title = _("Activity");
 
-$activity_scope = Util::getGet('activity_scope');
-$activity_date = Util::getGet('activity_date');
+$activity_scope = Horde_Util::getGet('activity_scope');
+$activity_date = Horde_Util::getGet('activity_date');
 if ($activity_scope && $activity_date) {
     $result = $folks_driver->deleteActivity($activity_scope, $activity_date);
     if ($result instanceof PEAR_Error) {
@@ -43,7 +43,7 @@ if ($form->validate()) {
     }
 }
 
-$activities = $folks_driver->getActivity(Auth::getAuth());
+$activities = $folks_driver->getActivity(Horde_Auth::getAuth());
 if ($activities instanceof PEAR_Error) {
     $notification->push($activities);
     header('Location: ' . Folks::getUrlFor('list', 'list'));
@@ -53,7 +53,7 @@ if ($activities instanceof PEAR_Error) {
 $delete_url = Horde::applicationUrl('edit/activity.php');
 $delete_img = Horde::img('delete.png', '', '', $registry->getImageDir('horde'));
 
-Horde::addScriptFile('tables.js', 'horde', true);
+Horde::addScriptFile('tables.js', 'horde');
 require FOLKS_TEMPLATES . '/common-header.inc';
 require FOLKS_TEMPLATES . '/menu.inc';
 

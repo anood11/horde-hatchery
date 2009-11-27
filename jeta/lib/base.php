@@ -11,37 +11,23 @@
  * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
  */
 
-// Check for a prior definition of HORDE_BASE (perhaps by an
-// auto_prepend_file definition for site customization).
-if (!defined('HORDE_BASE')) {
-    define('HORDE_BASE', dirname(__FILE__) . '/../..');
-}
+// Determine BASE directories.
+require_once dirname(__FILE__) . '/base.load.php';
 
-// Find the base file path of Jeta.
-if (!defined('JETA_BASE')) {
-    define('JETA_BASE', dirname(__FILE__) . '/..');
-}
-
-// Load the Horde Framework core, and set up inclusion paths.
+// Load the Horde Framework core.
 require_once HORDE_BASE . '/lib/core.php';
-require_once 'Horde/Autoloader.php';
-Horde_Autoloader::addClassPattern('/^Jeta_/', JETA_BASE . '/lib/');
 
 // Registry.
-$registry = &Registry::singleton();
-if (is_a(($pushed = $registry->pushApp('jeta', !defined('AUTH_HANDLER'))), 'PEAR_Error')) {
-    if ($pushed->getCode() == 'permission_denied') {
-        Horde::authenticationFailureRedirect();
-    }
-    Horde::fatal($pushed, __FILE__, __LINE__, false);
+$registry = Horde_Registry::singleton();
+try {
+    $registry->pushApp('jeta', array('logintasks' => true));
+} catch (Horde_Exception $e) {
+    Horde_Auth::authenticateFailure('jeta', $e);
 }
 
 $conf = &$GLOBALS['conf'];
 define('JETA_TEMPLATES', $registry->get('templates'));
 
 // Notification system.
-$notification = &Notification::singleton();
+$notification = Horde_Notification::singleton();
 $notification->attach('status');
-
-// Includes.
-require_once JETA_BASE . '/lib/Jeta.php';

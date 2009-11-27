@@ -60,7 +60,7 @@ class IMP_Message
 
     /**
      * Copies or moves a list of messages to a new mailbox.
-     * Handles use of the IMP::SEARCH_MBOX mailbox and the Trash mailbox.
+     * Handles search and Trash mailboxes.
      *
      * @param string $targetMbox  The mailbox to move/copy messages to
      *                            (UTF7-IMAP).
@@ -73,10 +73,6 @@ class IMP_Message
     public function copy($targetMbox, $action, $indices, $new = false)
     {
         global $conf, $notification, $prefs;
-
-        if (($action == 'move') && $GLOBALS['imp_imap']->isReadOnly($targetMbox)) {
-            return false;
-        }
 
         if ($conf['tasklist']['use_tasklist'] &&
             (strpos($targetMbox, '_tasklist_') === 0)) {
@@ -118,23 +114,44 @@ class IMP_Message
         }
 
         foreach ($msgList as $mbox => $msgIndices) {
-            if (($action == 'move') && $GLOBALS['imp_imap']->isReadOnly($mbox)) {
-                $notification->push(sprintf($message, IMP::displayFolder($mbox), IMP::displayFolder($targetMbox)) . ': ' . _("The target directory is read-only."), 'horde.error');
-                $return_value = false;
-                continue;
+            $error = null;
+
+            if ($GLOBALS['imp_imap']->isReadOnly($targetMbox)) {
+                $error = _("The target directory is read-only.");
+            }
+
+            if (!$error &&
+                ($action == 'move') &&
+                $GLOBALS['imp_imap']->isReadOnly($mbox)) {
+                $error = _("The source directory is read-only.");
+            }
+
+            if (!$error) {
+                try {
+                    $GLOBALS['imp_imap']->checkUidvalidity($mbox);
+                } catch (Horde_Exception $e) {
+                    $error = $e->getMessage();
+                }
             }
 
             /* Attempt to copy/move messages to new mailbox. */
-            try {
-                $GLOBALS['imp_imap']->ob->copy($mbox, $targetMbox, array('ids' => $msgIndices, 'move' => $imap_move));
+            if (!$error) {
+                try {
+                    $GLOBALS['imp_imap']->ob()->copy($mbox, $targetMbox, array('ids' => $msgIndices, 'move' => $imap_move));
 
-                $imp_mailbox = IMP_Mailbox::singleton($mbox);
-                if (($action == 'move') && $imp_mailbox->isBuilt()) {
-                    $imp_mailbox->removeMsgs(array($mbox => $msgIndices));
+                    $imp_mailbox = IMP_Mailbox::singleton($mbox);
+                    if (($action == 'move') && $imp_mailbox->isBuilt()) {
+                        $imp_mailbox->removeMsgs(array($mbox => $msgIndices));
+                    }
+                } catch (Horde_Imap_Client_Exception $e) {
+                    $error = $e->getMessage();
                 }
-            } catch (Horde_Imap_Client_Exception $e) {
-                $notification->push(sprintf($message, IMP::displayFolder($mbox), IMP::displayFolder($targetMbox)) . ': ' . $e->getMessage(), 'horde.error');
+            }
+
+            if ($error) {
+                $notification->push(sprintf($message, IMP::displayFolder($mbox), IMP::displayFolder($targetMbox)) . ': ' . $error, 'horde.error');
                 $return_value = false;
+                continue;
             }
         }
 
@@ -144,18 +161,21 @@ class IMP_Message
     /**
      * Deletes a list of messages taking into account whether or not a
      * Trash folder is being used.
-     * Handles use of the IMP::SEARCH_MBOX mailbox and the Trash folder.
+     * Handles search and Trash mailboxes.
      *
-     * @param mixed $indices    See IMP::parseIndicesList().
-     * @param boolean $nuke     Override user preferences and nuke (i.e.
-     *                          permanently delete) the messages instead?
-     * @param boolean $keeplog  Should any history information of the
-     *                          message be kept?
+     * @param mixed $indices  See IMP::parseIndicesList().
+     * @param array $options  Additional options:
+     * <pre>
+     * 'keeplog' - (boolean) Should any history information of the message be
+     *             kept?
+     * 'nuke' - (boolean) Override user preferences and nuke (i.e. permanently
+     *          delete) the messages instead?
+     * </pre>
      *
      * @return integer|boolean  The number of messages deleted if successful,
      *                          false if not.
      */
-    public function delete($indices, $nuke = false, $keeplog = false)
+    public function delete($indices, $options = array())
     {
         global $conf, $notification, $prefs;
 
@@ -172,12 +192,11 @@ class IMP_Message
         }
 
         $return_value = 0;
-        $maillog_update = (!$keeplog && !empty($conf['maillog']['use_maillog']));
+        $maillog_update = (empty($options['keeplog']) && !empty($conf['maillog']['use_maillog']));
 
         /* Check for Trash folder. */
-        $use_trash_folder = !$this->_usepop && !$nuke && !$use_vtrash && $use_trash;
+        $use_trash_folder = !$this->_usepop && empty($options['nuke']) && !$use_vtrash && $use_trash;
         if ($use_trash_folder) {
-            include_once IMP_BASE . '/lib/Folder.php';
             $imp_folder = IMP_Folder::singleton();
 
             if (!$imp_folder->exists($trash) &&
@@ -187,8 +206,22 @@ class IMP_Message
         }
 
         foreach ($msgList as $mbox => $msgIndices) {
+            $error = null;
+
             if ($GLOBALS['imp_imap']->isReadOnly($mbox)) {
-                $notification->push(sprintf(_("There was an error deleting messages from the folder \"%s\". This folder is read-only."), IMP::displayFolder($mbox)), 'horde.error');
+                $error = _("This folder is read-only.");
+            }
+
+            if (!$error) {
+                try {
+                    $GLOBALS['imp_imap']->checkUidvalidity($mbox);
+                } catch (Horde_Exception $e) {
+                    $error = $e->getMessage();
+                }
+            }
+
+            if ($error) {
+                $notification->push(sprintf(_("There was an error deleting messages from the folder \"%s\"."), IMP::displayFolder($mbox)) . ' ' . $error, 'horde.error');
                 $return_value = false;
                 continue;
             }
@@ -199,7 +232,7 @@ class IMP_Message
             /* Trash is only valid for IMAP mailboxes. */
             if ($use_trash_folder && ($mbox != $trash)) {
                 try {
-                    $GLOBALS['imp_imap']->ob->copy($mbox, $trash, array('ids' => $msgIndices, 'move' => true));
+                    $GLOBALS['imp_imap']->ob()->copy($mbox, $trash, array('ids' => $msgIndices, 'move' => true));
 
                     $imp_mailbox = IMP_Mailbox::singleton($mbox);
                     if ($imp_mailbox->isBuilt()) {
@@ -215,7 +248,7 @@ class IMP_Message
                 $fetch = null;
                 if ($maillog_update) {
                     try {
-                        $fetch = $GLOBALS['imp_imap']->ob->fetch($mbox, array(Horde_Imap_Client::FETCH_ENVELOPE => true), array('ids' => $msgIndices));
+                        $fetch = $GLOBALS['imp_imap']->ob()->fetch($mbox, array(Horde_Imap_Client::FETCH_ENVELOPE => true), array('ids' => $msgIndices));
                     } catch (Horde_Imap_Client_Exception $e) {}
                 }
 
@@ -224,7 +257,7 @@ class IMP_Message
                 $del_flags = array('\\deleted');
 
                 if ($this->_usepop ||
-                    $nuke ||
+                    !empty($options['nuke']) ||
                     ($use_trash && ($mbox == $trash)) ||
                     ($use_vtrash && ($GLOBALS['imp_search']->isVTrashFolder()))) {
                     /* Purge messages immediately. */
@@ -239,7 +272,7 @@ class IMP_Message
                 }
 
                 try {
-                    $GLOBALS['imp_imap']->ob->store($mbox, array('add' => array('\\deleted'), 'ids' => $msgIndices));
+                    $GLOBALS['imp_imap']->ob()->store($mbox, array('add' => array('\\deleted'), 'ids' => $msgIndices));
                     if ($expunge_now) {
                         $this->expungeMailbox($indices_array);
                     }
@@ -266,7 +299,7 @@ class IMP_Message
 
     /**
      * Undeletes a list of messages.
-     * Handles the IMP::SEARCH_MBOX mailbox.
+     * Handles search mailboxes.
      * This function works with IMAP only, not POP3.
      *
      * @param mixed $indices  See IMP::parseIndicesList().
@@ -280,13 +313,13 @@ class IMP_Message
 
     /**
      * Copies or moves a list of messages to a tasklist or notepad.
-     * Handles use of the IMP::SEARCH_MBOX mailbox and the Trash folder.
+     * Handles search and Trash mailboxes.
      *
      * @param string $list    The list in which the task or note will be
      *                        created.
      * @param string $action  Either 'copy' or 'move'.
      * @param mixed $indices  See IMP::parseIndicesList().
-     * @param string $type    The object type to create, defaults to task.
+     * @param string $type    The object type to create ('note' or 'task').
      *
      * @return boolean  True if successful, false if not.
      */
@@ -298,8 +331,6 @@ class IMP_Message
         if (!($msgList = IMP::parseIndicesList($indices))) {
             return false;
         }
-
-        require_once IMP_BASE . '/lib/version.php';
 
         foreach ($msgList as $folder => $msgIndices) {
             foreach ($msgIndices as $index) {
@@ -328,11 +359,11 @@ class IMP_Message
                 /* TODO: When Horde_iCalendar supports setting of charsets
                  * we need to set it there instead of relying on the fact
                  * that both Nag and IMP use the same charset. */
-                $body = String::convertCharset($body, $body_part->getCharset(), NLS::getCharset());
+                $body = Horde_String::convertCharset($body, $body_part->getCharset(), Horde_Nls::getCharset());
 
                 /* Create a new iCalendar. */
                 $vCal = new Horde_iCalendar();
-                $vCal->setAttribute('PRODID', '-//The Horde Project//IMP ' . IMP_VERSION . '//EN');
+                $vCal->setAttribute('PRODID', '-//The Horde Project//IMP ' . $GLOBALS['registry']->getVersion() . '//EN');
                 $vCal->setAttribute('METHOD', 'PUBLISH');
 
                 switch ($type) {
@@ -345,13 +376,21 @@ class IMP_Message
                     $vTodo->setAttribute('PRIORITY', '3');
 
                     /* Get the list of editable tasklists. */
-                    $lists = $registry->call('tasks/listTasklists',
-                                             array(false, PERMS_EDIT));
+                    try {
+                        $lists = $registry->call('tasks/listTasklists', array(false, Horde_Perms::EDIT));
+                    } catch (Horde_Exception $e) {
+                        $lists = null;
+                        $notification->push($e, $e->getCode());
+                    }
 
                     /* Attempt to add the new vTodo item to the requested
                      * tasklist. */
-                    $res = $registry->call('tasks/import',
-                                           array($vTodo, 'text/calendar', $list));
+                    try {
+                        $res = $registry->call('tasks/import', array($vTodo, 'text/calendar', $list));
+                    } catch (Horde_Exception $e) {
+                        $res = null;
+                        $notification->push($e, $e->getCode());
+                    }
                     break;
 
                 case 'note':
@@ -361,53 +400,60 @@ class IMP_Message
                     $vNote->setAttribute('BODY', $subject . "\n". $body);
 
                     /* Get the list of editable notepads. */
-                    $lists = $registry->call('notes/listNotepads',
-                                             array(false, PERMS_EDIT));
+                    try {
+                        $lists = $registry->call('notes/listNotepads', array(false, Horde_Perms::EDIT));
+                    } catch (Horde_Exception $e) {
+                        $lists = null;
+                        $notification->push($e, $e->getCode());
+                    }
 
                     /* Attempt to add the new vNote item to the requested
                      * notepad. */
-                    $res = $registry->call('notes/import',
-                                           array($vNote, 'text/x-vnote', $list));
+                    try {
+                        $res = $registry->call('notes/import', array($vNote, 'text/x-vnote', $list));
+                    } catch (Horde_Exception $e) {
+                        $res = null;
+                        $notification->push($e, $e->getCode());
+                    }
                     break;
                 }
 
-                if (is_a($res, 'PEAR_Error')) {
-                    $notification->push($res, $res->getCode());
-                } elseif (!$res) {
-                    switch ($type) {
-                    case 'task':
-                        $notification->push(_("An unknown error occured while creating the new task."), 'horde.error');
-                        break;
+                if (!is_null($res)) {
+                    if (!$res) {
+                        switch ($type) {
+                        case 'task':
+                            $notification->push(_("An unknown error occured while creating the new task."), 'horde.error');
+                            break;
 
-                    case 'note':
-                        $notification->push(_("An unknown error occured while creating the new note."), 'horde.error');
-                        break;
-                    }
-                } else {
-                    $name = '"' . htmlspecialchars($subject) . '"';
-
-                    /* Attempt to convert the object name into a hyperlink. */
-                    switch ($type) {
-                    case 'task':
-                        $link = $registry->link('tasks/show',
-                                                array('uid' => $res));
-                        break;
-                    case 'note':
-                        if ($registry->hasMethod('notes/show')) {
-                            $link = $registry->link('notes/show',
-                                                    array('uid' => $res));
-                        } else {
-                            $link = false;
+                        case 'note':
+                            $notification->push(_("An unknown error occured while creating the new note."), 'horde.error');
+                            break;
                         }
-                        break;
-                    }
-                    if ($link && !is_a($link, 'PEAR_Error')) {
-                        $name = sprintf('<a href="%s">%s</a>',
-                                        Horde::url($link),
-                                        $name);
-                    }
+                    } elseif (!is_null($lists)) {
+                        $name = '"' . htmlspecialchars($subject) . '"';
 
-                    $notification->push(sprintf(_("%s was successfully added to \"%s\"."), $name, htmlspecialchars($lists[$list]->get('name'))), 'horde.success', array('content.raw'));
+                        /* Attempt to convert the object name into a
+                         * hyperlink. */
+                        try {
+                            switch ($type) {
+                            case 'task':
+                                $link = $registry->link('tasks/show', array('uid' => $res));
+                                break;
+
+                            case 'note':
+                                $link = $registry->hasMethod('notes/show')
+                                    ? $registry->link('notes/show', array('uid' => $res))
+                                    : false;
+                                break;
+                            }
+
+                            if ($link) {
+                                $name = sprintf('<a href="%s">%s</a>', Horde::url($link), $name);
+                            }
+
+                            $notification->push(sprintf(_("%s was successfully added to \"%s\"."), $name, htmlspecialchars($lists[$list]->get('name'))), 'horde.success', array('content.raw'));
+                        } catch (Horde_Exception $e) {}
+                    }
                 }
             }
         }
@@ -422,7 +468,7 @@ class IMP_Message
 
     /**
      * Strips one or all MIME parts out of a message.
-     * Handles the IMP::SEARCH_MBOX mailbox.
+     * Handles search mailboxes.
      *
      * @param mixed $indices  See IMP::parseIndicesList().
      * @param string $partid  The MIME ID of the part to strip. All parts are
@@ -449,6 +495,8 @@ class IMP_Message
             throw new Horde_Exception(_("Cannot strip the MIME part as the mailbox is read-only"));
         }
 
+        $GLOBALS['imp_imap']->checkUidvalidity($mbox);
+
         /* Get a local copy of the message. */
         $contents = IMP_Contents::singleton($index . IMP::IDX_SEP . $mbox);
 
@@ -457,7 +505,7 @@ class IMP_Message
             /* For stripping all parts, it only makes sense to strip base
              * parts. Stripping subparts may cause issues with display of the
              * parent multipart type. */
-            for ($i = 2; ; ++$i) {
+            for ($i = 2;; ++$i) {
                 $part = $contents->getMIMEPart($i, array('nocontents' => true));
                 if (!$part) {
                     break;
@@ -472,7 +520,7 @@ class IMP_Message
 
         foreach ($partids as $partid) {
             $oldPart = $message->getPart($partid);
-            if (!is_a($oldPart, 'Horde_Mime_Part')) {
+            if (!($oldPart instanceof Horde_Mime_Part)) {
                 continue;
             }
             $newPart = new Horde_Mime_Part();
@@ -480,14 +528,15 @@ class IMP_Message
             $newPart->setDisposition('attachment');
 
             /* We need to make sure all text is in the correct charset. */
-            $newPart->setCharset(NLS::getCharset());
-            $newPart->setContents(sprintf(_("[Attachment stripped: Original attachment type: %s, name: %s]"), $oldPart->getType(), $oldPart->getName(true)), '8bit');
+            $part_name = $oldPart->getName(true);
+            $newPart->setCharset(Horde_Nls::getCharset());
+            $newPart->setContents(sprintf(_("[Attachment stripped: Original attachment type: %s, name: %s]"), $oldPart->getType(), $part_name ? $part_name : _("unnamed")));
             $message->alterPart($partid, $newPart);
         }
 
         /* Get the headers for the message. */
         try {
-            $res = $GLOBALS['imp_imap']->ob->fetch($mbox, array(
+            $res = $GLOBALS['imp_imap']->ob()->fetch($mbox, array(
                 Horde_Imap_Client::FETCH_HEADERTEXT => array(array('peek' => true)),
                 Horde_Imap_Client::FETCH_ENVELOPE => true,
                 Horde_Imap_Client::FETCH_FLAGS => true
@@ -501,12 +550,12 @@ class IMP_Message
                 unset($res['flags'][$pos]);
             }
 
-            $uid = $GLOBALS['imp_imap']->ob->append($mbox, array(array('data' => $res['headertext'][0] . $message->toString(false), 'flags' => $res['flags'], 'messageid' => $res['envelope']['message-id'])));
+            $uid = $GLOBALS['imp_imap']->ob()->append($mbox, array(array('data' => $message->toString(array('headers' => $res['headertext'][0], 'stream' => true)), 'flags' => $res['flags'], 'messageid' => $res['envelope']['message-id'])));
         } catch (Horde_Imap_Client_Exception $e) {
             throw new Horde_Exception(_("An error occured while attempting to strip the attachment."));
         }
 
-        $this->delete($indices, true, true);
+        $this->delete($indices, array('nuke' => true, 'keeplog' => true));
 
         $imp_mailbox = IMP_Mailbox::singleton($mbox);
         $imp_mailbox->setIndex(reset($uid));
@@ -518,7 +567,7 @@ class IMP_Message
 
     /**
      * Sets or clears a given flag for a list of messages.
-     * Handles use of the IMP::SEARCH_MBOX mailbox.
+     * Handles search mailboxes.
      * This function works with IMAP only, not POP3.
      *
      * @param array $flags     The IMAP flag(s) to set or clear.
@@ -530,8 +579,6 @@ class IMP_Message
      */
     public function flag($flags, $indices, $action = true)
     {
-        global $notification;
-
         if (!($msgList = IMP::parseIndicesList($indices))) {
             return false;
         }
@@ -541,16 +588,31 @@ class IMP_Message
             : array('remove' => $flags);
 
         foreach ($msgList as $mbox => $msgIndices) {
+            $error = null;
+
             if ($GLOBALS['imp_imap']->isReadOnly($mbox)) {
-                $notification->push(sprintf(_("There was an error flagging messages in the folder \"%s\". This folder is read-only."), IMP::displayFolder($mbox)), 'horde.error');
-                continue;
+                $error = _("This folder is read-only.");
             }
 
-            /* Flag/unflag the messages now. */
-            try {
-                $GLOBALS['imp_imap']->ob->store($mbox, array_merge($action_array, array('ids' => $msgIndices)));
-            } catch (Horde_Imap_Client_Exception $e) {
-                $notification->push(sprintf(_("There was an error flagging messages in the folder \"%s\". This is what the server said"), IMP::displayFolder($mbox)) . ': ' . $e->getMessage(), 'horde.error');
+            if (!$error) {
+                try {
+                    $GLOBALS['imp_imap']->checkUidvalidity($mbox);
+                } catch (Horde_Exception $e) {
+                    $error = $e->getMessage();
+                }
+            }
+
+            if (!$error) {
+                /* Flag/unflag the messages now. */
+                try {
+                    $GLOBALS['imp_imap']->ob()->store($mbox, array_merge($action_array, array('ids' => $msgIndices)));
+                } catch (Horde_Imap_Client_Exception $e) {
+                    $error = $e->getMessage();
+                }
+            }
+
+            if ($error) {
+                $GLOBALS['notification']->push(sprintf(_("There was an error flagging messages in the folder \"%s\". This folder is read-only."), IMP::displayFolder($mbox)), 'horde.error');
                 return false;
             }
         }
@@ -581,7 +643,7 @@ class IMP_Message
 
         foreach ($mboxes as $val) {
             try {
-                $GLOBALS['imp_imap']->ob->store($val, $action_array);
+                $GLOBALS['imp_imap']->ob()->store($val, $action_array);
             } catch (Horde_Imap_Client_Exception $e) {
                 return false;
             }
@@ -598,24 +660,29 @@ class IMP_Message
      *                          If the value is not an array, all messages
      *                          flagged as deleted in the mailbox will be
      *                          deleted.
+     * @param array $options    Additional options:
+     * <pre>
+     * 'list' - (boolean) Return a list of messages expunged.
+     *          DEFAULT: false
+     * </pre>
      *
-     * @return array  An array of mailbox names as keys and UIDs as values
-     *                that were expunged.
+     * @return array  If 'list' option is true, an array of mailbox names as
+     *                keys and UIDs as values that were expunged.
      */
-    public function expungeMailbox($mbox_list)
+    public function expungeMailbox($mbox_list, $options = array())
     {
-        global $imp_search;
+        $msg_list = !empty($options['list']);
 
         if (empty($mbox_list)) {
-            return array();
+            return $msg_list ? array() : null;
         }
 
         $process_list = $update_list = array();
 
         foreach (array_keys($mbox_list) as $key) {
             if (!$GLOBALS['imp_imap']->isReadOnly($key)) {
-                if ($imp_search->isSearchMbox($key)) {
-                    foreach ($imp_search->getSearchFolders($key) as $skey) {
+                if ($GLOBALS['imp_search']->isSearchMbox($key)) {
+                    foreach ($GLOBALS['imp_search']->getSearchFolders($key) as $skey) {
                         $process_list[$skey] = $mbox_list[$key];
                     }
                 } else {
@@ -625,18 +692,27 @@ class IMP_Message
         }
 
         foreach ($process_list as $key => $val) {
+            /* If expunging a particular UID list, need to check
+             * UIDVALIDITY. */
+            if (is_array($val)) {
+                try {
+                    $GLOBALS['imp_imap']->checkUidvalidity($key);
+                } catch (Horde_Exception $e) {
+                    continue;
+                }
+            }
+
             try {
-                $GLOBALS['imp_imap']->ob->expunge($key, array('ids' => is_array($val) ? $val : array()));
+                $update_list[$key] = $GLOBALS['imp_imap']->ob()->expunge($key, array('ids' => is_array($val) ? $val : array(), 'list' => $msg_list));
 
                 $imp_mailbox = IMP_Mailbox::singleton($key);
                 if ($imp_mailbox->isBuilt()) {
                     $imp_mailbox->removeMsgs(is_array($val) ? array($key => $val) : true);
                 }
-                $update_list[$key] = $val;
             } catch (Horde_Imap_Client_Exception $e) {}
         }
 
-        return $update_list;
+        return $msg_list ? $update_list : null;
     }
 
     /**
@@ -648,7 +724,9 @@ class IMP_Message
     {
         global $imp_search, $notification, $prefs;
 
-        $trash_folder = ($prefs->getValue('use_trash')) ? IMP::folderPref($prefs->getValue('trash_folder'), true) : null;
+        $trash_folder = ($prefs->getValue('use_trash'))
+            ? IMP::folderPref($prefs->getValue('trash_folder'), true)
+            : null;
 
         foreach ($mbox_list as $mbox) {
             $display_mbox = IMP::displayFolder($mbox);
@@ -667,17 +745,17 @@ class IMP_Message
             /* Make sure there is at least 1 message before attempting to
                delete. */
             try {
-                $status = $GLOBALS['imp_imap']->ob->status($mbox, Horde_Imap_Client::STATUS_MESSAGES);
+                $status = $GLOBALS['imp_imap']->ob()->status($mbox, Horde_Imap_Client::STATUS_MESSAGES);
                 if (empty($status['messages'])) {
                     $notification->push(sprintf(_("The mailbox %s is already empty."), $display_mbox), 'horde.message');
                     continue;
                 }
 
                 if (empty($trash_folder) || ($trash_folder == $mbox)) {
-                    $this->flagAllInMailbox(array('\\deleted'), $mbox, true);
+                    $this->flagAllInMailbox(array('\\deleted'), array($mbox), true);
                     $this->expungeMailbox(array($mbox => 1));
                 } else {
-                    $ret = $GLOBALS['imp_imap']->ob->search($mbox);
+                    $ret = $GLOBALS['imp_imap']->ob()->search($mbox);
                     $indices = array($mbox => $ret['match']);
                     $this->delete($indices);
                 }
@@ -699,7 +777,7 @@ class IMP_Message
     public function sizeMailbox($mbox, $formatted = true)
     {
         try {
-            $res = $GLOBALS['imp_imap']->ob->fetch($mbox, array(Horde_Imap_Client::FETCH_SIZE => true), array('sequence' => true));
+            $res = $GLOBALS['imp_imap']->ob()->fetch($mbox, array(Horde_Imap_Client::FETCH_SIZE => true), array('sequence' => true));
 
             $size = 0;
             reset($res);

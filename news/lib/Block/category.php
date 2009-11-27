@@ -16,7 +16,7 @@ class Horde_Block_News_category extends Horde_Block {
     {
         require_once dirname(__FILE__) . '/../base.php';
 
-        $url = Util::addParameter(Horde::applicationUrl('browse.php'), 'category', $this->_params['category']);
+        $url = Horde_Util::addParameter(Horde::applicationUrl('browse.php'), 'category', $this->_params['category']);
         $name = $GLOBALS['news_cat']->getName($this->_params['category']);
         $html = Horde::link($url, sprintf(_("Last news in %s"), $name), 'header');
         $html .= sprintf(_("Last news in %s"), $name) . '</a>';
@@ -48,7 +48,7 @@ class Horde_Block_News_category extends Horde_Block {
                  'ORDER BY n.publish DESC ' .
                  'LIMIT 0, ' . $this->_params['limit'];
 
-        $params = array(News::CONFIRMED, $this->_params['category'], $this->_params['category'], NLS::select());
+        $params = array(News::CONFIRMED, $this->_params['category'], $this->_params['category'], Horde_Nls::select());
         $rows = $GLOBALS['news']->db->getAll($query, $params, DB_FETCHMODE_ASSOC);
         if ($rows instanceof PEAR_Error) {
             return $rows->getDebugInfo();
@@ -56,7 +56,7 @@ class Horde_Block_News_category extends Horde_Block {
 
         $view = new News_View();
         $view->news = $rows;
-        $view->moreurl = Util::addParameter(Horde::applicationUrl('browse.php'), 'category', $this->_params['category']);
+        $view->moreurl = Horde_Util::addParameter(Horde::applicationUrl('browse.php'), 'category', $this->_params['category']);
 
         return $view->render('/block/news.php');
     }

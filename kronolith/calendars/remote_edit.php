@@ -1,7 +1,5 @@
 <?php
 /**
- * $Horde: kronolith/calendars/remote_edit.php,v 1.4 2009/01/06 18:01:00 jan Exp $
- *
  * Copyright 2002-2009 The Horde Project (http://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (GPL). If you
@@ -10,18 +8,17 @@
  * @author Chuck Hagenbuch <chuck@horde.org>
  */
 
-@define('KRONOLITH_BASE', dirname(dirname(__FILE__)));
-require_once KRONOLITH_BASE . '/lib/base.php';
+require_once dirname(__FILE__) . '/../lib/base.php';
 require_once KRONOLITH_BASE . '/lib/Forms/EditRemoteCalendar.php';
 
 // Exit if this isn't an authenticated user or if the user can't
 // subscribe to remote calendars (remote_cals is locked).
-if (!Auth::getAuth() || $prefs->isLocked('remote_cals')) {
+if (!Horde_Auth::getAuth() || $prefs->isLocked('remote_cals')) {
     header('Location: ' . Horde::applicationUrl($prefs->getValue('defaultview') . '.php', true));
     exit;
 }
 
-$vars = Variables::getDefaultVariables();
+$vars = Horde_Variables::getDefaultVariables();
 $url = $vars->get('url');
 
 $remote_calendar = null;
@@ -53,13 +50,12 @@ if ($form->validate($vars)) {
     exit;
 }
 
-$key = Auth::getCredential('password');
+$key = Horde_Auth::getCredential('password');
 $username = $calendar['user'];
 $password = $calendar['password'];
 if ($key) {
-    require_once 'Horde/Secret.php';
-    $username = Secret::read($key, base64_decode($username));
-    $password = Secret::read($key, base64_decode($password));
+    $username = Horde_Secret::read($key, base64_decode($username));
+    $password = Horde_Secret::read($key, base64_decode($password));
 }
 
 $vars->set('name', $calendar['name']);

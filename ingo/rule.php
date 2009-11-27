@@ -14,10 +14,11 @@
 require_once dirname(__FILE__) . '/lib/base.php';
 
 /* Check rule permissions. */
-if (!Ingo::hasPermission('allow_rules')) {
-    $message = @htmlspecialchars(_("You are not allowed to create or edit custom rules."), ENT_COMPAT, NLS::getCharset());
-    if (!empty($conf['hooks']['permsdenied'])) {
-        $message = Horde::callHook('_perms_hook_denied', array('ingo:allow_rules'), 'horde', $message);
+if (!$GLOBALS['perms']->hasAppPermission('allow_rules')) {
+    try {
+        $message = Horde::callHook('perms_denied', array('ingo:allow_rules'));
+    } catch (Horde_Exception_HookNotSet $e) {
+        $message = @htmlspecialchars(_("You are not allowed to create or edit custom rules."), ENT_COMPAT, Horde_Nls::getCharset());
     }
     $notification->push($message, 'horde.error', array('content.raw'));
     header('Location: ' . Horde::applicationUrl('filters.php', true));
@@ -42,32 +43,32 @@ require INGO_BASE . '/config/fields.php';
 $filters = &$ingo_storage->retrieve(Ingo_Storage::ACTION_FILTERS);
 
 /* Run through action handlers. */
-$actionID = Util::getFormData('actionID');
-$edit_number = Util::getFormData('edit');
+$actionID = Horde_Util::getFormData('actionID');
+$edit_number = Horde_Util::getFormData('edit');
 switch ($actionID) {
 case 'create_folder':
 case 'rule_save':
 case 'rule_update':
 case 'rule_delete':
-    if (!Ingo::hasPermission('shares', PERMS_EDIT)) {
+    if (!Ingo::hasSharePermission(Horde_Perms::EDIT)) {
         $notification->push(_("You do not have permission to edit filter rules."), 'horde.error');
         header('Location: ' . Horde::applicationUrl('filters.php', true));
         exit;
     }
 
     $rule = array(
-        'id' => Util::getFormData('id'),
-        'name' => Util::getFormData('name'),
-        'combine' => Util::getFormData('combine'),
-        'conditions' = array()
+        'id' => Horde_Util::getFormData('id'),
+        'name' => Horde_Util::getFormData('name'),
+        'combine' => Horde_Util::getFormData('combine'),
+        'conditions' => array()
     );
 
-    $field = Util::getFormData('field');
-    $match = Util::getFormData('match');
-    $userheader = Util::getFormData('userheader');
-    $value = Util::getFormData('value');
+    $field = Horde_Util::getFormData('field');
+    $match = Horde_Util::getFormData('match');
+    $userheader = Horde_Util::getFormData('userheader');
+    $value = Horde_Util::getFormData('value');
     if ($ingo_script->caseSensitive()) {
-        $casesensitive = Util::getFormData('case');
+        $casesensitive = Horde_Util::getFormData('case');
     }
 
     $valid = true;
@@ -103,16 +104,16 @@ case 'rule_delete':
     }
 
     if ($actionID == 'create_folder') {
-        $rule['action-value'] = Ingo::createFolder(Util::getFormData('new_folder_name'));
+        $rule['action-value'] = Ingo::createFolder(Horde_Util::getFormData('new_folder_name'));
     } else {
-        $rule['action-value'] = Util::getFormData('actionvalue');
+        $rule['action-value'] = Horde_Util::getFormData('actionvalue');
     }
 
-    $rule['action'] = Util::getFormData('action');
-    $rule['stop'] = Util::getFormData('stop');
+    $rule['action'] = Horde_Util::getFormData('action');
+    $rule['stop'] = Horde_Util::getFormData('stop');
 
     $rule['flags'] = 0;
-    $flags = Util::getFormData('flags', array());
+    $flags = Horde_Util::getFormData('flags', array());
     if (!empty($flags)) {
         foreach ($flags as $val) {
             $rule['flags'] |= $val;
@@ -125,8 +126,8 @@ case 'rule_delete':
     /* Save the rule. */
     if ($actionID == 'rule_save' && $valid) {
         if (is_null($edit_number)) {
-            if (Ingo::hasPermission('max_rules') !== true &&
-                Ingo::hasPermission('max_rules') <= count($filters->getFilterList())) {
+            if ($GLOBALS['perms']->hasAppPermission('max_rules') !== true &&
+                $GLOBALS['perms']->hasAppPermission('max_rules') <= count($filters->getFilterList())) {
                 header('Location: ' . Horde::applicationUrl('filters.php', true));
                 exit;
             }
@@ -144,12 +145,12 @@ case 'rule_delete':
         header('Location: ' . Horde::applicationUrl('filters.php'));
         exit;
     } elseif ($actionID == 'rule_delete') {
-        if (!Ingo::hasPermission('shares', PERMS_DELETE)) {
+        if (!Ingo::hasSharePermission(Horde_Perms::DELETE)) {
             $notification->push(_("You do not have permission to delete filter rules."), 'horde.error');
             header('Location: ' . Horde::applicationUrl('filters.php', true));
             exit;
         }
-        $cond_num = Util::getFormData('conditionnumber');
+        $cond_num = Horde_Util::getFormData('conditionnumber');
         if (!is_null($cond_num)) {
             unset($rule['conditions'][$cond_num]);
             $rule['conditions'] = array_values($rule['conditions']);
@@ -158,17 +159,18 @@ case 'rule_delete':
     break;
 
 default:
-    if (!Ingo::hasPermission('shares', PERMS_EDIT)) {
+    if (!Ingo::hasSharePermission(Horde_Perms::EDIT)) {
         $notification->push(_("You do not have permission to edit filter rules."), 'horde.error');
         header('Location: ' . Horde::applicationUrl('filters.php', true));
         exit;
     }
     if (is_null($edit_number)) {
-        if (Ingo::hasPermission('max_rules') !== true &&
-            Ingo::hasPermission('max_rules') <= count($filters->getFilterList())) {
-            $message = @htmlspecialchars(sprintf(_("You are not allowed to create more than %d rules."), Ingo::hasPermission('max_rules')), ENT_COMPAT, NLS::getCharset());
-            if (!empty($conf['hooks']['permsdenied'])) {
-                $message = Horde::callHook('_perms_hook_denied', array('ingo:max_rules'), 'horde', $message);
+        if ($GLOBALS['perms']->hasAppPermission('max_rules') !== true &&
+            $GLOBALS['perms']->hasAppPermission('max_rules') <= count($filters->getFilterList())) {
+            try {
+                $message = Horde::callHook('perms_denied', array('ingo:max_rules'));
+            } catch (Horde_Exception_HookNotSet $e) {
+                $message = @htmlspecialchars(sprintf(_("You are not allowed to create more than %d rules."), $GLOBALS['perms']->hasAppPermission('max_rules')), ENT_COMPAT, Horde_Nls::getCharset());
             }
             $notification->push($message, 'horde.error', array('content.raw'));
             header('Location: ' . Horde::applicationUrl('filters.php', true));
@@ -187,11 +189,10 @@ if (!$rule) {
     exit;
 }
 
-if ($registry->hasMethod('mail/createFolder')) {
-    Horde::addScriptFile('new_folder.js');
-}
-
 $title = $rule['name'];
+Horde::addScriptFile('rule.js', 'ingo');
+Ingo::prepareMenu();
+Ingo::addNewFolderJs();
 require INGO_TEMPLATES . '/common-header.inc';
 require INGO_TEMPLATES . '/menu.inc';
 require INGO_TEMPLATES . '/rule/header.inc';
@@ -252,7 +253,7 @@ foreach ($rule['conditions'] as $cond_num => $condition) {
             '<option value="' . Ingo::USER_HEADER . '"' . ((!$option_selected) ? ' selected="selected"' : '') . '>' . _("Self-Defined Header") . (($lastfield) ? '' : ':') . "</option>\n";
         if (!$option_selected) {
             $header_entry = true;
-            $userheader = Util::getFormData('userheader');
+            $userheader = Horde_Util::getFormData('userheader');
             if (empty($userheader)) {
                 $userheader = isset($condition['field']) ? $condition['field'] : '';
             } else {

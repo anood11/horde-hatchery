@@ -9,30 +9,47 @@
  * @package Kronolith
  */
 
-@define('KRONOLITH_BASE', dirname(__FILE__));
-require_once KRONOLITH_BASE . '/lib/base.php';
+require_once dirname(__FILE__) . '/lib/base.php';
 
-$kronolith_driver->open(Util::getFormData('calendar'));
-if ($eventID = Util::getFormData('eventID')) {
-    $event = &$kronolith_driver->getEvent($eventID);
+if (Kronolith_Resource::isResourceCalendar($c = Horde_Util::getFormData('calendar'))) {
+    $driver = 'Resource';
+} else {
+    $driver = null;
+}
+
+$kronolith_driver = Kronolith::getDriver($driver, $c);
+if ($eventID = Horde_Util::getFormData('eventID')) {
+    $event = $kronolith_driver->getEvent($eventID);
     if (is_a($event, 'PEAR_Error')) {
-        if (($url = Util::getFormData('url')) === null) {
+        if (($url = Horde_Util::getFormData('url')) === null) {
             $url = Horde::applicationUrl($prefs->getValue('defaultview') . '.php', true);
         }
         header('Location: ' . $url);
         exit;
     }
-    $share = &$kronolith_shares->getShare($event->getCalendar());
-    if (!$share->hasPermission(Auth::getAuth(), PERMS_DELETE, $event->getCreatorID())) {
-        $notification->push(_("You do not have permission to delete this event."), 'horde.warning');
+    if ($driver != 'Resource') {
+        $share = &$kronolith_shares->getShare($event->getCalendar());
+        if (!$share->hasPermission(Horde_Auth::getAuth(), Horde_Perms::DELETE, $event->getCreatorID())) {
+            $notification->push(_("You do not have permission to delete this event."), 'horde.warning');
+        } else {
+            $have_perms = true;
+        }
     } else {
-        $notification_type = KRONOLITH_ITIP_CANCEL;
+        if (!Horde_Auth::isAdmin()) {
+            $notification->push(_("You do not have permission to delete this event."), 'horde.warning');
+        } else {
+            $have_perms = true;
+        }
+    }
+
+    if (!empty($have_perms)) {
+        $notification_type = Kronolith::ITIP_CANCEL;
         $instance = null;
-        if (Util::getFormData('future')) {
+        if (Horde_Util::getFormData('future')) {
             $recurEnd = new Horde_Date(array('hour' => 0, 'min' => 0, 'sec' => 0,
-                                             'month' => Util::getFormData('month', date('n')),
-                                             'mday' => Util::getFormData('mday', date('j')) - 1,
-                                             'year' => Util::getFormData('year', date('Y'))));
+                                             'month' => Horde_Util::getFormData('month', date('n')),
+                                             'mday' => Horde_Util::getFormData('mday', date('j')) - 1,
+                                             'year' => Horde_Util::getFormData('year', date('Y'))));
             if ($event->end->compareDate($recurEnd) > 0) {
                 $result = $kronolith_driver->deleteEvent($event->getId());
                 if (is_a($result, 'PEAR_Error')) {
@@ -42,19 +59,19 @@ if ($eventID = Util::getFormData('eventID')) {
                 $event->recurrence->setRecurEnd($recurEnd);
                 $event->save();
             }
-            $notification_type = KRONOLITH_ITIP_REQUEST;
-        } elseif (Util::getFormData('current')) {
-            $event->recurrence->addException(Util::getFormData('year'),
-                                             Util::getFormData('month'),
-                                             Util::getFormData('mday'));
+            $notification_type = Kronolith::ITIP_REQUEST;
+        } elseif (Horde_Util::getFormData('current')) {
+            $event->recurrence->addException(Horde_Util::getFormData('year'),
+                                             Horde_Util::getFormData('month'),
+                                             Horde_Util::getFormData('mday'));
             $event->save();
-            $instance = new Horde_Date(array('year' => Util::getFormData('year'),
-                                             'month' => Util::getFormData('month'),
-                                             'mday' => Util::getFormData('mday')));
+            $instance = new Horde_Date(array('year' => Horde_Util::getFormData('year'),
+                                             'month' => Horde_Util::getFormData('month'),
+                                             'mday' => Horde_Util::getFormData('mday')));
         }
 
         if (!$event->recurs() ||
-            Util::getFormData('all') ||
+            Horde_Util::getFormData('all') ||
             !$event->recurrence->hasActiveRecurrence()) {
             $result = $kronolith_driver->deleteEvent($event->getId());
             if (is_a($result, 'PEAR_Error')) {
@@ -62,17 +79,17 @@ if ($eventID = Util::getFormData('eventID')) {
             }
         }
 
-        if (Util::getFormData('sendupdates', false)) {
+        if (Horde_Util::getFormData('sendupdates', false)) {
             Kronolith::sendITipNotifications($event, $notification, $notification_type, $instance);
         }
     }
 }
 
-if ($url = Util::getFormData('url')) {
+if ($url = Horde_Util::getFormData('url')) {
     $location = $url;
 } else {
-    $url = Util::addParameter($prefs->getValue('defaultview') . '.php',
-                              'date', Util::getFormData('date', date('Ymd')));
+    $url = Horde_Util::addParameter($prefs->getValue('defaultview') . '.php',
+                              'date', Horde_Util::getFormData('date', date('Ymd')));
     $location = Horde::applicationUrl($url, true);
 }
 

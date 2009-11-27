@@ -14,11 +14,11 @@ class IMP_Block_Newmail extends Horde_Block
 
     function _content()
     {
-        $GLOBALS['authentication'] = 'none';
-        require_once dirname(__FILE__) . '/../base.php';
-
-        if (!IMP::checkAuthentication(true)) {
-            return '';
+        require_once dirname(__FILE__) . '/../Application.php';
+        try {
+            new IMP_Application(array('init' => array('authentication' => 'throw')));
+        } catch (Horde_Exception $e) {
+            return;
         }
 
         /* Filter on INBOX display, if requested. */
@@ -35,14 +35,12 @@ class IMP_Block_Newmail extends Horde_Block
         if (empty($ids)) {
             $html .= '<tr><td><em>' . _("No unread messages") . '</em></td></tr>';
         } else {
-            require_once 'Horde/Identity.php';
-
-            $charset = NLS::getCharset();
+            $charset = Horde_Nls::getCharset();
             $imp_ui = new IMP_UI_Mailbox('INBOX');
             $shown = empty($this->_params['msgs_shown']) ? 3 : $this->_params['msgs_shown'];
 
             try {
-                $fetch_ret = $GLOBALS['imp_imap']->ob->fetch('INBOX', array(
+                $fetch_ret = $GLOBALS['imp_imap']->ob()->fetch('INBOX', array(
                     Horde_Imap_Client::FETCH_ENVELOPE => true
                 ), array('ids' => array_slice($ids, 0, $shown)));
                 reset($fetch_ret);

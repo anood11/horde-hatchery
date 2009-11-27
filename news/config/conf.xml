@@ -1,5 +1,4 @@
 <?xml version="1.0"?>
-<!-- $Id$ -->
 <configuration>
 
 <configtab name="storage" desc="Storage Settings">
@@ -34,7 +33,7 @@
         <configboolean name="ansel-images" desc="Link to Ansel galleries">TRUE</configboolean>
         <configstring name="ansel-url" desc="Ansel images url">TRUE</configstring>
         <configboolean name="tags" desc="Use tags">false</configboolean>
-        <configstring name="attachments" desc="Attachments dir"></configstring>
+        <configboolean name="attachments" desc="Allow attachments">true</configboolean>
         <configmultienum name="languages" desc="Select all languages that should be activated">
             <values>
                 <configspecial name="list-horde-languages" />

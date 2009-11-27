@@ -32,7 +32,7 @@ class News {
         static $lang;
 
         if ($lang === null) {
-            $lang = NLS::Select();
+            $lang = Horde_Nls::Select();
             if (!empty($conf['attributes']['languages']) &&
                 !in_array($lang, $conf['attributes']['languages'])) {
                 $lang = $conf['attributes']['languages'][0];
@@ -94,21 +94,21 @@ class News {
 
         case 'news':
             if (empty($GLOBALS['conf']['urls']['pretty'])) {
-                return Util::addParameter(Horde::applicationUrl('news.php', $full, $append_session), 'id', $data);
+                return Horde_Util::addParameter(Horde::applicationUrl('news.php', $full, $append_session), 'id', $data);
             } else {
                 return Horde::applicationUrl('article/' . $data, $full, $append_session);
             }
 
         case 'category':
             if (empty($GLOBALS['conf']['urls']['pretty'])) {
-                return Util::addParameter(Horde::applicationUrl('browse.php', $full, $append_session), 'category', $data);
+                return Horde_Util::addParameter(Horde::applicationUrl('browse.php', $full, $append_session), 'category', $data);
             } else {
                 return Horde::applicationUrl('category/' . $data, $full, $append_session);
             }
 
         case 'source':
             if (empty($GLOBALS['conf']['urls']['pretty'])) {
-                return Util::addParameter(Horde::applicationUrl('browse.php', $full, $append_session), 'source', $data);
+                return Horde_Util::addParameter(Horde::applicationUrl('browse.php', $full, $append_session), 'source', $data);
             } else {
                 return Horde::applicationUrl('source/' . $data, $full, $append_session);
             }
@@ -191,7 +191,7 @@ class News {
             return '';
         }
 
-        if (Auth::isAdmin('news:admin')) {
+        if (Horde_Auth::isAdmin('news:admin')) {
             $delete_img = Horde::img('delete.png', _("Delete"), ' style="width: 16px height: 16px"', $GLOBALS['registry']->getImageDir('horde'));
             $delete_url = Horde::applicationUrl('delete_file.php');
         }
@@ -201,18 +201,18 @@ class News {
         $view_url = Horde::applicationUrl('files.php');
 
         $html = '<table><tr valign="top"><td>';
-        $html .= Horde::link(Util::addParameter($view_url, array('actionID' => 'download_zip_all', 'news_id' => $id)), _("Compress and dowload all files at once")) . $dowload_zip . '</a> ' . "\n";
+        $html .= Horde::link(Horde_Util::addParameter($view_url, array('actionID' => 'download_zip_all', 'news_id' => $id)), _("Compress and dowload all files at once")) . $dowload_zip . '</a> ' . "\n";
         $html .= _("Attached files: ") . '</td><td>' . "\n";
 
         foreach ($files as $file) {
-            $view_url = Util::addParameter($view_url, $file);
+            $view_url = Horde_Util::addParameter($view_url, $file);
             $html .= ' -  ' . "\n";
-            $html .= Horde::link(Util::addParameter($view_url, 'actionID', 'download_zip'), sprintf(_("Compress and dowload %s"), $file['file_name'])) . $dowload_zip . '</a> ' . "\n";
-            $html .= Horde::link(Util::addParameter($view_url, 'actionID', 'download_file'), sprintf(_("Dowload %s"), $file['file_name'])) . $dowload_img . '</a> ' . "\n";
-            $html .= Horde::link(Util::addParameter($view_url, 'actionID', 'view_file'), sprintf(_("Preview %s"), $file['file_name']), '', '_file_view');
+            $html .= Horde::link(Horde_Util::addParameter($view_url, 'actionID', 'download_zip'), sprintf(_("Compress and dowload %s"), $file['file_name'])) . $dowload_zip . '</a> ' . "\n";
+            $html .= Horde::link(Horde_Util::addParameter($view_url, 'actionID', 'download_file'), sprintf(_("Dowload %s"), $file['file_name'])) . $dowload_img . '</a> ' . "\n";
+            $html .= Horde::link(Horde_Util::addParameter($view_url, 'actionID', 'view_file'), sprintf(_("Preview %s"), $file['file_name']), '', '_file_view');
             $html .= Horde::img(Horde_Mime_Viewer::getIcon($file['file_type']), $file['file_name'], 'width="16" height="16"', '') . ' ';
-            if (Auth::isAdmin('news:admin')) {
-                $html .= Horde::link(Util::addParameter($delete_url, $file), sprintf(_("Delete %s"), $file['file_name'])) . $delete_img . '</a> ' . "\n";
+            if (Horde_Auth::isAdmin('news:admin')) {
+                $html .= Horde::link(Horde_Util::addParameter($delete_url, $file), sprintf(_("Delete %s"), $file['file_name'])) . $delete_img . '</a> ' . "\n";
             }
             $html .= $file['file_name'] . '</a> ' . "\n";
             $html .= ' (' . self::format_filesize($file['file_size']) . ')';
@@ -226,6 +226,8 @@ class News {
 
     /**
      * Load VFS Backend
+     *
+     * @throws Horde_Exception
      */
     static public function loadVFS()
     {
@@ -236,11 +238,7 @@ class News {
         }
 
         $v_params = Horde::getVFSConfig('images');
-        if ($v_params instanceof PEAR_Error) {
-            return $v_params;
-        }
 
-        require_once 'VFS.php';
         $vfs = VFS::singleton($v_params['type'], $v_params['params']);
         return $vfs;
     }
@@ -265,19 +263,15 @@ class News {
         $vfspath = self::VFS_PATH . '/images/' . $type;
         $vfs_name = $id . '.' . $conf['images']['image_type'];
 
-        $driver = empty($conf['image']['convert']) ? 'gd' : 'im';
-        $img = Horde_Image::factory($driver,
-                                    array('type' => $conf['images']['image_type'],
-                                            'temp' => Horde::getTempDir()));
-
-        if ($img instanceof PEAR_Error) {
-            return $img;
+        $context = array('tmpdir' => Horde::getTempDir());
+        if (!empty($conf['image']['convert'])) {
+            $context['convert'] = $conf['image']['convert'];
         }
-
+        $params = array('type' => $conf['images']['image_type'],
+                        'context' => $context);
+        $driver = empty($conf['image']['convert']) ? 'Gd' : 'Im';
+        $img = Horde_Image::factory($driver, $params);
         $result = $img->loadFile($file);
-        if ($result instanceof PEAR_Error) {
-            return $result;
-        }
 
         // Store big image for articles
         if ($type == 'news') {
@@ -339,15 +333,17 @@ class News {
         }
 
         $vfs_name = $id . '.' . $GLOBALS['conf']['images']['image_type'];
-        $vfs->deleteFile(self::VFS_PATH . '/images/small/', $vfs_name);
-        $vfs->deleteFile(self::VFS_PATH . '/images/big/', $vfs_name);
-        $vfs->deleteFile(self::VFS_PATH . '/images/full/', $vfs_name);
+        $result = $vfs->deleteFile(self::VFS_PATH . '/images/news/full', $vfs_name);
+        $result = $vfs->deleteFile(self::VFS_PATH . '/images/news/small', $vfs_name);
+        $result = $vfs->deleteFile(self::VFS_PATH . '/images/news/big', $vfs_name);
+
+        return $result;
     }
 
     /**
      * Store file
      *
-     * @param $file_id     Image owner record id
+     * @param $file_id    File id
      * @param $file_src   File path
      */
     static public function saveFile($file_id, $file_src)
@@ -361,9 +357,24 @@ class News {
     }
 
     /**
+     * Get file contents
+     *
+     * @param $file_id     File ID
+     */
+    static public function getFile($file_id)
+    {
+        $vfs = self::loadVFS();
+        if ($vfs instanceof PEAR_Error) {
+            return $vfs;
+        }
+
+        return $vfs->read(self::VFS_PATH . '/files/', $file_id);
+    }
+
+    /**
      * Delete file
      *
-     * @param $id     Image owner record id
+     * @param $id     File ID
      */
     static public function deleteFile($file_id)
     {
@@ -385,7 +396,7 @@ class News {
     static public function getImageUrl($id, $view = 'small', $type = 'news')
     {
         if (empty($GLOBALS['conf']['images']['direct'])) {
-            return Util::addParameter(Horde::applicationUrl('view.php'),
+            return Horde_Util::addParameter(Horde::applicationUrl('view.php'),
                                      array('type' => $type,
                                            'view' => $view,
                                            'id' => $id),
@@ -407,7 +418,7 @@ class News {
             return unserialize($images);
         }
 
-        $images = $GLOBALS['registry']->call('images/listImages', array('ansel', $id, PERMS_SHOW, 'thumb'));
+        $images = $GLOBALS['registry']->call('images/listImages', array('ansel', $id, Horde_Perms::SHOW, 'thumb'));
         $GLOBALS['cache']->set("news_gallery_$id", serialize($images));
 
         return $images;
@@ -459,13 +470,11 @@ class News {
 
         $params = array(0, 'message_timestamp', 1, false, 'news', null, 0, $limit);
         $threads = $registry->call('forums/getThreads', $params);
-        if ($threads instanceof PEAR_Error) {
-            return $threads;
-        }
 
         foreach ($threads as $id => $message) {
-            $news_id = $registry->call('forums/getForumName', array('news', $message['forum_id']));
-            if ($news_id instanceof PEAR_Error) {
+            try {
+                $news_id = $registry->call('forums/getForumName', array('news', $message['forum_id']));
+            } catch (Horde_Exception $e) {
                 unset($threads[$id]);
                 continue;
             }
@@ -481,11 +490,9 @@ class News {
     /**
      * Build News's list of menu articles
      */
-    static public function getMenu($returnType = 'object')
+    static public function getMenu()
     {
-        require_once 'Horde/Menu.php';
-
-        $menu = &new Menu();
+        $menu = new Horde_Menu();
         $img_dir = $GLOBALS['registry']->getImageDir('horde');
 
         if ($GLOBALS['prefs']->getValue('news_layout') != '') {
@@ -499,16 +506,12 @@ class News {
             $menu->add(Horde::applicationUrl('cloud.php'), _("Tag cloud"), 'colorpicker.png', $img_dir);
         }
 
-        if (Auth::isAdmin('news:admin')) {
+        if (Horde_Auth::isAdmin('news:admin')) {
             $menu->add(Horde::applicationUrl('edit.php'), _("Editorship"), 'config.png', $img_dir);
             $menu->add(Horde::applicationUrl('admin/categories/index.php'), _("Administration"), 'administration.png', $img_dir);
         }
 
-        if ($returnType == 'object') {
-            return $menu;
-        } else {
-            return $menu->render();
-        }
+        return $menu;
     }
 
 }

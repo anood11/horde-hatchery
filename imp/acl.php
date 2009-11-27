@@ -12,10 +12,11 @@
  * @package IMP
  */
 
-require_once dirname(__FILE__) . '/lib/base.php';
+require_once dirname(__FILE__) . '/lib/Application.php';
+new IMP_Application(array('init' => true));
 
 /* Redirect back to the options screen if ACL is not enabled. */
-$prefs_url = IMP::prefsURL(true);
+$prefs_url = Horde::getServiceLink('options', 'imp');
 if ($prefs->isLocked('acl') || empty($_SESSION['imp']['acl'])) {
     $notification->push(_("Folder sharing is not enabled."), 'horde.error');
     header('Location: ' . $prefs_url);
@@ -23,18 +24,18 @@ if ($prefs->isLocked('acl') || empty($_SESSION['imp']['acl'])) {
 }
 
 try {
-    $ACLDriver = &IMP_IMAP_ACL::singleton();
+    $ACLDriver = IMP_Imap_Acl::singleton();
 } catch (Horde_Exception $e) {
     $notification->push($error, _("This server does not support sharing folders."));
     header('Location: ' . $prefs_url);
     exit;
 }
 
-$acls = Util::getFormData('acl');
-$folder = Util::getFormData('folder');
-$new_user = Util::getFormData('new_user');
+$acls = Horde_Util::getFormData('acl');
+$folder = Horde_Util::getFormData('folder');
+$new_user = Horde_Util::getFormData('new_user');
 if ($new_user) {
-    $new_acl = Util::getFormData('new_acl');
+    $new_acl = Horde_Util::getFormData('new_acl');
     /* check to see if $new_user already has an acl on the folder */
     if (isset($acls[$new_user])) {
         $acls[$new_user] = $new_acl;
@@ -46,7 +47,7 @@ $protected = $ACLDriver->getProtected();
 
 /* Run through the action handlers. */
 $ok_form = true;
-switch (Util::getFormData('actionID')) {
+switch (Horde_Util::getFormData('actionID')) {
 case 'imp_acl_set':
     if (!$folder) {
         $notification->push(_("No folder selected."), 'horde.error');
@@ -70,11 +71,7 @@ case 'imp_acl_set':
     }
 
     if ($ok_form) {
-        try {
-            $current_acl = $ACLDriver->getACL($folder);
-        } catch (Horde_Exception $e) {
-            Horde::fatal($e, __FILE__, __LINE__);
-        }
+        $current_acl = $ACLDriver->getACL($folder);
         foreach ($acls as $user => $acl) {
             if ($acl) {
                 $acl = array_flip($acl);
@@ -119,37 +116,28 @@ case 'imp_acl_set':
     break;
 }
 
-$imp_folder = &IMP_Folder::singleton();
+$imp_folder = IMP_Folder::singleton();
 $rights = $ACLDriver->getRights();
 
 if (empty($folder)) {
     $folder = 'INBOX';
 }
 
-try {
-    $curr_acl = $ACLDriver->getACL($folder);
-} catch (Horde_Exception $e) {
-    Horde::fatal($e, __FILE__, __LINE__);
-}
-$canEdit = $ACLDriver->canEdit($folder, $_SESSION['imp']['uniquser']);
+$curr_acl = $ACLDriver->getACL($folder);
+$canEdit = $ACLDriver->canEdit($folder, Horde_Auth::getAuth());
 
-require_once 'Horde/Prefs/UI.php';
-$result = Horde::loadConfiguration('prefs.php', array('prefGroups', '_prefs'), 'imp');
-if (is_a($result, 'PEAR_Error')) {
-    Horde::fatal($result, __FILE__, __LINE__);
-}
-extract($result);
+extract(Horde::loadConfiguration('prefs.php', array('prefGroups', '_prefs'), 'imp'));
 
 $app = 'imp';
-$chunk = Util::nonInputVar('chunk');
-Prefs_UI::generateHeader(null, $chunk);
+$chunk = Horde_Util::nonInputVar('chunk');
+Horde_Prefs_Ui::generateHeader(null, $chunk);
 
 /* Set up template. */
-$t = new IMP_Template();
+$t = new Horde_Template();
 $t->setOption('gettext', true);
 $t->set('aclurl', Horde::applicationUrl('acl.php'));
-$t->set('forminput', Util::formInput());
-$t->set('aclnavcell', Util::bufferOutput(array('Prefs_UI', 'generateNavigationCell'), 'acl'));
+$t->set('forminput', Horde_Util::formInput());
+$t->set('aclnavcell', Horde_Util::bufferOutput(array('Horde_Prefs_Ui', 'generateNavigationCell'), 'acl'));
 $t->set('changefolder', Horde::link('#', _("Change Folder"), 'smallheader', '', '', '', '', array('id' => 'changefolder')));
 $t->set('sharedimg', Horde::img('shared.png', _("Change Folder")));
 $t->set('options', IMP::flistSelect(array('selected' => $folder)));
@@ -183,15 +171,13 @@ $t->set('canedit', $canEdit);
 if (empty($_SESSION['imp']['admin'])) {
     $new_user_field = '<input id="new_user" type="text" name="new_user"/>';
 } else {
-    require_once IMP_BASE . '/lib/api.php';
     $current_users = array_keys($curr_acl);
     $new_user_field = '<select id="new_user" name="new_user">';
-    foreach (_imp_userList() as $user) {
+    foreach ($registry->callByPackage('userList', 'imp') as $user) {
         if (in_array($user, $current_users)) {
             continue;
         }
-        $new_user_field .= "\n" . '<option>' . htmlspecialchars($user)
-            . '</option>';
+        $new_user_field .= "\n<option>" . htmlspecialchars($user) . '</option>';
     }
     $new_user_field .= "\n</select>";
 }
@@ -209,8 +195,7 @@ $t->set('rights', $rightsval);
 $t->set('width', round(100 / (count($rightsval) + 1)) . '%');
 $t->set('prefsurl', $prefs_url);
 
-Horde::addScriptFile('prototype.js', 'horde', true);
-Horde::addScriptFile('acl.js', 'imp', true);
+Horde::addScriptFile('acl.js', 'imp');
 echo $t->fetch(IMP_TEMPLATES . '/acl/acl.html');
 if (!$chunk) {
     require $registry->get('templates', 'horde') . '/common-footer.inc';

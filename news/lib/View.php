@@ -21,7 +21,7 @@ class News_View extends Horde_View {
     {
         /* Set parents defualt data */
         parent::__construct(array('templatePath' => NEWS_TEMPLATES,
-                                  'encoding' => NLS::select()));
+                                  'encoding' => Horde_Nls::select()));
     }
 
     /**
@@ -65,7 +65,7 @@ class News_View extends Horde_View {
         $search = Horde::applicationUrl('search.php');
         foreach (explode(' ', $tags) as $tag) {
             $html .= '<a href="'
-                    . Util::addParameter($search, array('word' => $tag))
+                    . Horde_Util::addParameter($search, array('word' => $tag))
                      . '">' . $tag . '</a> ';
         }
 

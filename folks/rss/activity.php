@@ -11,11 +11,11 @@
  * @package Folks
  */
 
-define('AUTH_HANDLER', true);
+$folks_authentication = 'none';
 require_once dirname(__FILE__) . '/../lib/base.php';
 
-$auth = Auth::singleton($conf['auth']['driver']);
-if (!Auth::getAuth() &&
+$auth = Horde_Auth::singleton($conf['auth']['driver']);
+if (!Horde_Auth::getAuth() &&
     (!isset($_SERVER['PHP_AUTH_USER']) ||
      !$auth->authenticate($_SERVER['PHP_AUTH_USER'], array('password' => isset($_SERVER['PHP_AUTH_PW']) ? $_SERVER['PHP_AUTH_PW'] : null)))) {
     header('WWW-Authenticate: Basic realm="Letter RSS Interface"');

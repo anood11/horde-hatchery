@@ -15,15 +15,20 @@ class IMP_UI_Compose
 {
     /**
      */
-    function expandAddresses($input, $imp_compose)
+    public function expandAddresses($input, $imp_compose)
     {
-        $result = $imp_compose->expandAddresses($this->getAddressList($input));
+        $addr_list = $this->getAddressList($input);
+        if (empty($addr_list)) {
+            return '';
+        }
 
-        if (is_array($result)) {
+        $res = $imp_compose->expandAddresses($addr_list);
+
+        if (is_array($res)) {
             $GLOBALS['notification']->push(_("Please resolve ambiguous or invalid addresses."), 'horde.warning');
         }
 
-        return $result;
+        return $res;
     }
 
     /**
@@ -31,7 +36,7 @@ class IMP_UI_Compose
      *
      * @throws Horde_Exception
      */
-    function redirectMessage($to, $imp_compose, $contents, $encoding)
+    public function redirectMessage($to, $imp_compose, $contents, $encoding)
     {
         try {
             $recip = $imp_compose->recipientList(array('to' => $to));
@@ -40,7 +45,7 @@ class IMP_UI_Compose
         }
         $recipients = implode(', ', $recip['list']);
 
-        $identity = &Identity::singleton(array('imp', 'imp'));
+        $identity = Horde_Preffs_Identity::singleton(array('imp', 'imp'));
         $from_addr = $identity->getFromAddress();
 
         $headers = $contents->getHeaderOb();
@@ -62,15 +67,14 @@ class IMP_UI_Compose
             IMP_Maillog::log('redirect', $headers->getValue('message-id'), $recipients);
         }
 
-        $bodytext = $contents->getBody();
         try {
-            $imp_compose->sendMessage($recipients, $headers, $bodytext, $charset);
+            $imp_compose->sendMessage($recipients, $headers, $mime_message, $charset);
         } catch (IMP_Compose_Exception $e) {
             throw new Horde_Exception($e);
         }
 
         $entry = sprintf("%s Redirected message sent to %s from %s",
-                         $_SERVER['REMOTE_ADDR'], $recipients, $_SESSION['imp']['uniquser']);
+                         $_SERVER['REMOTE_ADDR'], $recipients, Horde_Auth::getAuth());
         Horde::logMessage($entry, __FILE__, __LINE__, PEAR_LOG_INFO);
 
         if ($GLOBALS['conf']['sentmail']['driver'] != 'none') {
@@ -81,18 +85,12 @@ class IMP_UI_Compose
 
     /**
      */
-    function getForwardData(&$imp_compose, &$imp_contents, $type, $index)
+    public function getForwardData(&$imp_compose, &$imp_contents, $index)
     {
-        $fwd_msg = $imp_compose->forwardMessage($imp_contents, ($type == 'forward_body'));
-        if ($type == 'forward_all') {
-            $subject_header = $imp_compose->attachIMAPMessage(array($index), $fwd_msg['headers']);
-            if ($subject_header === false) {
-                // TODO: notification
-            } else {
-                $fwd_msg['headers']['subject'] = $subject_header;
-            }
-        } elseif ($type == 'forward_attachments') {
-            $imp_compose->attachFilesFromMessage($imp_contents, array('notify' => true));
+        $fwd_msg = $imp_compose->forwardMessage($imp_contents);
+        $subject_header = $imp_compose->attachIMAPMessage(array($index), $fwd_msg['headers']);
+        if ($subject_header !== false) {
+            $fwd_msg['headers']['subject'] = $subject_header;
         }
 
         return $fwd_msg;
@@ -100,17 +98,18 @@ class IMP_UI_Compose
 
     /**
      */
-    function attachAutoCompleter($fields)
+    public function attachAutoCompleter($fields)
     {
         /* Attach autocompleters to the compose form elements. */
         foreach ($fields as $val) {
-            call_user_func_array(array('IMP_Imple', 'factory'), array('ContactAutoCompleter', array('triggerId' => $val)));
+            $imple = Horde_Ajax_Imple::factory(array('imp', 'ContactAutoCompleter'), array('triggerId' => $val));
+            $imple->attach();
         }
     }
 
     /**
      */
-    function attachSpellChecker($mode, $add_br = false)
+    public function attachSpellChecker($mode, $add_br = false)
     {
         $menu_view = $GLOBALS['prefs']->getValue('menu_view');
         $show_text = ($menu_view == 'text' || $menu_view == 'both');
@@ -118,7 +117,7 @@ class IMP_UI_Compose
         $spell_img = Horde::img('spellcheck.png');
         $args = array(
             'id' => ($mode == 'dimp' ? 'DIMP.' : 'IMP.') . 'SpellCheckerObject',
-            'targetId' => 'message',
+            'targetId' => 'composeMessage',
             'triggerId' => 'spellcheck',
             'states' => array(
                 'CheckSpelling' => $spell_img . ($show_text ? $br . _("Check Spelling") : ''),
@@ -127,13 +126,15 @@ class IMP_UI_Compose
                 'Error' => $spell_img . $br . _("Spell Check Failed")
             )
         );
-        call_user_func_array(array('IMP_Imple', 'factory'), array('SpellChecker', $args));
+
+        $imple = Horde_Ajax_Imple::factory('SpellChecker', $args);
+        $imple->attach();
     }
 
     /**
      */
-    function getAddressList($to, $to_list = array(), $to_field = array(),
-                            $to_new = '', $expand = false)
+    public function getAddressList($to, $to_list = array(), $to_field = array(),
+                                   $to_new = '', $expand = false)
     {
         $to = rtrim(trim($to), ',');
         if (!empty($to)) {
@@ -142,12 +143,12 @@ class IMP_UI_Compose
             $clean_to = '';
             foreach (Horde_Mime_Address::explode($to, ',;') as $val) {
                 $val = trim($val);
-                $clean_to .= $val . (($val[String::length($val) - 1] == ';') ? ' ' : ', ');
+                $clean_to .= $val . (($val[Horde_String::length($val) - 1] == ';') ? ' ' : ', ');
             }
             if ($expand) {
-               return $clean_to;
+                return $clean_to;
             } else {
-               return IMP_Compose::formatAddr($clean_to);
+                return IMP_Compose::formatAddr($clean_to);
             }
         }
 
@@ -173,28 +174,41 @@ class IMP_UI_Compose
     }
 
     /**
+     * Initialize the Rich Text Editor (RTE).
+     *
+     * @param boolean $mini  Load the basic ckeditor stub?
      */
-    function initRTE($mode = 'imp', $editoronly = false)
+    public function initRTE($basic = false)
     {
-        $editor = &Horde_Editor::singleton('Fckeditor', array('id' => 'message', 'no_notify' => true));
-        if ($editoronly) {
-            return $editor;
+        $editor = Horde_Editor::singleton('Ckeditor', array('basic' => $basic));
+
+        $config = array(
+            /* To more closely match "normal" textarea behavior, send <BR> on
+             * enter instead of <P>. */
+            // CKEDITOR.ENTER_BR
+            'enterMode: 2',
+            // CKEDITOR.ENTER_P
+            'shiftEnterMode: 1',
+
+            /* Don't load the config.js file. */
+            'customConfig: ""',
+
+            /* Disable resize of the textarea. */
+            'resize_enabled: false',
+
+            /* Use the old skin for now. */
+            'skin: "v2"'
+        );
+
+        $buttons = $GLOBALS['prefs']->getValue('ckeditor_buttons');
+        if (!empty($buttons)) {
+            $config[] = 'toolbar: ' . $GLOBALS['prefs']->getValue('ckeditor_buttons');
         }
 
-        $fck_buttons = $GLOBALS['prefs']->getValue('fckeditor_buttons');
-        if (!empty($fck_buttons)) {
-            $js_onload = array(
-                'oFCKeditor.Config.CustomConfigurationsPath = "' . IMP::getCacheURL('fckeditor', null) . '"',
-                'oFCKeditor.ToolbarSet = "ImpToolbar"'
-            );
-            if ($mode == 'imp') {
-                $js_onload[] = 'oFCKeditor.Height = $(\'message\').getHeight()';
-                $js_onload[] = 'oFCKeditor.ReplaceTextarea()';
-            }
-            IMP::addInlineScript($js_onload, 'load');
-        }
-
-        return $editor->getJS();
+        Horde::addInlineScript(array(
+            'if (!window.IMP) { window.IMP = {}; }',
+            'IMP.ckeditor_config = {' . implode(',', $config) . '}'
+        ));
     }
 
 }

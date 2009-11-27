@@ -17,21 +17,15 @@ class Crumb {
     /**
      * Build Crumb's list of menu items.
      */
-    function getMenu($returnType = 'object')
+    function getMenu()
     {
         global $conf, $registry, $browser, $print_link;
 
-        require_once 'Horde/Menu.php';
-
-        $menu = new Menu(HORDE_MENU_MASK_ALL);
+        $menu = new Horde_Menu(Horde_Menu::MASK_ALL);
         $menu->add(Horde::applicationUrl('listclients.php'), _("List Clients"), 'user.png', $registry->getImageDir('horde'));
         $menu->add(Horde::applicationUrl('addclient.php'), _("Add Client"), 'user.png', $registry->getImageDir('horde'));
 
-        if ($returnType == 'object') {
-            return $menu;
-        } else {
-            return $menu->render();
-        }
+        return $menu;
     }
 
 }

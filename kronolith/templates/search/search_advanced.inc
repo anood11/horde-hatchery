@@ -1,12 +1,16 @@
+<?php
+$issearch = true;
+require KRONOLITH_TEMPLATES . '/edit/javascript.inc';
+?>
 <form method="post" name="eventform" action="search.php">
-<?php Util::pformInput() ?>
+<?php Horde_Util::pformInput() ?>
 <input type="hidden" name="actionID" value="search_calendar" />
 <input type="hidden" name="search_mode" value="advanced" />
 
 <br /><br />
 <h1 class="header">
- <span class="rightFloat" class="smallheader">
-  <?php echo Horde::widget(Util::addParameter(Horde::applicationUrl('search.php'), 'search_mode', 'basic'), _("Basic Search"), 'smallheader', '', '', _("_Basic Search")) ?>
+ <span class="smallheader rightFloat">
+  <?php echo Horde::widget(Horde_Util::addParameter(Horde::applicationUrl('search.php'), 'search_mode', 'basic'), _("Basic Search"), 'smallheader', '', '', _("_Basic Search")) ?>
  </span>
  <?php echo _("Advanced Search") ?>
 </h1>
@@ -18,11 +22,6 @@
  <strong><?php echo _("General") ?></strong>
 </td></tr>
 
-<?php
-$calendars = Kronolith::listCalendars(false, PERMS_READ);
-$issearch = true;
-require KRONOLITH_TEMPLATES . '/edit/javascript.inc';
-?>
 <!-- title -->
 <tr>
  <td class="rightAlign"><strong><?php echo Horde::label('title', _("Tit_le")) ?></strong></td>
@@ -38,16 +37,18 @@ require KRONOLITH_TEMPLATES . '/edit/javascript.inc';
  </td>
  <td colspan="4">
   <select id="calendar" name="calendar">
-  <?php
-  $eCalendar = $event->getCalendar();
-  echo '<option value="__any"' .
-       (!$eCalendar ? ' selected="selected"' : '') . '>' . _("Any") .
-       '</option>';
-  foreach ($calendars as $id => $cal) {
-      $sel = ($id == $eCalendar) ? ' selected="selected"' : '';
-      printf('<option value="%s"%s>%s</option>',
-             htmlspecialchars($id), $sel, htmlspecialchars($cal->get('name'))) . "\n";
-  } ?>
+   <option value="|__any"<?php if ($search_calendar[1] == '__any') echo ' selected="selected"' ?>><?php echo _("Any") ?></option>
+   <?php foreach ($calendars as $type => $list): ?>
+   <?php if ($optgroup): ?>
+   <optgroup label="<?php echo htmlspecialchars($type) ?>">
+   <?php endif; ?>
+   <?php foreach ($list as $id => $name): ?>
+   <option value="<?php echo htmlspecialchars($id) ?>"<?php if ($search_calendar[0] . '|' . $search_calendar[1] == $id) echo ' selected="selected"' ?>><?php echo ($optgroup ? '' : htmlspecialchars($type) . ' ') . htmlspecialchars($name) ?></option>
+   <?php endforeach; ?>
+   <?php if ($optgroup): ?>
+   </optgroup>
+   <?php endif; ?>
+   <?php endforeach; ?>
   </select>
  </td>
 </tr>

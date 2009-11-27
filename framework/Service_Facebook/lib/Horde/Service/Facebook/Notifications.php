@@ -22,20 +22,25 @@ class Horde_Service_Facebook_Notifications extends Horde_Service_Facebook_Base
     public function &get()
     {
         // Session key is *required*
-        if (!$this->_facebook->auth->getSessionKey()) {
+        if (!$skey = $this->_facebook->auth->getSessionKey()) {
             throw new Horde_Service_Facebook_Exception('session_key is required',
                                                Horde_Service_Facebook_ErrorCodes::API_EC_SESSION_REQUIRED);
         }
-        return $this->_facebook->call_method('facebook.notifications.get',
-            array('session_key' => $this->_facebook->auth->getSessionKey()));
+        return $this->_facebook->callMethod('facebook.notifications.get',
+            array('session_key' => $skey));
     }
 
     /**
      * Sends a notification to the specified users.
      *
+     * @param mixed $to_ids         Either an array of uids or a string
+     *                              delimited list of uids.
+     * @param string $notification  A FBML string for the notification.
+     * @param string $type          Either 'user_to_user' or 'app_to_user'
+     *
      * @throws Horde_Service_Facebook_Exception
-     * @return A comma separated list of successful recipients
-     * @error  API_EC_PARAM_USER_ID_LIST
+     *
+     * @return string A comma separated list of successful recipients
      */
     public function &send($to_ids, $notification, $type)
     {
@@ -45,7 +50,7 @@ class Horde_Service_Facebook_Notifications extends Horde_Service_Facebook_Base
                                                Horde_Service_Facebook_ErrorCodes::API_EC_SESSION_REQUIRED);
         }
 
-        return $this->call_method('facebook.notifications.send',
+        return $this->_facebook->callMethod('facebook.notifications.send',
             array('to_ids' => $to_ids,
                   'notification' => $notification,
                   'type' => $type,
@@ -72,7 +77,7 @@ class Horde_Service_Facebook_Notifications extends Horde_Service_Facebook_Base
             throw new Horde_Service_Facebook_Exception('session_key is required',
                                                Horde_Service_Facebook_ErrorCodes::API_EC_SESSION_REQUIRED);
         }
-        return $this->call_method('facebook.notifications.sendEmail',
+        return $this->_facebook->callMethod('facebook.notifications.sendEmail',
             array('recipients' => $recipients,
                   'subject' => $subject,
                   'text' => $text,

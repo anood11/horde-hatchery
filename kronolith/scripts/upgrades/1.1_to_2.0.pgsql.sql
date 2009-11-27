@@ -1,5 +1,3 @@
--- $Horde: kronolith/scripts/upgrades/1.1_to_2.0.pgsql.sql,v 1.4 2006/12/13 04:58:22 chuck Exp $
---
 -- Update script to update Kronolith 1.1 data to 2.x data for pgsql
 -- Converted from mysql version by Daniel E. Markle <lexicon@seul.org>
 --
@@ -47,8 +45,8 @@ ALTER TABLE kronolith_events ADD COLUMN event_attendees TEXT;
 CREATE INDEX kronolith_uid_idx ON kronolith_events (event_uid);
 
 CREATE TABLE kronolith_storage (
-    vfb_owner      VARCHAR(255) DEFAULT NULL,
-    vfb_email      VARCHAR(255) DEFAULT '' NOT NULL,
+    vfb_owner      VARCHAR(255),
+    vfb_email      VARCHAR(255) NOT NULL,
     vfb_serialized TEXT NOT NULL
 );
 

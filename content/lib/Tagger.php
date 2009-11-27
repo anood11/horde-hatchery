@@ -240,6 +240,7 @@ class Content_Tagger
         } elseif (isset($args['userId'])) {
             $args['userId'] = current($this->_userManager->ensureUsers($args['userId']));
             $sql = 'SELECT DISTINCT t.tag_id AS tag_id, tag_name FROM ' . $this->_t('tagged') . ' AS tagged INNER JOIN ' . $this->_t('tags') . ' AS t ON tagged.tag_id = t.tag_id WHERE tagged.user_id = ' . (int)$args['userId'];
+            $haveWhere = true;
         } elseif (isset($args['typeId'])) {
             $args['typeId'] = current($this->_typeManager->ensureTypes($args['typeId']));
             $sql = 'SELECT DISTINCT t.tag_id AS tag_id, tag_name FROM ' . $this->_t('tagged') . ' AS tagged INNER JOIN ' . $this->_t('objects') . ' AS objects ON tagged.object_id = objects.object_id AND objects.type_id = ' . (int)$args['typeId'] . ' INNER JOIN ' . $this->_t('tags') . ' AS t ON tagged.tag_id = t.tag_id';
@@ -255,7 +256,7 @@ class Content_Tagger
 
         if (isset($args['q']) && strlen($args['q'])) {
             // @TODO tossing a where clause in won't work with all query modes
-            $sql .= ' WHERE tag_name LIKE ' . $this->_db->quoteString($args['q'] . '%');
+            $sql .= (!empty($haveWhere) ? ' AND' : ' WHERE') .  ' tag_name LIKE ' . $this->_db->quoteString($args['q'] . '%');
         }
 
         if (isset($args['limit'])) {
@@ -291,7 +292,7 @@ class Content_Tagger
             $sql = 'SELECT t.tag_id AS tag_id, tag_name, COUNT(*) AS count FROM ' . $this->_t('tagged') . ' AS tagged INNER JOIN ' . $this->_t('objects') . ' AS objects ON tagged.object_id = objects.object_id AND objects.type_id = ' . (int)$args['typeId'] . ' INNER JOIN ' . $this->_t('tags') . ' AS t ON tagged.tag_id = t.tag_id WHERE tagged.user_id = ' . (int)$args['user_id'] . ' GROUP BY t.tag_id';
         } elseif (isset($args['userId'])) {
             $args['userId'] = current($this->_userManager->ensureUsers($args['userId']));
-            $sql = 'SELECT t.tag_id AS tag_id, tag_name, count FROM ' . $this->_t('tagged') . ' AS tagged INNER JOIN ' . $this->_t('tags') . ' AS t ON tagged.tag_id = t.tag_id INNER JOIN ' . $this->_t('user_tag_stats') . ' AS uts ON t.tag_id = uts.tag_id AND uts.user_id = ' . (int)$args['userId'] . ' GROUP BY t.tag_id';
+            $sql = 'SELECT t.tag_id AS tag_id, tag_name, count FROM ' . $this->_t('tagged') . ' AS tagged INNER JOIN ' . $this->_t('tags') . ' AS t ON tagged.tag_id = t.tag_id INNER JOIN ' . $this->_t('user_tag_stats') . ' AS uts ON t.tag_id = uts.tag_id AND uts.user_id = ' . (int)$args['userId'] . ' GROUP BY t.tag_id, tag_name, count';
         } elseif (isset($args['typeId'])) {
             $args['typeId'] = current($this->_typeManager->ensureTypes($args['typeId']));
             // This doesn't use a stat table, so may be slow.
@@ -345,8 +346,10 @@ class Content_Tagger
      *   limit      Maximum number of objects to return.
      *   offset     Offset the results. Only useful for paginating, and not recommended.
      *   tagId      Return objects related through one or more tags.
+     *   notTagId   Don't return objects tagged with one or more tags.
      *   typeId     Only return objects with a specific type.
      *   objectId   Return objects with the same tags as $objectId.
+     *   userId     Limit results to objects tagged by a specific user.
      *
      * @return array  An array of object ids.
      */
@@ -403,7 +406,10 @@ class Content_Tagger
                 $sql .= ' AND objects.type_id IN (' . implode(', ', $args['typeId']) . ')';
             }
 
-
+            if (!empty($args['userId'])) {
+                $args['userId'] = $this->_userManager->ensureUsers($args['userId']);
+                $sql .= ' AND tagged.user_id IN ( ' . implode(', ', $args['userId']) . ')';
+            }
         }
 
         if (isset($args['limit'])) {

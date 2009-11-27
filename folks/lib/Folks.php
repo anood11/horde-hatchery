@@ -44,13 +44,11 @@ class Folks {
      */
     static function getCountries()
     {
-        if (file_exists(FOLKS_BASE . '/config/countries.php')) {
-            $countries = Horde::loadConfiguration('countries.php', 'countries', 'folks');
-        } else {
-            $countries = NLS::getCountryISO();
+        try {
+           return Horde::loadConfiguration('countries.php', 'countries', 'folks');
+        } catch (Horde_Exception $e) {
+            return Horde_Nls::getCountryISO();
         }
-
-        return $countries;
     }
 
     /**
@@ -63,7 +61,7 @@ class Folks {
     static public function getImageUrl($user, $view = 'small', $full = false)
     {
         if (empty($GLOBALS['conf']['images']['direct'])) {
-            return Util::addParameter(Horde::applicationUrl('view.php', $full),
+            return Horde_Util::addParameter(Horde::applicationUrl('view.php', $full),
                                      array('view' => $view,
                                            'id' => $user),
                                      null, false);
@@ -106,7 +104,7 @@ class Folks {
 
         case 'user':
             if (empty($GLOBALS['conf']['urls']['pretty'])) {
-                return Util::addParameter(Horde::applicationUrl('user.php', $full, $append_session), 'user', $data);
+                return Horde_Util::addParameter(Horde::applicationUrl('user.php', $full, $append_session), 'user', $data);
             } else {
                 return Horde::applicationUrl('user/' . $data, $full, $append_session);
             }
@@ -118,6 +116,10 @@ class Folks {
      */
     static public function calcAge($birthday)
     {
+        if (substr($birthday, 0, 4) == '0000') {
+            return array('age' => '', 'sign' => '');
+        }
+
         list($year, $month, $day) = explode('-', $birthday);
         $year_diff = date('Y') - $year;
         $month_diff = date('m') - $month;
@@ -129,7 +131,7 @@ class Folks {
             $year_diff--;
         }
 
-        if ($year_diff < 1 || $year == '0000') {
+        if (empty($year_diff)) {
             return array('age' => '', 'sign' => '');
         }
 
@@ -233,22 +235,19 @@ class Folks {
      */
     static public function sendMail($to, $subject, $body, $attaches = array())
     {
-        $mail = new Horde_Mime_Mail($subject, $body, $to, $GLOBALS['conf']['support'], NLS::getCharset());
+        $mail = new Horde_Mime_Mail(array('subject' => $subject, 'body' => $body, 'to' => $to, 'from' => $GLOBALS['conf']['support'], 'charset' => Horde_Nls::getCharset()));
 
-        require_once FOLKS_BASE . '/lib/version.php';
-        $mail->addHeader('User-Agent', 'Folks ' . FOLKS_VERSION);
+        $mail->addHeader('User-Agent', 'Folks ' . $GLOBALS['registry']->getVersion());
         $mail->addHeader('X-Originating-IP', $_SERVER['REMOTE_ADDR']);
         $mail->addHeader('X-Remote-Browser', $_SERVER['HTTP_USER_AGENT']);
 
         foreach ($attaches as $file) {
             if (file_exists($file)) {
-                $mail->addAttachment($file, null, null, NLS::getCharset());
+                $mail->addAttachment($file, null, null, Horde_Nls::getCharset());
             }
         }
 
-        list($mail_driver, $mail_params) = Horde::getMailerConfig();
-
-        return $mail->send($mail_driver, $mail_params);
+        return $mail->send(Horde::getMailerConfig());
     }
 
     /**
@@ -261,13 +260,13 @@ class Folks {
     static public function getUserEmail($user)
     {
         // We should always realy on registration data
-        // $prefs = Prefs::singleton($GLOBALS['conf']['prefs']['driver'], 'horde', Auth::addHook($user), '', null, false);
+        // $prefs = Horde_Prefs::singleton($GLOBALS['conf']['prefs']['driver'], 'horde', Horde_Auth::convertUsername($user, true), '', null, false);
         // $prefs->retrieve();
         // $email = $prefs->getValue('alternate_email') ? $prefs->getValue('alternate_email') : $prefs->getValue('from_addr');
 
         // If there is no email set use the registration one
         if (empty($email)) {
-            if (Auth::isAuthenticated()) {
+            if (Horde_Auth::isAuthenticated()) {
                 $profile = $GLOBALS['folks_driver']->getProfile($user);
             } else {
                 $profile = $GLOBALS['folks_driver']->getRawProfile($user);
@@ -289,23 +288,17 @@ class Folks {
     /**
      * Build Folks's list of menu items.
      */
-    static function getMenu($returnType = 'object')
+    static function getMenu()
     {
-        require_once 'Horde/Menu.php';
-
         $img = $GLOBALS['registry']->getImageDir('horde');
-        $menu = new Menu(HORDE_MENU_MASK_ALL);
-        $menu->add(self::getUrlFor('user', Auth::getAuth()), _("My profile"), 'myaccount.png', $img);
+        $menu = new Horde_Menu(Horde_Menu::MASK_ALL);
+        $menu->add(self::getUrlFor('user', Horde_Auth::getAuth()), _("My profile"), 'myaccount.png', $img);
         $menu->add(self::getUrlFor('list', 'friends'), _("Friends"), 'group.png', $img);
         $menu->add(Horde::applicationUrl('edit/edit.php'), _("Edit profile"), 'edit.png', $img);
         $menu->add(Horde::applicationUrl('services.php'), _("Services"), 'horde.png', $img);
         $menu->add(Horde::applicationUrl('search.php'), _("Search"), 'search.png', $img);
         $menu->add(self::getUrlFor('list', 'online'), _("List"), 'group.png', $img);
 
-        if ($returnType == 'object') {
-            return $menu;
-        } else {
-            return $menu->render();
-        }
+        return $menu;
     }
 }

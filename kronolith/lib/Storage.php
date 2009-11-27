@@ -2,8 +2,6 @@
 /**
  * Kronolith_Storage:: defines an API for storing free/busy information.
  *
- * $Horde: kronolith/lib/Storage.php,v 1.8 2008/06/06 04:25:13 chuck Exp $
- *
  * @author  Mike Cochrane <mike@graftonhall.co.nz>
  * @package Kronolith
  */
@@ -37,7 +35,7 @@ class Kronolith_Storage {
     function &factory($user = null, $driver = null, $params = null)
     {
         if (is_null($user)) {
-            $user = Auth::getAuth();
+            $user = Horde_Auth::getAuth();
         }
 
         if (is_null($driver)) {
@@ -50,10 +48,9 @@ class Kronolith_Storage {
             $params = Horde::getDriverConfig('storage', $driver);
         }
 
-        require_once dirname(__FILE__) . '/Storage/' . $driver . '.php';
         $class = 'Kronolith_Storage_' . $driver;
         if (class_exists($class)) {
-            $driver = &new $class($user, $params);
+            $driver = new $class($user, $params);
         } else {
             $driver = PEAR::raiseError(sprintf(_("Unable to load the definition of %s."), $class));
             return $driver;
@@ -61,7 +58,7 @@ class Kronolith_Storage {
 
         $result = $driver->initialize();
         if (is_a($result, 'PEAR_Error')) {
-            $driver = &new Kronolith_Storage($params);
+            $driver = new Kronolith_Storage($params);
         }
 
         return $driver;
@@ -96,7 +93,7 @@ class Kronolith_Storage {
         static $instances = array();
 
         if (is_null($user)) {
-            $user = Auth::getAuth();
+            $user = Horde_Auth::getAuth();
         }
 
         if (is_null($driver)) {

@@ -11,14 +11,12 @@
  * @package Folks
  */
 
-if (!Auth::isAuthenticated()) {
-    Horde::authenticationFailureRedirect();
+if (!Horde_Auth::isAuthenticated()) {
+    Horde_Auth::authenticateFailure('folks');
 }
 
-require_once 'Horde/Variables.php';
-
-$vars = Variables::getDefaultVariables();
-$tabs = new Horde_UI_Tabs('what', $vars);
+$vars = Horde_Variables::getDefaultVariables();
+$tabs = new Horde_Ui_Tabs('what', $vars);
 $tabs->addTab(_("Edit my profile"), Horde::applicationUrl('edit/edit.php'), 'edit');
 $tabs->addTab(_("Privacy"), Horde::applicationUrl('edit/privacy.php'), 'privacy');
 $tabs->addTab(_("Blacklist"), Horde::applicationUrl('edit/friends/blacklist.php'), 'blacklist');
@@ -29,7 +27,12 @@ $tabs->addTab(_("Password"), Horde::applicationUrl('edit/password.php'), 'passwo
 
 if ($conf['comments']['allow'] != 'never'
         && $registry->hasMethod('forums/doComments')) {
-    $tabs->addTab(_("Comments"), 'comments.php', 'comments');
+    $tabs->addTab(_("Comments"), Horde::applicationUrl('edit/comments.php'), 'comments');
 }
 
-Horde::addScriptFile('tables.js', 'horde', true);
+if ($conf['facebook']['enabled']) {
+    $tabs->addTab(_("Facebook"), Horde::applicationUrl('edit/facebook.php'), 'facebook');
+}
+
+
+Horde::addScriptFile('tables.js', 'horde');

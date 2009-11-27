@@ -1,48 +1,38 @@
 <?php
 /**
  * Ingo base inclusion file.
+ *
  * This file brings in all of the dependencies that every Ingo
  * script will need and sets up objects that all scripts use.
+ *
+ * The following global variables are used:
+ * <pre>
+ * $ingo_authentication - The type of authentication to use:
+ *   'none'  - Do not authenticate
+ *   [DEFAULT] - Authenticate; on failed auth redirect to login screen
+ * </pre>
  *
  * Global variables defined:
  *   $ingo_shared  - TODO
  *   $ingo_storage - The Ingo_Storage:: object to use for storing rules.
+ *   $no_compress  - Controls whether the page should be compressed
  *
  * See the enclosed file LICENSE for license information (ASL).  If you
  * did not receive this file, see http://www.horde.org/licenses/asl.php.
  */
 
-$ingo_dir = dirname(__FILE__);
+// Determine BASE directories.
+require_once dirname(__FILE__) . '/base.load.php';
 
-// Check for a prior definition of HORDE_BASE.
-if (!defined('HORDE_BASE')) {
-    /* Temporary fix - if horde does not live directly under the imp
-     * directory, the HORDE_BASE constant should be defined in
-     * imp/lib/base.local.php. */
-    if (file_exists($ingo_dir . '/base.local.php')) {
-        include $ingo_dir . '/base.local.php';
-    } else {
-        define('HORDE_BASE', $ingo_dir . '/../..');
-    }
-}
-
-// Find the base file path of Ingo.
-if (!defined('INGO_BASE')) {
-    define('INGO_BASE', $ingo_dir . '/..');
-}
-
-// Load the Horde Framework core, and set up inclusion paths.
+// Load the Horde Framework core.
 require_once HORDE_BASE . '/lib/core.php';
-Horde_Autoloader::addClassPath($ingo_dir);
-Horde_Autoloader::addClassPattern('/^Ingo_/', $ingo_dir);
 
 // Registry.
-$registry = &Registry::singleton();
-if (is_a(($pushed = $registry->pushApp('ingo', !defined('AUTH_HANDLER'))), 'PEAR_Error')) {
-    if ($pushed->getCode() == 'permission_denied') {
-        Horde::authenticationFailureRedirect();
-    }
-    Horde::fatal($pushed, __FILE__, __LINE__, false);
+$registry = Horde_Registry::singleton();
+try {
+    $registry->pushApp('ingo', array('check_perms' => (Horde_Util::nonInputVar('ingo_authentication') != 'none'), 'logintasks' => true));
+} catch (Horde_Exception $e) {
+    Horde_Auth::authenticateFailure('ingo', $e);
 }
 $conf = &$GLOBALS['conf'];
 
@@ -51,16 +41,13 @@ if (!defined('INGO_TEMPLATES')) {
 }
 
 // Notification system.
-$notification = &Notification::singleton();
+$notification = Horde_Notification::singleton();
 $notification->attach('status');
 
-// Redirect the user to the Horde login page if they haven't authenticated.
-if (!Auth::isAuthenticated() && !defined('AUTH_HANDLER')) {
-    Horde::authenticationFailureRedirect();
-}
-
 // Start compression.
-Horde::compressOutput();
+if (!Horde_Util::nonInputVar('no_compress')) {
+    Horde::compressOutput();
+}
 
 // Load the Ingo_Storage driver. It appears in the global variable
 // $ingo_storage.
@@ -74,17 +61,16 @@ if (!isset($_SESSION['ingo']) || !is_array($_SESSION['ingo'])) {
 // Create shares if necessary.
 $driver = Ingo::getDriver();
 if ($driver->supportShares()) {
-    $GLOBALS['ingo_shares'] = &Horde_Share::singleton($registry->getApp());
+    $GLOBALS['ingo_shares'] = Horde_Share::singleton($registry->getApp());
     $GLOBALS['all_rulesets'] = Ingo::listRulesets();
 
     /* If personal share doesn't exist then create it. */
-    $signature = $_SESSION['ingo']['backend']['id'] . ':' . Auth::getAuth();
+    $signature = $_SESSION['ingo']['backend']['id'] . ':' . Horde_Auth::getAuth();
     if (!$GLOBALS['ingo_shares']->exists($signature)) {
-        require_once 'Horde/Identity.php';
-        $identity = &Identity::singleton();
+        $identity = Horde_Prefs_Identity::singleton();
         $name = $identity->getValue('fullname');
         if (trim($name) == '') {
-            $name = Auth::removeHook(Auth::getAuth());
+            $name = Horde_Auth::getOriginalAuth();
         }
         $share = &$GLOBALS['ingo_shares']->newShare($signature);
         $share->set('name', $name);
@@ -93,10 +79,10 @@ if ($driver->supportShares()) {
     }
 
     /* Select current share. */
-    $_SESSION['ingo']['current_share'] = Util::getFormData('ruleset', @$_SESSION['ingo']['current_share']);
+    $_SESSION['ingo']['current_share'] = Horde_Util::getFormData('ruleset', @$_SESSION['ingo']['current_share']);
     if (empty($_SESSION['ingo']['current_share']) ||
         empty($GLOBALS['all_rulesets'][$_SESSION['ingo']['current_share']]) ||
-        !$GLOBALS['all_rulesets'][$_SESSION['ingo']['current_share']]->hasPermission(Auth::getAuth(), PERMS_READ)) {
+        !$GLOBALS['all_rulesets'][$_SESSION['ingo']['current_share']]->hasPermission(Horde_Auth::getAuth(), Horde_Perms::READ)) {
         $_SESSION['ingo']['current_share'] = $signature;
     }
 } else {

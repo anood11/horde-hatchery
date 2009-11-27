@@ -10,75 +10,87 @@
  * @package IMP
  */
 
-require_once dirname(__FILE__) . '/lib/base.php';
+require_once dirname(__FILE__) . '/lib/Application.php';
+new IMP_Application(array('init' => true));
 
-$folder = Util::getFormData('folder');
-$index = Util::getFormData('uid');
-if (!$index || !$folder) {
+$folder = Horde_Util::getFormData('folder');
+$uid = Horde_Util::getFormData('uid');
+if (!$uid || !$folder) {
     exit;
 }
 
 $imp_ui = new IMP_UI_Message();
+$readonly = $imp_imap->isReadOnly($folder);
 
 $args = array(
     'headers' => array_diff(array_keys($imp_ui->basicHeaders()), array('subject')),
-    'folder' => $folder,
-    'index' => $index,
+    'mailbox' => $folder,
     'preview' => false,
+    'uid' => $uid
 );
 
 $show_msg = new IMP_Views_ShowMessage();
 $show_msg_result = $show_msg->showMessage($args);
 if (isset($show_msg_result['error'])) {
-    echo IMP::wrapInlineScript(array(
-        DIMP::notify(false, 'parent.opener.document', 'parent.opener.DimpCore'),
+    echo Horde::wrapInlineScript(array(
+        IMP_Dimp::notify(),
         'parent.close()'
     ));
     exit;
 }
 
-$compose_args = array(
-    'folder' => $folder,
-    'index' => $index,
-    'messageCache' => '',
-    'popup' => false,
-    'qreply' => true,
+$scripts = array(
+    array('ContextSensitive.js', 'imp'),
+    array('fullmessage-dimp.js', 'imp')
 );
-$compose_result = IMP_Views_Compose::showCompose($compose_args);
 
-/* Init IMP_UI_Compose:: object. */
-$imp_ui = new IMP_UI_Compose();
-
-/* Attach spellchecker & auto completer. */
-$imp_ui->attachAutoCompleter(array('to', 'cc', 'bcc'));
-$imp_ui->attachSpellChecker('dimp');
-
-$compose_result['js'] = array_merge($compose_result['js'], array(
-    'DIMP.conf.msg_index = "' . $show_msg_result['index'] . '"',
-    'DIMP.conf.msg_folder = "' . $show_msg_result['folder'] . '"'
-));
-
-foreach (array('from', 'to', 'cc', 'bcc', 'replyTo') as $val) {
+$js_onload = $js_out = array();
+foreach (array('from', 'to', 'cc', 'bcc', 'replyTo', 'log', 'uid', 'mailbox') as $val) {
     if (!empty($show_msg_result[$val])) {
-        $compose_result['js'][] = 'DimpFullmessage.' . $val . ' = ' . Horde_Serialize::serialize($show_msg_result[$val], Horde_Serialize::JSON);
+        $js_out[] = 'DimpFullmessage.' . $val . ' = ' . Horde_Serialize::serialize($show_msg_result[$val], Horde_Serialize::JSON);
     }
 }
-IMP::addInlineScript($compose_result['js']);
-IMP::addInlineScript($compose_result['jsonload'], 'load');
-IMP::addInlineScript(array(DIMP::notify()), 'dom');
 
-$scripts = array(
-    array('ContextSensitive.js', 'imp', true),
-    array('fullmessage-dimp.js', 'imp', true),
-    array('compose-dimp.js', 'imp', true),
-    array('imp.js', 'imp', true)
-);
+/* Determine if compose mode is disabled. */
+$disable_compose = !IMP::canCompose();
 
-DIMP::header($show_msg_result['subject'], $scripts);
+if (!$disable_compose) {
+    $compose_args = array(
+        'folder' => $folder,
+        'messageCache' => '',
+        'popup' => false,
+        'qreply' => true,
+        'uid' => $uid,
+    );
+    $compose_result = IMP_Views_Compose::showCompose($compose_args);
+
+    /* Init IMP_UI_Compose:: object. */
+    $imp_ui = new IMP_UI_Compose();
+
+    /* Attach spellchecker & auto completer. */
+    $imp_ui->attachAutoCompleter(array('to', 'cc', 'bcc'));
+    $imp_ui->attachSpellChecker('dimp');
+
+    $js_out = array_merge($js_out, $compose_result['js']);
+    $scripts[] = array('compose-dimp.js', 'imp');
+
+    $js_onload = $compose_result['jsonload'];
+}
+
+$js_onload[] = IMP_Dimp::notify();
+if (isset($show_msg_result['js'])) {
+    $js_onload = array_merge($js_onload, $show_msg_result['js']);
+}
+
+Horde::addInlineScript($js_out);
+Horde::addInlineScript(array_filter($js_onload), 'load');
+
+IMP_Dimp::header($show_msg_result['title'], $scripts);
 echo "<body>\n";
 require IMP_TEMPLATES . '/chunks/message.php';
-IMP::includeScriptFiles();
-IMP::outputInlineScript();
-echo $compose_result['jsappend'];
-$notification->notify(array('listeners' => array('javascript')));
+Horde::includeScriptFiles();
+Horde::outputInlineScript();
+if (!$disable_compose) {
+    echo $compose_result['jsappend'];
+}
 echo "</body>\n</html>";

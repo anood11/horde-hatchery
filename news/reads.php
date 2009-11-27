@@ -13,12 +13,12 @@
 
 require_once dirname(__FILE__) . '/lib/base.php';
 
-if (!Auth::isAuthenticated()) {
-    Horde::authenticationFailureRedirect();
+if (!Horde_Auth::isAuthenticated()) {
+    Horde_Auth::authenticateFailure('news');
 }
 
-$id = Util::getFormData('id', 0);
-$actionID = Util::getFormData('actionID', false);
+$id = Horde_Util::getFormData('id', 0);
+$actionID = Horde_Util::getFormData('actionID', false);
 $url = Horde::applicationUrl('reads.php');
 
 $sql = 'SELECT id, user, ip, readdate FROM ' . $news->prefix . '_user_reads WHERE ';
@@ -35,9 +35,9 @@ if ($result instanceof PEAR_Error) {
     exit;
 }
 
-Horde::addScriptFile('tables.js', 'horde', true);
+Horde::addScriptFile('tables.js', 'horde');
 Horde::includeScriptFiles();
-echo Horde::stylesheetLink('news');
+Horde::includeStylesheetFiles();
 
 // require_once NEWS_TEMPLATES . '/common-header.inc';
 require_once NEWS_TEMPLATES . '/reads/header.inc';

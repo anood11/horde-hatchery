@@ -10,7 +10,7 @@
  * @package    Horde_Date
  * @subpackage UnitTests
  */
-class Horde_Date_Parser_TokenTest extends PHPUnit_Framework_TestCase
+class Horde_Date_Parser_TokenTest extends Horde_Test_Case
 {
     public function testToken()
     {
@@ -31,6 +31,22 @@ class Horde_Date_Parser_TokenTest extends PHPUnit_Framework_TestCase
         $token->untag('foo');
         $this->assertEquals(1, count($token->tags));
         $this->assertType('int', $token->getTag('bar'));
+    }
+
+    public function testScanForDayNames()
+    {
+        $parser = Horde_Date_Parser::factory();
+        $tokenizer = $parser->componentFactory('Repeater');
+
+        $token = new Horde_Date_Parser_Token('saturday');
+        $repeater = $tokenizer->scanForDayNames($token);
+        $this->assertType('Horde_Date_Repeater_DayName', $repeater);
+        $this->assertEquals('saturday', $repeater->type);
+
+        $token = new Horde_Date_Parser_Token('sunday');
+        $repeater = $tokenizer->scanForDayNames($token);
+        $this->assertType('Horde_Date_Repeater_DayName', $repeater);
+        $this->assertEquals('sunday', $repeater->type);
     }
 
 }

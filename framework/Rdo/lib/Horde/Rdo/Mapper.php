@@ -126,6 +126,10 @@ abstract class Horde_Rdo_Mapper implements Countable
             $this->inflector = new Horde_Support_Inflector();
             return $this->inflector;
 
+        case 'primaryKey':
+            $this->primaryKey = (string)$this->tableDefinition->getPrimaryKey();
+            return $this->primaryKey;
+
         case 'table':
             $this->table = !empty($this->_table) ? $this->_table : $this->mapperToTable();
             return $this->table;
@@ -174,11 +178,7 @@ abstract class Horde_Rdo_Mapper implements Countable
      */
     public function getAdapter()
     {
-        $adapter = Horde_Db::getAdapter();
-        if ($adapter) {
-            return $adapter;
-        }
-        throw new Horde_Rdo_Exception('You must override getAdapter(), assign a Horde_Db_Adapter by calling setAdapter(), or set a global adapter by calling Horde_Db::setAdapter().');
+        throw new Horde_Rdo_Exception('You must override getAdapter() or assign a Horde_Db_Adapter by calling setAdapter().');
     }
 
     /**
@@ -196,19 +196,48 @@ abstract class Horde_Rdo_Mapper implements Countable
         // Guess a classname if one isn't explicitly set.
         if (!$this->_classname) {
             $this->_classname = $this->mapperToEntity();
+            if (!$this->_classname) {
+                throw new Horde_Rdo_Exception('Unable to find an entity class (extending Horde_Rdo_Base) for ' . get_class($this));
+            }
         }
 
+        $o = new $this->_classname();
+        $o->setMapper($this);
+
+        $this->mapFields($o, $fields);
+
+        if (is_callable(array($o, 'afterMap'))) {
+            $o->afterMap();
+        }
+
+        return $o;
+    }
+
+    /**
+     * Update an instance of $this->_classname from a set of data.
+     *
+     * @param Horde_Rdo_Base $object The object to update
+     * @param array $fields Field names/default values for the object
+     */
+    public function mapFields($object, $fields = array())
+    {
         $relationships = array();
-        foreach ($fields as $fieldName => $fieldValue) {
+        foreach ($fields as $fieldName => &$fieldValue) {
             if (strpos($fieldName, '@') !== false) {
                 list($rel, $field) = explode('@', $fieldName, 2);
                 $relationships[$rel][$field] = $fieldValue;
                 unset($fields[$fieldName]);
             }
+            if (isset($this->fields[$fieldName])) {
+                $fieldName = $this->fields[$fieldName];
+            }
+            $column = $this->tableDefinition->getColumn($fieldName);
+            if ($column) {
+                $fieldValue = $column->typeCast($fieldValue);
+            }
         }
 
-        $o = new $this->_classname($fields);
-        $o->setMapper($this);
+        $object->setFields($fields);
 
         if (count($relationships)) {
             foreach ($this->relationships as $relationship => $rel) {
@@ -223,16 +252,10 @@ abstract class Horde_Rdo_Mapper implements Countable
                 }
 
                 if (isset($relationships[$m->table])) {
-                    $o->$relationship = $m->map($relationships[$m->table]);
+                    $object->$relationship = $m->map($relationships[$m->table]);
                 }
             }
         }
-
-        if (is_callable(array($o, 'afterMap'))) {
-            $o->afterMap();
-        }
-
-        return $o;
     }
 
     /**
@@ -326,7 +349,7 @@ abstract class Horde_Rdo_Mapper implements Countable
         }
 
         // Filter out any extra fields.
-        $fields = array_intersect_key($fields, $this->tableDefinition->getColumnNames());
+        $fields = array_intersect_key($fields, array_flip($this->tableDefinition->getColumnNames()));
 
         if (!$fields) {
             throw new Horde_Rdo_Exception('create() requires at least one field value.');
@@ -345,8 +368,7 @@ abstract class Horde_Rdo_Mapper implements Countable
 
         $id = $this->adapter->insert($sql, $bindParams);
 
-        return $this->map(array_merge(array($this->tableDefinition->getPrimaryKey() => $id),
-                                      $fields));
+        return $this->map(array_merge($fields, array($this->primaryKey => $id)));
     }
 
     /**
@@ -364,13 +386,14 @@ abstract class Horde_Rdo_Mapper implements Countable
     public function update($object, $fields = null)
     {
         if ($object instanceof Horde_Rdo_Base) {
-            $key = $this->tableDefinition->getPrimaryKey();
+            $key = $this->primaryKey;
             $id = $object->$key;
             $fields = iterator_to_array($object);
 
             if (!$id) {
                 // Object doesn't exist yet; create it instead.
-                $object = $this->create($fields);
+                $o = $this->create($fields);
+                $this->mapFields($object, iterator_to_array($o));
                 return 1;
             }
         } else {
@@ -396,7 +419,7 @@ abstract class Horde_Rdo_Mapper implements Countable
             $sql .= ' ' . $this->adapter->quoteColumnName($field) . ' = ?,';
             $bindParams[] = $value;
         }
-        $sql = substr($sql, 0, -1) . ' WHERE ' . $this->tableDefinition->getPrimaryKey() . ' = ?';
+        $sql = substr($sql, 0, -1) . ' WHERE ' . $this->primaryKey . ' = ?';
         $bindParams[] = $id;
 
         return $this->adapter->update($sql, $bindParams);
@@ -414,13 +437,13 @@ abstract class Horde_Rdo_Mapper implements Countable
     public function delete($object)
     {
         if ($object instanceof Horde_Rdo_Base) {
-            $key = $this->tableDefinition->getPrimaryKey();
+            $key = $this->primaryKey;
             $id = $object->$key;
             $query = array($key => $id);
         } elseif ($object instanceof Horde_Rdo_Query) {
             $query = $object;
         } else {
-            $key = $this->tableDefinition->getPrimaryKey();
+            $key = $this->primaryKey;
             $query = array($key => $object);
         }
 
@@ -470,11 +493,10 @@ abstract class Horde_Rdo_Mapper implements Countable
             if (is_numeric(key($arg))) {
                 // Numerically indexed arrays are assumed to be an array of
                 // primary keys.
-                $key = $this->tableDefinition->getPrimaryKey();
                 $query = new Horde_Rdo_Query();
                 $query->combineWith('OR');
                 foreach ($argv[0] as $id) {
-                    $query->addTest($key, '=', $id);
+                    $query->addTest($this->primaryKey, '=', $id);
                 }
             } else {
                 $query = $arg;
@@ -508,7 +530,7 @@ abstract class Horde_Rdo_Mapper implements Countable
         if (is_null($arg)) {
             $query = null;
         } elseif (is_scalar($arg)) {
-            $query = array((string)$this->tableDefinition->getPrimaryKey() => $arg);
+            $query = array($this->primaryKey => $arg);
         } else {
             $query = $arg;
         }

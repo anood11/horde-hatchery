@@ -1,8 +1,6 @@
 #!/usr/bin/env php
 <?php
 /**
- * $Horde: kronolith/scripts/agenda.php,v 1.4 2009/01/06 18:01:04 jan Exp $
- *
  * Copyright 2003-2009 The Horde Project (http://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (LGPL). If you
@@ -11,20 +9,17 @@
  * @author Chuck Hagenbuch <chuck@horde.org>
  */
 
-define('AUTH_HANDLER', true);
+$kronolith_authentication = 'none';
 require_once dirname(__FILE__) . '/../lib/base.php';
-require_once HORDE_BASE . '/lib/core.php';
-require_once 'Horde/CLI.php';
-require_once 'Horde/Identity.php';
 
 // Make sure no one runs this from the web.
-if (!Horde_CLI::runningFromCLI()) {
+if (!Horde_Cli::runningFromCLI()) {
     exit("Must be run from the command line\n");
 }
 
 // Load the CLI environment - make sure there's no time limit, init
 // some variables, etc.
-Horde_CLI::init();
+Horde_Cli::init();
 
 send_agendas();
 exit(0);
@@ -60,7 +55,7 @@ function send_agendas()
         if (is_a($calendar, 'PEAR_Error')) {
             continue;
         }
-        $users = array_merge($users, $calendar->listUsers(PERMS_READ));
+        $users = array_merge($users, $calendar->listUsers(Horde_Perms::READ));
     }
 
     // Remove duplicates.
@@ -68,11 +63,12 @@ function send_agendas()
 
     $runtime = new Horde_Date($runtime);
     $default_timezone = date_default_timezone_get();
+    $kronolith_driver = Kronolith::getDriver();
 
     // Loop through the users and generate an agenda for them
     foreach ($users as $user) {
-        $prefs = Prefs::singleton($GLOBALS['conf']['prefs']['driver'],
-                                  'kronolith', $user);
+        $prefs = Horde_Prefs::singleton($GLOBALS['conf']['prefs']['driver'],
+                                        'kronolith', $user);
         $prefs->retrieve();
         $agenda_calendars = $prefs->getValue('daily_agenda');
 
@@ -86,7 +82,7 @@ function send_agendas()
         }
 
         // try to find an email address for the user
-        $identity = Identity::singleton('none', $user);
+        $identity = Horde_Prefs_Identity::singleton('none', $user);
         $email = $identity->getValue('from_addr');
         if (strstr($email, '@')) {
             list($mailbox, $host) = explode('@', $email);
@@ -100,18 +96,18 @@ function send_agendas()
         // If we found an email address, generate the agenda.
         switch ($agenda_calendars) {
         case 'owner':
-            $calendars = $GLOBALS['shares']->listShares($user, PERMS_SHOW, $user);
+            $calendars = $GLOBALS['shares']->listShares($user, Horde_Perms::SHOW, $user);
             break;
 
         case 'read':
-            $calendars = $GLOBALS['shares']->listShares($user, PERMS_SHOW, null);
+            $calendars = $GLOBALS['shares']->listShares($user, Horde_Perms::SHOW, null);
             break;
 
         case 'show':
         default:
             $calendars = array();
             $shown_calendars = unserialize($prefs->getValue('display_cals'));
-            $cals = $GLOBALS['shares']->listShares($user, PERMS_SHOW, null);
+            $cals = $GLOBALS['shares']->listShares($user, Horde_Perms::SHOW, null);
             foreach ($cals as $calId => $cal) {
                 if (in_array($calId, $shown_calendars)) {
                     $calendars[$calId] = $cal;
@@ -122,18 +118,16 @@ function send_agendas()
         // Get a list of events for today
         $eventlist = array();
         foreach ($calendars as $calId => $calendar) {
-            $GLOBALS['kronolith_driver']->open($calId);
-            $events = $GLOBALS['kronolith_driver']->listEvents($runtime, $runtime);
-            foreach ($events as $eventId) {
-                $event = $GLOBALS['kronolith_driver']->getEvent($eventId);
-                if (is_a($event, 'PEAR_Error')) {
-                    return $event;
+            $kronolith_driver->open($calId);
+            $events = $kronolith_driver->listEvents($runtime, $runtime);
+            foreach ($events as $dayevents) {
+                foreach ($dayevents as $event) {
+                    // The event list contains events starting at 12am.
+                    if ($event->start->mday != $runtime->mday) {
+                        continue;
+                    }
+                    $eventlist[$event->start->strftime('%Y%m%d%H%M%S')] = $event;
                 }
-                // The event list contains events starting at 12am.
-                if ($event->start->mday != $runtime->mday) {
-                    continue;
-                }
-                $eventlist[$event->start->strftime('%Y%m%d%H%M%S')] = $event;
             }
         }
 
@@ -146,22 +140,14 @@ function send_agendas()
         $lang = $prefs->getValue('language');
         $twentyFour = $prefs->getValue('twentyFour');
         $dateFormat = $prefs->getValue('date_format');
-        NLS::setLanguageEnvironment($lang);
-        $mime_mail = new Horde_Mime_Mail(sprintf(_("Your daily agenda for %s"), strftime($dateFormat, $runtime)),
-                                         null,
-                                         $email,
-                                         $GLOBALS['conf']['reminder']['from_addr'],
-                                         NLS::getCharset());
+        Horde_Nls::setLanguageEnvironment($lang);
+        $mime_mail = new Horde_Mime_Mail(array('subject' => sprintf(_("Your daily agenda for %s"), strftime($dateFormat, $runtime)),
+                                               'to' => $email,
+                                               'from' => $GLOBALS['conf']['reminder']['from_addr'],
+                                               'charset' => Horde_Nls::getCharset()));
+        $mime_mail->addHeader('User-Agent', 'Kronolith ' . $registry->getVersion());
 
-        $mail_driver = $GLOBALS['conf']['mailer']['type'];
-        $mail_params = $GLOBALS['conf']['mailer']['params'];
-        if ($mail_driver == 'smtp' && $mail_params['auth'] &&
-            empty($mail_params['username'])) {
-            Horde::logMessage('Agenda Notifications don\'t work with user based SMTP authentication.',
-                              __FILE__, __LINE__, PEAR_LOG_ERR);
-            return;
-        }
-        $pad = max(String::length(_("All day")) + 2, $twentyFour ? 6 : 8);
+        $pad = max(Horde_String::length(_("All day")) + 2, $twentyFour ? 6 : 8);
 
         $message = sprintf(_("Your daily agenda for %s"),
                            strftime($dateFormat, $runtime))
@@ -175,14 +161,14 @@ function send_agendas()
             $message .= $event->title . "\n";
         }
 
-        $mime_mail->setBody($message, NLS::getCharset(), true);
+        $mime_mail->setBody($message, Horde_Nls::getCharset(), true);
         try {
             $mime_mail->addRecipients($email);
         } catch (Horde_Mime_Exception $e) {}
         Horde::logMessage(sprintf('Sending daily agenda to %s', $email),
                           __FILE__, __LINE__, PEAR_LOG_DEBUG);
         try {
-            $mime_mail->send($mail_driver, $mail_params, false, false);
+            $mime_mail->send(Horde::getMailerConfig(), false, false);
         } catch (Horde_Mime_Exception $e) {}
     }
 }

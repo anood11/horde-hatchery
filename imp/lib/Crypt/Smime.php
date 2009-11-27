@@ -107,13 +107,13 @@ class IMP_Crypt_Smime extends Horde_Crypt_Smime
         /* Make sure the certificate is valid. */
         $key_info = openssl_x509_parse($cert);
         if (!is_array($key_info) || !isset($key_info['subject'])) {
-            throw new Horde_Exception(_("Not a valid public key."), 'horde.error');
+            throw new Horde_Exception(_("Not a valid public key."));
         }
 
         /* Add key to the user's address book. */
         $email = $this->getEmailFromKey($cert);
         if (is_null($email)) {
-            throw new Horde_Exception(_("No email information located in the public key."), 'horde.error');
+            throw new Horde_Exception(_("No email information located in the public key."));
         }
 
         /* Get the name corresponding to this key. */
@@ -122,13 +122,10 @@ class IMP_Crypt_Smime extends Horde_Crypt_Smime
         } elseif (isset($key_info['subject']['OU'])) {
             $name = $key_info['subject']['OU'];
         } else {
-            throw new Horde_Exception(_("Not a valid public key."), 'horde.error');
+            throw new Horde_Exception(_("Not a valid public key."));
         }
 
-        $res = $GLOBALS['registry']->call('contacts/addField', array($email, $name, self::PUBKEY_FIELD, $cert, $GLOBALS['prefs']->getValue('add_source')));
-        if (is_a($res, 'PEAR_Error')) {
-            throw new Horde_Exception($res);
-        }
+        $GLOBALS['registry']->call('contacts/addField', array($email, $name, self::PUBKEY_FIELD, $cert, $GLOBALS['prefs']->getValue('add_source')));
     }
 
     /**
@@ -165,18 +162,27 @@ class IMP_Crypt_Smime extends Horde_Crypt_Smime
      */
     public function getPublicKey($address)
     {
-        $params = IMP_Compose::getAddressSearchParams();
-        $key = $GLOBALS['registry']->call('contacts/getField', array($address, self::PUBKEY_FIELD, $params['sources'], false, true));
+        try {
+            $key = Horde::callHook('smime_key', array($address), 'imp');
+            if ($key) {
+                return $key;
+            }
+        } catch (Horde_Exception_HookNotSet $e) {
+        }
 
-        /* See if the address points to the user's public key. */
-        if (is_a($key, 'PEAR_Error')) {
-            require_once 'Horde/Identity.php';
-            $identity = &Identity::singleton(array('imp', 'imp'));
+        $params = IMP_Compose::getAddressSearchParams();
+
+        try {
+            $key = $GLOBALS['registry']->call('contacts/getField', array($address, self::PUBKEY_FIELD, $params['sources'], false, true));
+        } catch (Horde_Exception $e) {
+            /* See if the address points to the user's public key. */
+            $identity = Horde_Prefs_Identity::singleton(array('imp', 'imp'));
             $personal_pubkey = $this->getPersonalPublicKey();
             if (!empty($personal_pubkey) && $identity->hasAddress($address)) {
                 return $personal_pubkey;
             }
-            throw new Horde_Exception($key);
+
+            throw $e;
         }
 
         /* If more than one public key is returned, just return the first in
@@ -197,12 +203,7 @@ class IMP_Crypt_Smime extends Horde_Crypt_Smime
         if (empty($params['sources'])) {
             return array();
         }
-        $res = $GLOBALS['registry']->call('contacts/getAllAttributeValues', array(self::PUBKEY_FIELD, $params['sources']));
-        if (is_a($res, 'PEAR_Error')) {
-            throw new Horde_Exception($res);
-        }
-
-        return $res;
+        return $GLOBALS['registry']->call('contacts/getAllAttributeValues', array(self::PUBKEY_FIELD, $params['sources']));
     }
 
     /**
@@ -215,10 +216,7 @@ class IMP_Crypt_Smime extends Horde_Crypt_Smime
     public function deletePublicKey($email)
     {
         $params = IMP_Compose::getAddressSearchParams();
-        $res = $GLOBALS['registry']->call('contacts/deleteField', array($email, self::PUBKEY_FIELD, $params['sources']));
-        if (is_a($res, 'PEAR_Error')) {
-            throw new Horde_Exception($res);
-        }
+        $GLOBALS['registry']->call('contacts/deleteField', array($email, self::PUBKEY_FIELD, $params['sources']));
     }
 
     /**
@@ -248,7 +246,7 @@ class IMP_Crypt_Smime extends Horde_Crypt_Smime
      */
     public function verifySignature($text)
     {
-        return $this->verify($text, empty($GLOBALS['conf']['utils']['openssl_cafile']) ? array() : $GLOBALS['conf']['utils']['openssl_cafile']);
+        return $this->verify($text, empty($GLOBALS['conf']['openssl']['cafile']) ? array() : $GLOBALS['conf']['openssl']['cafile']);
     }
 
 
@@ -280,15 +278,15 @@ class IMP_Crypt_Smime extends Horde_Crypt_Smime
         }
 
         if (isset($_SESSION['imp']['smime']['passphrase'])) {
-            return Horde_Secret::read(IMP::getAuthKey(), $_SESSION['imp']['smime']['passphrase']);
+            return Horde_Secret::read(Horde_Secret::getKey('imp'), $_SESSION['imp']['smime']['passphrase']);
         } elseif (isset($_SESSION['imp']['smime']['null_passphrase'])) {
             return ($_SESSION['imp']['smime']['null_passphrase']) ? null : false;
         } else {
-            $res = $this->verifyPassphrase($private_key, null);
+            $result = $this->verifyPassphrase($private_key, null);
             if (!isset($_SESSION['imp']['smime'])) {
                 $_SESSION['imp']['smime'] = array();
             }
-            $_SESSION['imp']['smime']['null_passphrase'] = ($res) ? null : false;
+            $_SESSION['imp']['smime']['null_passphrase'] = ($result) ? null : false;
             return $_SESSION['imp']['smime']['null_passphrase'];
         }
     }
@@ -309,7 +307,7 @@ class IMP_Crypt_Smime extends Horde_Crypt_Smime
         if (!isset($_SESSION['imp']['smime'])) {
             $_SESSION['imp']['smime'] = array();
         }
-        $_SESSION['imp']['smime']['passphrase'] = Horde_Secret::write(IMP::getAuthKey(), $passphrase);
+        $_SESSION['imp']['smime']['passphrase'] = Horde_Secret::write(Horde_Secret::getKey('imp'), $passphrase);
 
         return true;
     }
@@ -335,10 +333,11 @@ class IMP_Crypt_Smime extends Horde_Crypt_Smime
     {
         $params = array(
             'actionID' => 'save_attachment_public_key',
+            'mailbox' => $mailbox,
             'uid' => $uid,
             'mime_id' => $id
         );
-        return IMP::popupIMPString('smime.php', $params, 450, 200);
+        return Horde::popupJs(Horde::applicationUrl('smime.php'), array('params' => $params, 'height' => 200, 'width' => 450));
     }
 
     /**
@@ -396,16 +395,19 @@ class IMP_Crypt_Smime extends Horde_Crypt_Smime
      */
     public function addFromPKCS12($pkcs12, $password, $pkpass = null)
     {
-        $sslpath = (empty($GLOBALS['conf']['utils']['openssl_binary'])) ? null : $GLOBALS['conf']['utils']['openssl_binary'];
+        $sslpath = empty($GLOBALS['conf']['openssl']['path'])
+            ? null
+            : $GLOBALS['conf']['openssl']['path'];
+
         $params = array('sslpath' => $sslpath, 'password' => $password);
         if (!empty($pkpass)) {
             $params['newpassword'] = $pkpass;
         }
 
-        $res = $this->parsePKCS12Data($pkcs12, $params);
-        $this->addPersonalPrivateKey($res->private);
-        $this->addPersonalPublicKey($res->public);
-        $this->addAdditionalCert($res->certs);
+        $result = $this->parsePKCS12Data($pkcs12, $params);
+        $this->addPersonalPrivateKey($result->private);
+        $this->addPersonalPublicKey($result->public);
+        $this->addAdditionalCert($result->certs);
     }
 
     /**
@@ -418,9 +420,9 @@ class IMP_Crypt_Smime extends Horde_Crypt_Smime
      */
     public function extractSignedContents($data)
     {
-        $sslpath = empty($GLOBALS['conf']['utils']['openssl_binary'])
+        $sslpath = empty($GLOBALS['conf']['openssl']['path'])
             ? null
-            : $GLOBALS['conf']['utils']['openssl_binary'];
+            : $GLOBALS['conf']['openssl']['path'];
 
         return parent::extractSignedContents($data, $sslpath);
     }

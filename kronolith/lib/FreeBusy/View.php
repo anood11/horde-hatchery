@@ -14,6 +14,8 @@ class Kronolith_FreeBusy_View {
 
     var $_requiredMembers = array();
     var $_optionalMembers = array();
+    var $_requiredResourceMembers = array();
+    var $_optionalResourceMembers = array();
     var $_timeBlocks = array();
 
     var $_startHour;
@@ -32,6 +34,16 @@ class Kronolith_FreeBusy_View {
         $this->_optionalMembers[] = clone $vFreebusy;
     }
 
+    function addOptionalResourceMember($vFreebusy)
+    {
+        $this->_optionalResourceMembers[] = clone $vFreebusy;
+    }
+
+    function addRequiredResourceMember($vFreebusy)
+    {
+        $this->_requiredResourceMembers[] = clone $vFreebusy;
+    }
+
     function render($day = null)
     {
         global $prefs;
@@ -42,26 +54,36 @@ class Kronolith_FreeBusy_View {
         $this->_render($day);
 
         $vCal = new Horde_iCalendar();
+
+        /* Required members */
         $required = &Horde_iCalendar::newComponent('vfreebusy', $vCal);
         foreach ($this->_requiredMembers as $member) {
             $required->merge($member, false);
         }
+        foreach ($this->_requiredResourceMembers as $member) {
+            $required->merge($member, false);
+        }
         $required->simplify();
 
+        /* Optional members */
         $optional = &Horde_iCalendar::newComponent('vfreebusy', $vCal);
         foreach ($this->_optionalMembers as $member) {
             $optional->merge($member, false);
         }
+        foreach ($this->_optionalResourceMembers as $member) {
+            $optional->merge($member, false);
+        }
         $optional->simplify();
 
+        /* Optimal time calculation */
         $optimal = &Horde_iCalendar::newComponent('vfreebusy', $vCal);
         $optimal->merge($required, false);
         $optimal->merge($optional);
 
         $base_url = Horde::selfUrl();
-        $base_url = Util::removeParameter($base_url, 'date');
-        $base_url = Util::removeParameter($base_url, 'fbview');
-        $base_url = Util::addParameter($base_url, 'fbview', $this->view);
+        $base_url = Horde_Util::removeParameter($base_url, 'date');
+        $base_url = Horde_Util::removeParameter($base_url, 'fbview');
+        $base_url = Horde_Util::addParameter($base_url, 'fbview', $this->view);
 
         $template = new Horde_Template();
         $template->set('title', $this->_title());
@@ -78,7 +100,6 @@ class Kronolith_FreeBusy_View {
 
         // Required to attend.
         if (count($this->_requiredMembers) > 0) {
-            $template = new Horde_Template();
             $rows = '';
             foreach ($this->_requiredMembers as $member) {
                 $member->simplify();
@@ -100,7 +121,6 @@ class Kronolith_FreeBusy_View {
 
         // Optional to attend.
         if (count($this->_optionalMembers) > 0) {
-            $template = new Horde_Template();
             $rows = '';
             foreach ($this->_optionalMembers as $member) {
                 $member->simplify();
@@ -119,6 +139,58 @@ class Kronolith_FreeBusy_View {
             $template->set('legend', '');
             $html .= $template->fetch(KRONOLITH_TEMPLATES . '/fbview/section.html');
         }
+
+        // Required Resources
+        //if (count($this->_requiredResourceMembers) > 0) {
+        if (count($this->_requiredResourceMembers) > 0 || count($this->_optionalResourceMembers) > 0) {
+            $template = new Horde_Template();
+            $rows = '';
+            foreach ($this->_requiredResourceMembers as $member) {
+                $member->simplify();
+                $blocks = $this->_getBlocks($member, $member->getBusyPeriods(), 'busyblock.html', _("Busy"));
+                $template = new Horde_Template();
+                $template->set('blocks', $blocks);
+                $template->set('name', $member->getName());
+                $rows .= $template->fetch(KRONOLITH_TEMPLATES . '/fbview/row.html');
+            }
+            foreach ($this->_optionalResourceMembers as $member) {
+                $member->simplify();
+                $blocks = $this->_getBlocks($member, $member->getBusyPeriods(), 'busyblock.html', _("Busy"));
+                $template = new Horde_Template();
+                $template->set('blocks', $blocks);
+                $template->set('name', $member->getName());
+                $rows .= $template->fetch(KRONOLITH_TEMPLATES . '/fbview/row.html');
+            }
+            $template = new Horde_Template();
+            $template->set('title', _("Required Resources"));
+            $template->set('rows', $rows);
+            $template->set('span', count($this->_timeBlocks));
+            $template->set('hours', $hours_html);
+            $template->set('legend', '');
+            $html .= $template->fetch(KRONOLITH_TEMPLATES . '/fbview/section.html');
+        }
+
+//        // Optional Resources
+//        if (count($this->_optionalResourceMembers) > 0) {
+//            $template = new Horde_Template();
+//            $rows = '';
+//            foreach ($this->_optionalResourceMembers as $member) {
+//                $member->simplify();
+//                $blocks = $this->_getBlocks($member, $member->getBusyPeriods(), 'busyblock.html', _("Busy"));
+//                $template = new Horde_Template();
+//                $template->set('blocks', $blocks);
+//                $template->set('name', $member->getName());
+//                $rows .= $template->fetch(KRONOLITH_TEMPLATES . '/fbview/row.html');
+//            }
+//            $template = new Horde_Template();
+//            $template->set('title', _("Optional Resources"));
+//            $template->set('rows', $rows);
+//            $template->set('span', count($this->_timeBlocks));
+//            $template->set('hours', $hours_html);
+//            $template->set('legend', '');
+//            $html .= $template->fetch(KRONOLITH_TEMPLATES . '/fbview/section.html');
+//        }
+
 
         // Possible meeting times.
         $optimal->setAttribute('ORGANIZER', _("All Attendees"));
@@ -141,6 +213,17 @@ class Kronolith_FreeBusy_View {
         $template->set('name', _("Required Attendees"));
         $template->set('blocks', $blocks);
         $rows .= $template->fetch(KRONOLITH_TEMPLATES . '/fbview/row.html');
+
+        // Possible meeting times.
+//        $resource->setAttribute('ORGANIZER', _("Required Attendees"));
+//        $blocks = $this->_getBlocks($required,
+//                                    $required->getFreePeriods($this->_start->timestamp(), $this->_end->timestamp()),
+//                                    'meetingblock.html', _("Required Attendees"));
+//
+//        $template = new Horde_Template();
+//        $template->set('name', _("Required Attendees"));
+//        $template->set('blocks', $blocks);
+//        $rows .= $template->fetch(KRONOLITH_TEMPLATES . '/fbview/row.html');
 
         // Reset locale.
         setlocale(LC_NUMERIC, $lc);
@@ -173,7 +256,6 @@ class Kronolith_FreeBusy_View {
     function factory($view)
     {
         $driver = basename($view);
-        require_once dirname(__FILE__) . '/View/' . $driver . '.php';
         $class = 'Kronolith_FreeBusy_View_' . $driver;
         if (class_exists($class)) {
             return new $class($user, $params);

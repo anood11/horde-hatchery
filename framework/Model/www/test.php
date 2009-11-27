@@ -4,19 +4,15 @@
  *
  * The initial Horde_Form xhtml rewrite was supported by Google SoC
  * 2005.
- *
- * $Horde: incubator/Horde_Form/test.php,v 1.25 2008/09/02 17:43:09 chuck Exp $
  */
 
 @define('HORDE_BASE', dirname(__FILE__) . '/../..');
 @define('INCUBATOR_BASE', dirname(__FILE__));
 
 require_once HORDE_BASE . '/lib/core.php';
-require_once 'Horde/Variables.php';
-require_once 'Horde/Autoloader.php';
 Horde_Autoloader::addClassPath(dirname(__FILE__));
-$registry = Registry::singleton();
-$vars = Variables::getDefaultVariables();
+$registry = Horde_Registry::singleton();
+$vars = Horde_Variables::getDefaultVariables();
 
 $vars->set('example_bar', 'text with a beginning and an end');
 $form = new Horde_Form($vars, 'Horde_Form Test');
@@ -71,7 +67,6 @@ $form->add('a_checkboxgroup', 'set', _("Checkbox Group"), '', false, false, arra
 <head>
 <title>Incubator Horde_Form Test</title>
 <link rel="stylesheet" type="text/css" href="themes/form.css" />
-<script type="text/javascript" src="<?=$registry->get('jsuri', 'horde')?>/horde.js"></script>
 <script type="text/javascript" src="<?=$registry->get('jsuri', 'horde')?>/form_helpers.js"></script>
 </head>
 <body>

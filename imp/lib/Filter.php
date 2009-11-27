@@ -27,6 +27,7 @@ class IMP_Filter
      * Runs the filters if they are able to be applied manually.
      *
      * @param string $mbox  The mailbox to apply the filters to.
+     * @throws Horde_Exception
      */
     public function filter($mbox)
     {
@@ -39,7 +40,6 @@ class IMP_Filter
             : array($mbox);
 
         foreach ($mbox_list as $val) {
-            // @todo ingo needs to be rewritten to use non-stream access
             $GLOBALS['registry']->call('mail/applyFilters', array(array('mailbox' => $val)));
         }
     }
@@ -53,11 +53,12 @@ class IMP_Filter
      *                            notification message?
      *
      * @return boolean  True if the messages(s) were deleted.
+     * @throws Horde_Exception
      */
     public function blacklistMessage($indices, $show_link = true)
     {
         if ($this->_processBWlist($indices, _("your blacklist"), 'blacklistFrom', 'showBlacklist', $show_link)) {
-            $imp_message = &IMP_Message::singleton();
+            $imp_message = IMP_Message::singleton();
 
             if (($msg_count = $imp_message->delete($indices))) {
                 if ($msg_count == 1) {
@@ -80,6 +81,7 @@ class IMP_Filter
      *                            notification message?
      *
      * @return boolean  True if the messages(s) were whitelisted.
+     * @throws Horde_Exception
      */
     public function whitelistMessage($indices, $show_link = true)
     {
@@ -99,6 +101,7 @@ class IMP_Filter
      *                         notification message?
      *
      * @return boolean  True on success.
+     * @throws Horde_Exception
      */
     protected function _processBWlist($indices, $descrip, $reg1, $reg2, $link)
     {
@@ -109,8 +112,10 @@ class IMP_Filter
         /* Get the list of from addresses. */
         $addr = array();
         foreach ($msgList as $mbox => $msgIndices) {
+            $GLOBALS['imp_imap']->checkUidvalidity($mbox);
+
             foreach ($msgIndices as $idx) {
-                $contents = &IMP_Contents::singleton($idx . IMP::IDX_SEP . $mbox);
+                $contents = IMP_Contents::singleton($idx . IMP::IDX_SEP . $mbox);
                 $hdr = $contents->getHeaderOb();
                 $addr[] = Horde_Mime_Address::bareAddress($hdr->getValue('from'));
             }

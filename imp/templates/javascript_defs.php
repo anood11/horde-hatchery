@@ -10,17 +10,15 @@
 
 $code = array(
 /* Variables used in core javascript files. */
-    'conf' =>  array(
-        'IMP_ALL' => IMP::FLAG_ALL,
-        'isIE' => $GLOBALS['browser']->isBrowser('msie'),
-        'pop3' => (isset($_SESSION['imp']) && ($_SESSION['imp']['protocol'] == 'pop')),
+    'conf' => array(
+        'pop3' => intval((isset($_SESSION['imp']) && ($_SESSION['imp']['protocol'] == 'pop'))),
         'fixed_folders' => empty($GLOBALS['conf']['server']['fixed_folders'])
             ? array()
             : $GLOBALS['conf']['server']['fixed_folders'],
     ),
 
     /* Gettext strings used in core javascript files. */
-    'text' => array_map('addslashes', array(
+    'text' => array(
         /* Strings used in compose.js */
         'compose_cancel' => _("Cancelling this message will permanently discard its contents.") . "\n" . _("Are you sure you want to do this?"),
         'compose_discard' => _("Doing so will discard this message permanently."),
@@ -41,7 +39,7 @@ $code = array(
 
         /* Strings used in contacts.js */
         'contacts_select' => _("You must select an address first."),
-        'contacts_closed' => _("The message being composed has been closed. Exiting."),
+        'contacts_closed' => _("The message being composed has been closed."),
         'contacts_called' => _("This window must be called from a compose window."),
 
         /* Strings used in folders.js */
@@ -56,9 +54,6 @@ $code = array(
         'folders_rename2' => _("Please enter the new name:"),
         'folders_no_rename' => _("This folder may not be renamed:"),
 
-        /* Strings used in search.js */
-        'search_select' => _("Please select at least one folder to search."),
-
         /* Strings used in imp.js */
         'popup_block' => _("A popup window could not be opened. Perhaps you have set your browser to block popup windows?"),
 
@@ -71,7 +66,9 @@ $code = array(
         'notspam_report' => _("Are you sure you wish to report this message as innocent?"),
         'newfolder' => _("You are copying/moving to a new folder.") . "\n" . _("Please enter a name for the new folder:") . "\n",
         'target_mbox' => _("You must select a target mailbox first."),
-    ))
+    )
 );
 
-echo IMP::wrapInlineScript(array('var IMP = ' . Horde_Serialize::serialize($code, Horde_Serialize::JSON, NLS::getCharset()) . ';'));
+Horde::addInlineScript(array(
+    'var IMP = ' . Horde_Serialize::serialize($code, Horde_Serialize::JSON, Horde_Nls::getCharset())
+), null, true);

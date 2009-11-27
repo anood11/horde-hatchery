@@ -15,7 +15,7 @@ class Horde_Form_Renderer_Xhtml extends Horde_Form_Renderer {
         $open_section = $form->getOpenSection();
 
         /* Add the javascript for the toggling the sections. */
-        Horde::addScriptFile('form_sections.js', 'horde', true);
+        Horde::addScriptFile('form_sections.js', 'horde');
         echo '<script type="text/javascript">' . "\n" .
             sprintf('var sections_%1$s = new Horde_Form_Sections(\'%1$s\', \'%2$s\');',
                     $form->getName(),
@@ -63,7 +63,7 @@ if (document.getElementById(%1$s)){
     {
         // Stripe alternate rows if that option is turned on.
         if ($this->_stripedRows) {
-            Horde::addScriptFile('stripe.js', 'horde', true);
+            Horde::addScriptFile('stripe.js', 'horde');
             $class = 'striped';
         } else {
             $class = '';
@@ -130,9 +130,8 @@ if (document.getElementById(%1$s)){
                 }
             }
         }
-        require_once 'Horde/NLS.php';
         echo '<input type="hidden" name="_formvars" value="'
-            . htmlspecialchars(serialize($vars), ENT_QUOTES, NLS::getCharset())
+            . htmlspecialchars(serialize($vars), ENT_QUOTES, Horde_Nls::getCharset())
             . '" />';
     }
 
@@ -144,7 +143,7 @@ if (document.getElementById(%1$s)){
             . (empty($this->_name) ? '' : ' id="' . $this->_name. '"')
             . (is_null($this->_enctype) ? '' : ' enctype="' . $this->_enctype . '"')
             . ">\n";
-        echo Util::formInput();
+        echo Horde_Util::formInput();
 
         $this->listFormVars($form);
 
@@ -393,7 +392,7 @@ try {
         if ($var->hasHelp()) {
             global $registry;
             if (isset($registry) && is_a($registry, 'Registry')) {
-                $help = Help::link($GLOBALS['registry']->getApp(), $var->getHelp());
+                $help = Horde_Help::link($GLOBALS['registry']->getApp(), $var->getHelp());
             } else {
                 $help = @htmlspecialchars($var->getHelp());
             }

@@ -13,17 +13,16 @@ class Jeta {
     /**
      * Build Jeta's list of menu items.
      */
-    function getMenu($returnType = 'object')
+    function getMenu()
     {
         global $registry, $conf;
 
-        require_once 'Horde/Menu.php';
-        $menu = new Menu();
+        $menu = new Horde_Menu();
 
         /* Jeta Home. */
         $menu->addArray(array('url' => Horde::applicationUrl('main.php'), 'text' => _("_Shell"), 'icon' => 'jeta.png', 'class' => (basename($_SERVER['PHP_SELF']) == 'main.php' || basename($_SERVER['PHP_SELF']) == 'index.php') ? 'current' : ''));
 
-        return ($returnType == 'object') ? $menu : $menu->render();
+        return $menu;
     }
 
 }

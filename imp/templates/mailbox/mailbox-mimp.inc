@@ -6,6 +6,12 @@ if (!empty($msgcount)) {
 if ($pageOb['pagecount'] > 1) {
     $title .= ' - ' . $pageOb['page'] . ' ' . _("of") . ' ' . $pageOb['pagecount'];
 }
+
+if ($readonly) {
+    $title .= ' [' . _("Read-Only") . ']';
+}
+
+$mimp_render = new Horde_Mobile();
 $c = &$mimp_render->add(new Horde_Mobile_card('m', $title));
 $c->softkey('#o', _("Menu"));
 
@@ -13,7 +19,8 @@ $imp_notify->setMobileObject($c);
 $notification->notify(array('listeners' => 'status'));
 
 if (!empty($pageOb['end'])) {
-    $t = &$c->add(new Horde_Mobile_table());
+    $elts = null;
+    $t = &$c->add(new Horde_Mobile_table($elts));
     $t->set('border', 0);
     $t->set('padding', 1);
     $t->set('spacing', 1);

@@ -14,25 +14,24 @@
  */
 
 require_once dirname(__FILE__) . '/lib/base.php';
-require_once 'Horde/Variables.php';
 
-if (!Auth::isAdmin('news:admin')) {
+if (!Horde_Auth::isAdmin('news:admin')) {
     $notification->push(_("Only admin can delete a news."));
     header('Location: ' . Horde::applicationUrl('edit.php'));
     exit;
 }
 
-$vars = Variables::getDefaultVariables();
+$vars = Horde_Variables::getDefaultVariables();
 $form = new Horde_Form($vars, _("Are you sure you want to delete file?"), 'delete');
 $form->setButtons(array(_("Remove"), _("Cancel")));
 
-$news_id = (int)Util::getFormData('news_id');
+$news_id = (int)Horde_Util::getFormData('news_id');
 $form->addHidden('', 'news_id', 'int', true);
 
-$news_lang = Util::getFormData('lang', News::getLang());
+$news_lang = Horde_Util::getFormData('lang', News::getLang());
 $form->addHidden('', 'news_lang', 'text', false);
 
-$file_id = Util::getFormData('file_id');
+$file_id = Horde_Util::getFormData('file_id');
 $form->addHidden('', 'file_id', 'text', true);
 
 $article = $news->get($news_id);
@@ -50,7 +49,7 @@ $form->addVariable($article['content'], 'content', 'description', false);
 
 if ($form->validate()) {
 
-    if (Util::getFormData('submitbutton') == _("Remove")) {
+    if (Horde_Util::getFormData('submitbutton') == _("Remove")) {
         $result = News::deleteFile($file_id);
         if ($result instanceof PEAR_Error) {
 

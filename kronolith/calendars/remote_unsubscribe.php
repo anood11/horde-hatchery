@@ -1,7 +1,5 @@
 <?php
 /**
- * $Horde: kronolith/calendars/remote_unsubscribe.php,v 1.3 2009/01/06 18:01:00 jan Exp $
- *
  * Copyright 2002-2009 The Horde Project (http://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (GPL). If you
@@ -10,18 +8,17 @@
  * @author Chuck Hagenbuch <chuck@horde.org>
  */
 
-@define('KRONOLITH_BASE', dirname(dirname(__FILE__)));
-require_once KRONOLITH_BASE . '/lib/base.php';
+require_once dirname(__FILE__) . '/../lib/base.php';
 require_once KRONOLITH_BASE . '/lib/Forms/UnsubscribeRemoteCalendar.php';
 
 // Exit if this isn't an authenticated user or if the user can't
 // subscribe to remote calendars (remote_cals is locked).
-if (!Auth::getAuth() || $prefs->isLocked('remote_cals')) {
+if (!Horde_Auth::getAuth() || $prefs->isLocked('remote_cals')) {
     header('Location: ' . Horde::applicationUrl($prefs->getValue('defaultview') . '.php', true));
     exit;
 }
 
-$vars = Variables::getDefaultVariables();
+$vars = Horde_Variables::getDefaultVariables();
 $url = $vars->get('url');
 
 $remote_calendar = null;
@@ -41,7 +38,7 @@ if (is_null($remote_calendar)) {
 $form = new Kronolith_UnsubscribeRemoteCalendarForm($vars, $remote_calendar);
 
 // Execute if the form is valid (must pass with POST variables only).
-if ($form->validate(new Variables($_POST))) {
+if ($form->validate(new Horde_Variables($_POST))) {
     $result = $form->execute();
     if (is_a($result, 'PEAR_Error')) {
         $notification->push($result, 'horde.error');

@@ -1,7 +1,5 @@
 <?php
 /**
- * $Horde: framework/Rdo/examples/Horde/Rdo/User.php,v 1.3 2008/09/02 17:24:59 chuck Exp $
- *
  * @package Horde_Rdo
  */
 
@@ -9,7 +7,7 @@ require_once 'Horde/Autoloader.php';
 
 @include './conf.php';
 if (empty($conf['sql'])) {
-    die('No sql configuration found.');
+    die("No sql configuration found\n");
 }
 
 /**
@@ -48,7 +46,10 @@ if ($userTwo) {
     echo "Found Alice: id $userTwo->id\n";
 } else {
     echo "No Alice found, creating:\n";
-    $userOne = $um->create(array('name' => 'Alice', 'phone' => '212-555-6565'));
+    // $userOne = $um->create(array('name' => 'Alice', 'phone' => '212-555-6565'));
+    $userOne = new User(array('name' => 'Alice', 'phone' => '212-555-6565'));
+    $userOne->setMapper($um);
+    $userOne->save();
     $userOneId = $userOne->id;
     echo "Created new user with id: $userOneId\n";
 }

@@ -1,5 +1,4 @@
 <?xml version="1.0"?>
-<!-- $Horde: ingo/locale/en_US/help.xml,v 1.16 2007/04/16 17:30:26 jan Exp $ -->
 <help>
   <entry id="blacklist">
     <title>Blacklist</title>
@@ -190,6 +189,10 @@
     <heading>Greater than</heading>
     <para>This is a relational test which will compare the value you specify
     and the value in the message header numerically.</para>
+    <heading>Limitation with Sieve filtering</heading>
+    <warn>The Sieve specification doesn't support comparions with negative
+    numbers. If you enter a negative value in one of the relational tests,
+    your rule won't work correctly.</warn>
   </entry>
   <entry id="rule-name">
     <title>Filter Rule: Name</title>

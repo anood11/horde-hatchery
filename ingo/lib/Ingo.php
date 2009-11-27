@@ -22,6 +22,12 @@ class Ingo
      */
     const USER_HEADER = '++USER_HEADER++';
 
+    /* getMenu() cache. */
+    static private $_menuCache = null;
+
+    /* hasSharePermission() cache. */
+    static private $_shareCache = null;
+
     /**
      * Generates a folder widget.
      * If an application is available that provides a folderlist method
@@ -41,10 +47,9 @@ class Ingo
     {
         global $conf, $registry;
 
-        if (!empty($conf['rules']['usefolderapi']) &&
-            $registry->hasMethod('mail/folderlist')) {
-            $mailboxes = $registry->call('mail/folderlist');
-            if (!is_a($mailboxes, 'PEAR_Error')) {
+        if (!empty($conf['rules']['usefolderapi'])) {
+            try {
+                $mailboxes = $registry->call('mail/folderlist');
                 $createfolder = $registry->hasMethod('mail/createFolder');
 
                 $text = '<select id="' . $tagname . '" name="' . $tagname . '"';
@@ -54,7 +59,7 @@ class Ingo
                         $text .= $onchange . ';';
                     }
                     if ($createfolder) {
-                        $text .= 'newFolderName(\'' . $form . '\', \'' .
+                        $text .= 'IngoNewFolder.newFolderName(\'' . $form . '\', \'' .
                             $tagname . '\');';
                     }
                     $text .= '"';
@@ -66,8 +71,6 @@ class Ingo
                     $text .= '<option value="">' . _("Create new folder") . "</option>\n";
                 }
 
-                require_once 'Horde/Text.php';
-
                 foreach ($mailboxes as $mbox) {
                     $sel = ($mbox['val'] && ($mbox['val'] === $value)) ? ' selected="selected"' : '';
                     $disabled = empty($mbox['val']) ? ' disabled="disabled"' : '';
@@ -75,12 +78,12 @@ class Ingo
                     $label = $mbox['abbrev'];
                     $text .= sprintf('<option%s value="%s"%s>%s</option>%s',
                                      $disabled, $val, $sel,
-                                     Text::htmlSpaces($label), "\n");
+                                     Horde_Text_Filter::filter($label, 'space2html', array('charset' => Horde_Nls::getCharset(), 'encode' => true)), "\n");
                 }
 
                 $text .= '</select>';
                 return $text;
-            }
+            } catch (Horde_Exception $e) {}
         }
 
         return '<input id="' . $tagname . '" name="' . $tagname . '" size="40" value="' . $value . '" />';
@@ -91,13 +94,13 @@ class Ingo
      *
      * @param string $folder  The name of the folder to create.
      *
-     * @return boolean  True on success, false if not created, PEAR_Error on
-     *                  failure.
+     * @return boolean  True on success, false if not created. PEAR_Error on
+     * @throws Horde_Exception
      */
     static public function createFolder($folder)
     {
         return $GLOBALS['registry']->hasMethod('mail/createFolder')
-            ? $GLOBALS['registry']->call('mail/createFolder', array('folder' => String::convertCharset($folder, NLS::getCharset(), 'UTF7-IMAP')))
+            ? $GLOBALS['registry']->call('mail/createFolder', array('folder' => Horde_String::convertCharset($folder, Horde_Nls::getCharset(), 'UTF7-IMAP')))
             : false;
     }
 
@@ -114,8 +117,8 @@ class Ingo
             $user = ($full ||
                      (isset($_SESSION['ingo']['backend']['hordeauth']) &&
                       $_SESSION['ingo']['backend']['hordeauth'] === 'full')) ?
-                Auth::getAuth() :
-                Auth::getBareAuth();
+                Horde_Auth::getAuth() :
+                Horde_Auth::getBareAuth();
         } else {
             list(, $user) = explode(':', $_SESSION['ingo']['current_share'], 2);
         }
@@ -210,13 +213,13 @@ class Ingo
      * single value or an array of multiple values.
      *
      * @return array  The backend entry.
-     *                Calls Horde::fatal() on error.
+     * @throws Horde_Exception
      */
     static public function getBackend()
     {
         include INGO_BASE . '/config/backends.php';
         if (!isset($backends) || !is_array($backends)) {
-            Horde::fatal(PEAR::raiseError(_("No backends configured in backends.php")), __FILE__, __LINE__);
+            throw new Horde_Exception(_("No backends configured in backends.php"));
         }
 
         $backend = null;
@@ -240,16 +243,16 @@ class Ingo
 
         /* Check for valid backend configuration. */
         if (!isset($backend)) {
-            Horde::fatal(PEAR::raiseError(_("No backend configured for this host")), __FILE__, __LINE__);
+            throw new Horde_Exception(_("No backend configured for this host"));
         }
 
         $backends[$backend]['id'] = $name;
         $backend = $backends[$backend];
 
         if (empty($backend['script'])) {
-            Horde::fatal(PEAR::raiseError(sprintf(_("No \"%s\" element found in backend configuration."), 'script')), __FILE__, __LINE__);
+            throw new Horde_Exception(sprintf(_("No \"%s\" element found in backend configuration."), 'script'));
         } elseif (empty($backend['driver'])) {
-            Horde::fatal(PEAR::raiseError(sprintf(_("No \"%s\" element found in backend configuration."), 'driver')), __FILE__, __LINE__);
+            throw new Horde_Exception(sprintf(_("No \"%s\" element found in backend configuration."), 'driver'));
         }
 
         /* Make sure the 'params' entry exists. */
@@ -263,14 +266,15 @@ class Ingo
     /**
      * Loads a Ingo_Script:: backend and checks for errors.
      *
-     * @return Ingo_Script  Script object on success, PEAR_Error on failure.
+     * @return Ingo_Script  Script object on success.
+     * @throws Horde_Exception
      */
     static public function loadIngoScript()
     {
         $ingo_script = Ingo_Script::factory($_SESSION['ingo']['backend']['script'],
                                             isset($_SESSION['ingo']['backend']['scriptparams']) ? $_SESSION['ingo']['backend']['scriptparams'] : array());
         if (is_a($ingo_script, 'PEAR_Error')) {
-            Horde::fatal($ingo_script, __FILE__, __LINE__);
+            throw new Horde_Exception($ingo_script);
         }
 
         return $ingo_script;
@@ -288,15 +292,15 @@ class Ingo
         // Set authentication parameters.
         if (!empty($_SESSION['ingo']['backend']['hordeauth'])) {
             $params['username'] = ($_SESSION['ingo']['backend']['hordeauth'] === 'full')
-                        ? Auth::getAuth() : Auth::getBareAuth();
-            $params['password'] = Auth::getCredential('password');
+                        ? Horde_Auth::getAuth() : Horde_Auth::getBareAuth();
+            $params['password'] = Horde_Auth::getCredential('password');
         } elseif (isset($_SESSION['ingo']['backend']['params']['username']) &&
                   isset($_SESSION['ingo']['backend']['params']['password'])) {
             $params['username'] = $_SESSION['ingo']['backend']['params']['username'];
             $params['password'] = $_SESSION['ingo']['backend']['params']['password'];
         } else {
-            $params['username'] = Auth::getBareAuth();
-            $params['password'] = Auth::getCredential('password');
+            $params['username'] = Horde_Auth::getBareAuth();
+            $params['password'] = Horde_Auth::getCredential('password');
         }
 
         return Ingo_Driver::factory($_SESSION['ingo']['backend']['driver'], $params);
@@ -313,9 +317,9 @@ class Ingo
      * @return array  The ruleset list.
      */
     static public function listRulesets($owneronly = false,
-                                        $permission = PERMS_SHOW)
+                                        $permission = Horde_Perms::SHOW)
     {
-        $rulesets = $GLOBALS['ingo_shares']->listShares(Auth::getAuth(), $permission, $owneronly ? Auth::getAuth() : null);
+        $rulesets = $GLOBALS['ingo_shares']->listShares(Horde_Auth::getAuth(), $permission, $owneronly ? Horde_Auth::getAuth() : null);
         if (is_a($rulesets, 'PEAR_Error')) {
             Horde::logMessage($rulesets, __FILE__, __LINE__, PEAR_LOG_ERR);
             return array();
@@ -325,46 +329,19 @@ class Ingo
     }
 
     /**
-     * Returns the specified permission for the current user.
-     *
-     * @param string $permission  A permission, either 'allow_rules' or
-     *                            'max_rules'.
-     *
-     * @return mixed  The value of the specified permission.
+     * TODO
      */
-    static public function hasPermission($permission, $mask = null)
+    static public function hasSharePermission($mask = null)
     {
-        if ($permission == 'shares') {
-            if (!isset($GLOBALS['ingo_shares'])) {
-                return true;
-            }
-            static $all_perms;
-            if (!isset($all_perms)) {
-                $all_perms = $GLOBALS['ingo_shares']->getPermissions($_SESSION['ingo']['current_share'], Auth::getAuth());
-            }
-            return $all_perms & $mask;
-        }
-
-        global $perms;
-
-        if (!$perms->exists('ingo:' . $permission)) {
+        if (!isset($GLOBALS['ingo_shares'])) {
             return true;
         }
 
-        $allowed = $perms->getPermissions('ingo:' . $permission);
-        if (is_array($allowed)) {
-            switch ($permission) {
-            case 'allow_rules':
-                $allowed = (bool)count(array_filter($allowed));
-                break;
-
-            case 'max_rules':
-                $allowed = max($allowed);
-                break;
-            }
+        if (is_null(self::$_shareCache)) {
+            self::$_shareCache = $GLOBALS['ingo_shares']->getPermissions($_SESSION['ingo']['current_share'], Horde_Auth::getAuth());
         }
 
-        return $allowed;
+        return self::$_shareCache & $mask;
     }
 
     /**
@@ -375,20 +352,18 @@ class Ingo
      *
      * @return boolean  True if the address is not empty.
      */
-    static protected function _filterEmptyAddress($address)
+    static public function filterEmptyAddress($address)
     {
         $address = trim($address);
-        return !empty($address) && $address != '@';
+        return !empty($address) && ($address != '@');
     }
 
     /**
      * Build Ingo's list of menu items.
      */
-    static public function getMenu($returnType = 'object')
+    static public function getMenu()
     {
-        require_once 'Horde/Menu.php';
-
-        $menu = new Menu();
+        $menu = new Horde_Menu();
         $menu->add(Horde::applicationUrl('filters.php'), _("Filter _Rules"), 'ingo.png', null, null, null, basename($_SERVER['PHP_SELF']) == 'index.php' ? 'current' : null);
         if (!is_a($whitelist_url = $GLOBALS['registry']->link('mail/showWhitelist'), 'PEAR_Error')) {
             $menu->add(Horde::url($whitelist_url), _("_Whitelist"), 'whitelist.png');
@@ -396,13 +371,13 @@ class Ingo
         if (!is_a($blacklist_url = $GLOBALS['registry']->link('mail/showBlacklist'), 'PEAR_Error')) {
             $menu->add(Horde::url($blacklist_url), _("_Blacklist"), 'blacklist.png');
         }
-        if (in_array(INGO_STORAGE_ACTION_VACATION, $_SESSION['ingo']['script_categories'])) {
+        if (in_array(Ingo_Storage::ACTION_VACATION, $_SESSION['ingo']['script_categories'])) {
             $menu->add(Horde::applicationUrl('vacation.php'), _("_Vacation"), 'vacation.png');
         }
-        if (in_array(INGO_STORAGE_ACTION_FORWARD, $_SESSION['ingo']['script_categories'])) {
+        if (in_array(Ingo_Storage::ACTION_FORWARD, $_SESSION['ingo']['script_categories'])) {
             $menu->add(Horde::applicationUrl('forward.php'), _("_Forward"), 'forward.png');
         }
-        if (in_array(INGO_STORAGE_ACTION_SPAM, $_SESSION['ingo']['script_categories'])) {
+        if (in_array(Ingo_Storage::ACTION_SPAM, $_SESSION['ingo']['script_categories'])) {
             $menu->add(Horde::applicationUrl('spam.php'), _("S_pam"), 'spam.png');
         }
         if ($_SESSION['ingo']['script_generate'] &&
@@ -411,13 +386,36 @@ class Ingo
             $menu->add(Horde::applicationUrl('script.php'), _("_Script"), 'script.png');
         }
         if (!empty($GLOBALS['ingo_shares']) && empty($GLOBALS['conf']['share']['no_sharing'])) {
-            $menu->add('#', _("_Permissions"), 'perms.png', $GLOBALS['registry']->getImageDir('horde'), '', 'popup(\'' . Util::addParameter(Horde::url($GLOBALS['registry']->get('webroot', 'horde') . '/services/shares/edit.php', true), array('app' => 'ingo', 'share' => htmlspecialchars($_SESSION['ingo']['backend']['id'] . ':' . Auth::getAuth())), null, false) . '\');return false;');
+            $menu->add('#', _("_Permissions"), 'perms.png', $GLOBALS['registry']->getImageDir('horde'), '', Horde::popupJs(Horde::url($GLOBALS['registry']->get('webroot', 'horde') . '/services/shares/edit.php', true), array('params' => array('app' => 'ingo', 'share' => $_SESSION['ingo']['backend']['id'] . ':' . Horde_Auth::getAuth()), 'urlencode' => true)) . 'return false;');
         }
 
-        if ($returnType == 'object') {
-            return $menu;
-        } else {
-            return $menu->render();
+        return $menu;
+    }
+
+    /**
+     * Prepares and caches Ingo's list of menu items.
+     *
+     * @return string  The menu text.
+     */
+    static public function prepareMenu()
+    {
+        if (!self::$_menuCache) {
+            self::$_menuCache = self::getMenu()->render();
+        }
+
+        return self::$_menuCache;
+    }
+
+    /**
+     * Add new_folder.js to the list of output javascript files.
+     */
+    static public function addNewFolderJs()
+    {
+        if ($GLOBALS['registry']->hasMethod('mail/createFolder')) {
+            Horde::addScriptFile('new_folder.js', 'ingo');
+            Horde::addInlineScript(array(
+                'IngoNewFolder.folderprompt = ' . Horde_Serialize::serialize(_("Please enter the name of the new folder:"), Horde_Serialize::JSON, Horde_Nls::getCharset())
+            ));
         }
     }
 

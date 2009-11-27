@@ -49,18 +49,42 @@ class Horde_Service_Facebook_Auth
 
     /** EXTEND_PERMS constants **/
     const EXTEND_PERMS_OFFLINE = 'offline_access';
+
+    // These perms are now wrapped up in the publish_stream permission, but are
+    // left here for BC and to allow atomic setting of the perms if desired.
     const EXTEND_PERMS_STATUSUPDATE = 'status_update';
     const EXTEND_PERMS_SHAREITEM = 'share_item';
     const EXTEND_PERMS_UPLOADPHOTO = 'photo_upload';
 
+    const EXTEND_PERMS_PUBLISHSTREAM = 'publish_stream';
+    const EXTEND_PERMS_READSTREAM = 'read_stream';
+
+
+
     /**
-     * TODO: Probably abstract out a Base class for these?
-     * @return unknown_type
+     * Const'r
+     *
+     * @param Horde_Service_Facebook         $facebook
+     * @param Horde_Service_Facebook_Request $request
+     * @param array $params
      */
     public function __construct($facebook, $request, $params = array())
     {
         $this->_facebook = $facebook;
         $this->_request = $request;
+    }
+
+    /**
+     *  Return a valid FB login URL with necessary GET parameters appended.
+     *
+     * @param string $next  URL to return to
+     *
+     * @return string  The Facebook Login Url
+     */
+    public function getLoginUrl($next)
+    {
+        return Horde_Service_Facebook::getFacebookUrl() . '/login.php?v=1.0&api_key='
+            . $this->_facebook->apiKey . ($next ? '&next=' . urlencode($next)  : '');
     }
 
     /**
@@ -77,8 +101,8 @@ class Horde_Service_Facebook_Auth
      */
     public function getAuthTokenUrl()
     {
-        return $this->_facebook->get_facebook_url() . '/code_gen.php?v=1.0&api_key='
-            . $this->_facebook->api_key;
+        return $this->_facebook->getFacebookUrl() . '/code_gen.php?v=1.0&api_key='
+            . $this->_facebook->apiKey;
     }
 
 
@@ -87,14 +111,14 @@ class Horde_Service_Facebook_Auth
      *
      * @param string $perm         An EXTEND_PERMS_* constant
      * @param string $success_url  URL to redirect to on success
-     * @param strint $cancel_url   URL to redirect to on cancel
+     * @param string $cancel_url   URL to redirect to on cancel
      *
      * @return string
      */
     public function getExtendedPermUrl($perm, $success_url = '', $cancel_url = '')
     {
-        return $this->_facebook->get_facebook_url() . '/authorize.php?v=1'
-            . '&ext_perm=' . $perm . '&api_key=' . $this->_facebook->api_key
+        return $this->_facebook->getFacebookUrl() . '/authorize.php?v=1'
+            . '&ext_perm=' . $perm . '&api_key=' . $this->_facebook->apiKey
             . (!empty($success_url) ? '&next=' . urlencode($success_url) : '')
             . (!empty($cancel_url) ? '&cancel=' . urlencode($cancel_url) : '');
     }
@@ -128,19 +152,16 @@ class Horde_Service_Facebook_Auth
      */
     public function getSession($auth_token)
     {
-        //Check if we are in batch mode
-        if ($this->_facebook->batchRequest === null) {
-            try {
-                $results = $this->_facebook->call_method(
-                    'facebook.auth.getSession',
-                    array('auth_token' => $auth_token));
-                return $results;
-            } catch (Horde_Service_Facebook_Exception $e) {
-                if ($e->getCode() != Horde_Service_Facebook_ErrorCodes::API_EC_PARAM) {
-                    // API_EC_PARAM means we don't have a logged in user, otherwise who
-                    // knows what it means, so just throw it.
-                    throw $e;
-                }
+        try {
+            $results = $this->_facebook->callMethod(
+                'facebook.auth.getSession',
+                array('auth_token' => $auth_token));
+            return $results;
+        } catch (Horde_Service_Facebook_Exception $e) {
+            if ($e->getCode() != Horde_Service_Facebook_ErrorCodes::API_EC_PARAM) {
+                // API_EC_PARAM means we don't have a logged in user, otherwise who
+                // knows what it means, so just throw it.
+                throw $e;
             }
         }
     }
@@ -154,7 +175,7 @@ class Horde_Service_Facebook_Auth
      */
     public function createToken()
     {
-        return $this->_facebook->call_method('facebook.auth.createToken');
+        return $this->_facebook->callMethod('facebook.auth.createToken');
     }
 
     /**
@@ -172,7 +193,7 @@ class Horde_Service_Facebook_Auth
             'No Session', Horde_Service_Facebook_ErrorCodes::API_EC_SESSION_REQUIRED);
         }
 
-        return $this->_facebook->call_method('facebook.auth.expireSession', array('session_key' => $this->_sessionKey));
+        return $this->_facebook->callMethod('facebook.auth.expireSession', array('session_key' => $this->_sessionKey));
     }
 
     /**
@@ -182,12 +203,12 @@ class Horde_Service_Facebook_Auth
     public function expireSession()
     {
         if ($this->_expireSession()) {
-            if ($this->_request->getCookie($this->_facebook->api_key . '_user')) {
+            if ($this->_request->getCookie($this->_facebook->apiKey . '_user')) {
                 $cookies = array('user', 'session_key', 'expires', 'ss');
                 foreach ($cookies as $name) {
-                    setcookie($this->_facebook->api_key . '_' . $name, false, time() - 3600);
+                    setcookie($this->_facebook->apiKey . '_' . $name, false, time() - 3600);
                 }
-                setcookie($this->_facebook->api_key, false, time() - 3600);
+                setcookie($this->_facebook->apiKey, false, time() - 3600);
             }
 
             // now, clear the rest of the stored state
@@ -248,12 +269,12 @@ class Horde_Service_Facebook_Auth
             $this->setUser($user, $sessionKey, $expires);
 
         } elseif (!$ignore_cookies &&
-                  $fb_params = $this->_getParams($this->_request->getCookie(), null, $this->_facebook->api_key)) {
+                  $fb_params = $this->_getParams($this->_request->getCookie(), null, $this->_facebook->apiKey)) {
 
             // Nothing yet, try cookies...this is where we will get our values
             // for an extenral web app accessing FB's API - assuming the session
             // has already been retrieved previously.
-            $base_domain_cookie = 'base_domain_' . $this->_facebook->api_key;
+            $base_domain_cookie = 'base_domain_' . $this->_facebook->apiKey;
             if ($this->_request->getCookie($base_domain_cookie)) {
                 $this->_base_domain = $this->_request->getCookie($base_domain_cookie);
             }
@@ -338,9 +359,9 @@ class Horde_Service_Facebook_Auth
      * Validates that a given set of parameters match their signature.
      * Parameters all match a given input prefix, such as "fb_sig".
      *
-     * @param array $fb_params  An array of all Facebook-sent parameters, not
-     *                          including the signature itself.
-     * @param $expected_sig     The expected result to check against.
+     * @param array  $fb_params     An array of all Facebook-sent parameters, not
+     *                              including the signature itself.
+     * @param string $expected_sig  The expected result to check against.
      *
      * @return boolean
      */
@@ -363,11 +384,11 @@ class Horde_Service_Facebook_Auth
      *
      * @return string  Hash to be checked against the FB provided signature.
      */
-    public static function generateSignature($params_array, $secret)
+    public static function generateSignature($params, $secret)
     {
         $str = '';
-        ksort($params_array);
-        foreach ($params_array as $k => $v) {
+        ksort($params);
+        foreach ($params as $k => $v) {
             $str .= "$k=$v";
         }
         $str .= $secret;
@@ -377,8 +398,8 @@ class Horde_Service_Facebook_Auth
     /**
      * Set session cookies.
      *
-     * @param string $user  FB userid
-     * @param string $session_key  The current session key
+     * @param string $user        FB userid
+     * @param string $sessionKey  The current session key
      * @param timestamp $expires
      *
      * @return void
@@ -392,12 +413,12 @@ class Horde_Service_Facebook_Auth
             $cookies['expires'] = $expires;
         }
         foreach ($cookies as $name => $val) {
-            setcookie($this->_facebook->api_key . '_' . $name, $val, (int)$expires, '', $this->_base_domain);
+            setcookie($this->_facebook->apiKey . '_' . $name, $val, (int)$expires, '', $this->_base_domain);
         }
         $sig = self::generateSignature($cookies, $this->_facebook->secret);
-        setcookie($this->_facebook->api_key, $sig, (int)$expires, '', $this->_base_domain);
+        setcookie($this->_facebook->apiKey, $sig, (int)$expires, '', $this->_base_domain);
         if ($this->_base_domain != null) {
-            $base_domain_cookie = 'base_domain_' . $this->_facebook->api_key;
+            $base_domain_cookie = 'base_domain_' . $this->_facebook->apiKey;
             setcookie($base_domain_cookie, $this->_base_domain, (int)$expires, '', $this->_base_domain);
         }
     }
@@ -405,16 +426,17 @@ class Horde_Service_Facebook_Auth
     /**
      * Set the current session user in the object and in a cookie.
      *
-     * @param string $user  The FB userid
-     * @param string $sessionKey
-     * @param timestamp $expires
+     * @param string $user        The FB userid
+     * @param string $sessionKey  The current sessionkey
+     * @param timestamp $expires  Expire time
+     * @param boolean $noCookie   If true, do not set a user cookie.
      *
      * @return void
      */
-    public function setUser($user, $sessionKey, $expires = null, $no_cookie = false)
+    public function setUser($user, $sessionKey, $expires = null, $noCookie = false)
     {
-        if ($no_cookie || !$this->_request->getCookie($this->_facebook->api_key . '_user') ||
-            $this->_request->getCookie($this->_facebook->api_key . '_user') != $user) {
+        if (!$noCookie && (!$this->_request->getCookie($this->_facebook->apiKey . '_user') ||
+            $this->_request->getCookie($this->_facebook->apiKey . '_user') != $user)) {
 
             $this->setCookies($user, $sessionKey, $expires);
         }
@@ -422,4 +444,63 @@ class Horde_Service_Facebook_Auth
         $this->_sessionKey = $sessionKey;
         $this->_session_expires = $expires;
     }
+
+    /**
+     * Revoke a previously authorizied extended permission
+     *
+     * @param string $perm  The extended permission to remove.
+     * @param string $uid   The FB userid to remove permission from
+     *
+     * @return unknown_type
+     */
+    public function revokeExtendedPermission($perm, $uid)
+    {
+        // Session key is *required*
+        if (!$skey = $this->getSessionKey()) {
+            throw new Horde_Service_Facebook_Exception('session_key is required',
+                                               Horde_Service_Facebook_ErrorCodes::API_EC_SESSION_REQUIRED);
+        }
+
+        return $this->_facebook->callMethod('Auth.revokeExtendedPermission',
+                                            array('session_key' => $skey,
+                                                  'perm' => $perm,
+                                                  'user' => $uid));
+
+    }
+
+    /**
+     * Revoke all application permissions for the current session user.
+     *
+     */
+    function revokeAuthorization()
+    {
+        // Session key is *required*
+        if (!$skey = $this->getSessionKey()) {
+            throw new Horde_Service_Facebook_Exception('session_key is required',
+                                               Horde_Service_Facebook_ErrorCodes::API_EC_SESSION_REQUIRED);
+        }
+
+        $this->_facebook->callMethod('Auth.revokeAuthorization',
+                                            array('session_key' => $skey));
+        $this->expireSession();
+
+    }
+
+    /**
+     * Returns the user corresponding to the current session object.
+     *
+     * @throws Horde_Service_Facebook_Exception
+     * @return integer  User id
+     */
+    public function &getLoggedInUser()
+    {
+        if (!$this->getSessionKey()) {
+            throw new Horde_Service_Facebook_Exception('users.getLoggedInUser requires a session_key',
+                Horde_Service_Facebook_ErrorCodes::API_EC_PARAM_SESSION_KEY);
+        }
+
+        return $this->_facebook->callMethod('facebook.users.getLoggedInUser',
+            array('session_key' => $this->getSessionKey()));
+    }
+
 }

@@ -12,15 +12,9 @@ $prefGroups['view'] = array(
     'members' => array('dynamic_view', 'confirm_delete', 'defaultview',
                        'time_between_days', 'week_start_monday',
                        'day_hour_start', 'day_hour_end', 'day_hour_force',
-                       'slots_per_hour', 'show_icons', 'show_time', 'show_location',
-                       'show_panel', 'show_fb_legend', 'show_shared_side_by_side'),
-);
-
-$prefGroups['summary'] = array(
-    'column' => _("Display Options"),
-    'label' => _("Portal Options"),
-    'desc' => _("Select which events to show in the portal."),
-    'members' => array('summary_days', 'summary_alarms'),
+                       'slots_per_hour', 'show_icons', 'show_time',
+                       'show_location', 'show_fb_legend',
+                       'show_shared_side_by_side'),
 );
 
 $prefGroups['share'] = array(
@@ -30,25 +24,17 @@ $prefGroups['share'] = array(
     'members' => array('shareselect'),
 );
 
-if (!empty($GLOBALS['conf']['holidays']['enable'])) {
-    $prefGroups['holidays'] = array(
-        'column' => _("Calendars"),
-        'label' => _("Holidays"),
-        'desc' => _("Choose which holidays to display"),
-        'members' => array('holiday_drivers'),
-    );
-}
-
 $prefGroups['event_options'] = array(
     'column' => _("Events"),
     'label' => _("Event Defaults"),
     'desc' => _("Set default values for new events."),
     'members' => array('default_alarm_management'),
 );
-$prefGroups['maintenance'] = array(
+
+$prefGroups['logintasks'] = array(
     'column' => _("Events"),
-    'label' => _("Maintenance"),
-    'desc' => _("Set options for deleting old events."),
+    'label' => _("Login Tasks"),
+    'desc' => sprintf(_("Customize tasks to run upon logon to %s."), $GLOBALS['registry']->get('name')),
     'members' => array('purge_events', 'purge_events_interval', 'purge_events_keep')
 );
 
@@ -80,7 +66,7 @@ if ($GLOBALS['registry']->hasMethod('contacts/sources')) {
 
 // show dynamic view?
 $_prefs['dynamic_view'] = array(
-    'value' => 0,
+    'value' => 1,
     'locked' => false,
     'shared' => false,
     'type' => 'checkbox',
@@ -209,8 +195,7 @@ $_prefs['show_panel'] = array(
     'value' => 1,
     'locked' => false,
     'shared' => false,
-    'type' => 'checkbox',
-    'desc' => _("Show calendar options panel?"),
+    'type' => 'implicit',
 );
 
 // show Free/Busy legend?
@@ -232,42 +217,13 @@ $_prefs['show_shared_side_by_side'] = array(
     'desc' => _("Show shared calendars side-by-side?"),
 );
 
-// days to show in summary
-$_prefs['summary_days'] = array(
-    'value' => 7,
-    'locked' => false,
-    'shared' => false,
-    'type' => 'enum',
-    'desc' => _("Select the time span to show:"),
-    'enum' => array(1 => '1 ' . _("day"),
-                    2 => '2 ' . _("days"),
-                    3 => '3 ' . _("days"),
-                    4 => '4 ' . _("days"),
-                    5 => '5 ' . _("days"),
-                    6 => '6 ' . _("days"),
-                    7 => '1 ' . _("week"),
-                    14 => '2 ' . _("weeks"),
-                    21 => '3 ' . _("weeks"),
-                    28 => '4 ' . _("weeks"),
-    ),
-);
-
-// show alarms in summary?
-$_prefs['summary_alarms'] = array(
-    'value' => 0,
-    'locked' => false,
-    'shared' => false,
-    'type' => 'checkbox',
-    'desc' => _("Show only events that have an alarm set?"),
-);
-
 // default calendar selection widget
 $_prefs['shareselect'] = array('type' => 'special');
 
 // default calendar
 // Set locked to true if you don't want users to have multiple calendars.
 $_prefs['default_share'] = array(
-    'value' => Auth::getAuth() ? Auth::getAuth() : 0,
+    'value' => Horde_Auth::getAuth() ? Horde_Auth::getAuth() : 0,
     'locked' => false,
     'shared' => false,
     'type' => 'implicit',
@@ -278,8 +234,7 @@ $_prefs['holiday_drivers'] = array(
     'value' => 'a:0:{}',
     'locked' => false,
     'shared' => false,
-    'type' => 'multienum',
-    'desc' => _("Which kind of holidays do you want to get displayed?"),
+    'type' => 'implicit',
 );
 
 // store the calendars to diplay
@@ -439,20 +394,23 @@ $_prefs['fb_cals'] = array(
 // Free/Busy calendars selector.
 $_prefs['fb_cals_select'] = array('type' => 'special');
 
+
+// Login Tasks preferences
+
 $_prefs['purge_events'] = array(
     'value' => 0,
     'locked' => false,
     'shared' => false,
     'type' => 'checkbox',
-    'desc' => _("Purge old events from your calender?"),
+    'desc' => _("Purge old events from your calendar?"),
 );
 
-// 'value': yearly = 1, monthly = 2, weekly = 3, daily = 4, every login = 5
 $_prefs['purge_events_interval'] = array(
-    'value' => '2',
+    'value' => Horde_LoginTasks::MONTHLY,
     'locked' => false,
     'shared' => false,
-    'type' => 'select',
+    'type' => 'enum',
+    'enum' => Horde_LoginTasks::getLabels(),
     'desc' => _("Purge old events how often:"),
 );
 
@@ -464,11 +422,4 @@ $_prefs['purge_events_keep'] = array(
     'desc' => _("Purge old events older than this amount of days."),
 );
 
-// last time maintenance was run.
-// value is a UNIX timestamp of the last time maintenance ran for the user.
-$_prefs['last_kronolith_maintenance'] = array(
-    'value' => 0,
-    'locked' => false,
-    'shared' => false,
-    'type' => 'implicit'
-);
+// End Login Tasks preferences

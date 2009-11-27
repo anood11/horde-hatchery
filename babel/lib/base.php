@@ -23,24 +23,20 @@ if (!defined('BABEL_BASE')) {
 require_once HORDE_BASE . '/lib/core.php';
 
 /* Notification system. */
-$notification = &Notification::singleton();
+$notification = Horde_Notification::singleton();
 $notification->attach('status');
 
 /* Registry. */
-$registry = &Registry::singleton();
+$registry = Horde_Registry::singleton();
 
-if (is_a(($pushed = $registry->pushApp('babel', !defined('AUTH_HANDLER'))), 'PEAR_Error')) {
-    if ($pushed->getCode() == 'permission_denied') {
-        Horde::authenticationFailureRedirect(); 
-    }
-    Horde::fatal($pushed, __FILE__, __LINE__, false);
+try {
+    $registry->pushApp('babel', array('logintasks' => true));
+} catch (Horde_Exception $e) {
+    Horde_Auth::authenticateFailure('babel', $e);
 }
 
 $conf = &$GLOBALS['conf'];
 @define('BABEL_TEMPLATES', $registry->get('templates'));
-
-/* Horde base libraries */
-require_once 'Horde/Secret.php';
 
 /* Babel base library */
 require_once BABEL_BASE . '/lib/Babel.php';
@@ -48,44 +44,32 @@ require_once BABEL_BASE . '/lib/Translate.php';
 require_once BABEL_BASE . '/lib/Translate_Help.php';
 require_once BABEL_BASE . '/lib/Display.php';
 
-/* Help */
-require_once 'Horde/Help.php';
-
-/* Menu */
-require_once 'Horde/Menu.php';
-
 /* Gettext (PO) */
 require_once BABEL_BASE . '/lib/Gettext/PO.php';
 
 /* Form and Variables */
 require_once 'Horde/Form.php';
-require_once 'Horde/Variables.php';
 require_once 'Horde/Form/Renderer.php';
 require_once 'Horde/Form/Action.php';
 
-/* Tabs and Pager UI */
-require_once 'Horde/UI/Tabs.php';
-require_once 'Horde/UI/Pager.php';
-
 /* Templates */
-require_once 'Horde/Template.php';
-$template = &new Horde_Template();
+$template = new Horde_Template();
 
 /* Module selection */
-$app = Util::getFormData('module');
-  
+$app = Horde_Util::getFormData('module');
+
 /* Language selection */
-if (($lang = Util::getFormData('display_language')) !== null) {
+if (($lang = Horde_Util::getFormData('display_language')) !== null) {
     $_SESSION['babel']['language'] = $lang;
 } elseif (isset($_SESSION['babel']['language'])) {
     $lang = $_SESSION['babel']['language'];
 } else {
-    
-    $tests =  $nls['languages'];
-    
+
+    $tests =  Horde_Nls::$config['languages'];
+
     // Unset English
     unset($tests['en_US']);
-    
+
     foreach($tests as $dir => $desc) {
 	if (!Babel::hasPermission("language:$dir")) {
 	    continue;
@@ -96,10 +80,10 @@ if (($lang = Util::getFormData('display_language')) !== null) {
     }
     $_SESSION['babel']['language'] = $lang;
 }
-						  
+
 /* Set up the template fields. */
-$template->set('menu', Babel::getMenu('string'));
-$template->set('notify', Util::bufferOutput(array($notification, 'notify'), array('listeners' => 'status')));
+$template->set('menu', Babel::getMenu()->render());
+$template->set('notify', Horde_Util::bufferOutput(array($notification, 'notify'), array('listeners' => 'status')));
 $template->set('lang', Babel::displayLanguage());
 $fmenu = Babel::LanguageSelection();
 
@@ -110,11 +94,11 @@ if ($app) {
 $template->set('fmenu', $fmenu);
 
 if ($lang && !Babel::hasPermission("language:$lang")) {
-    Horde::fatal(sprintf(_("Access forbidden to '%s'."), $lang), __FILE__, __LINE__, true);
+    throw new Horde_Exception(sprintf(_("Access forbidden to '%s'."), $lang));
 }
 
 if ($app && !Babel::hasPermission("module:$app")) {
-    Horde::fatal(sprintf(_("Access forbidden to '%s'."), $app), __FILE__, __LINE__, true);
+    throw new Horde_Exception(sprintf(_("Access forbidden to '%s'."), $app));
 }
 
 /* Custom sort function */

@@ -34,7 +34,7 @@ class IMP_Quota
      * It will only create a new instance if no instance with the same
      * parameters currently exists.
      *
-     * This method must be invoked as: $var = &IMP_Quota::singleton()
+     * This method must be invoked as: $var = IMP_Quota::singleton()
      *
      * @param string $driver  The type of concrete subclass to return.
      * @param array $params   A hash containing any additional configuration
@@ -46,13 +46,13 @@ class IMP_Quota
     static public function singleton($driver, $params = array())
     {
         ksort($params);
-        $signature = md5(serialize(array($driver, $params)));
+        $sig = hash('md5', serialize(array($driver, $params)));
 
-        if (!isset(self::$_instances[$signature])) {
-            self::$_instances[$signature] = IMP_Quota::getInstance($driver, $params);
+        if (!isset(self::$_instances[$sig])) {
+            self::$_instances[$sig] = self::factory($driver, $params);
         }
 
-        return self::$_instances[$signature];
+        return self::$_instances[$sig];
     }
 
     /**
@@ -65,10 +65,10 @@ class IMP_Quota
      * @return IMP_Quota  The concrete instance.
      * @throws Horde_Exception
      */
-    static public function getInstance($driver, $params = array())
+    static public function factory($driver, $params = array())
     {
         $driver = basename($driver);
-        $class = 'IMP_Quota_' . $driver;
+        $class = 'IMP_Quota_' . ucfirst($driver);
 
         if (class_exists($class)) {
             return new $class($params);
@@ -89,7 +89,7 @@ class IMP_Quota
         /* If 'password' exists in params, it has been encrypted in the
          * session so we need to decrypt. */
         if (isset($this->_params['password'])) {
-            $this->_params['password'] = Horde_Secret::read(IMP::getAuthKey(), $this->_params['password']);
+            $this->_params['password'] = Horde_Secret::read(Horde_Secret::getKey('imp'), $this->_params['password']);
         }
     }
 
@@ -126,7 +126,7 @@ class IMP_Quota
             'nolimit_short' => isset($this->_params['format']['nolimit_short'])
                 ? $this->_params['format']['nolimit_short']
                 : _("%.0f %s")
-       );
+        );
     }
 
     /**
@@ -156,4 +156,5 @@ class IMP_Quota
 
         return array($calc, $unit);
     }
+
 }

@@ -13,31 +13,9 @@
  * @package IMP
  */
 
-/**
- * Utility function to return a url for the various images.
- */
-function _image($name, $alt, $type)
-{
-    static $cache = array();
-
-    $val = ($type == 'folder') ? $name['value'] : $name;
-    if (!empty($cache[$type][$val])) {
-        return $cache[$type][$val];
-    }
-
-    if ($type == 'folder') {
-        $cache[$type][$val] = Horde::img($name['icon'], $name['alt'], null, $name['icondir']);
-    } else {
-        $cache[$type][$val] = Horde::img('tree/' . $name, $alt, null, $GLOBALS['registry']->getImageDir('horde'));
-    }
-
-    return $cache[$type][$val];
-}
-
-require_once dirname(__FILE__) . '/lib/base.php';
-require_once 'Horde/Help.php';
-Horde::addScriptFile('prototype.js', 'horde', true);
-Horde::addScriptFile('folders.js', 'imp', true);
+require_once dirname(__FILE__) . '/lib/Application.php';
+new IMP_Application(array('init' => true));
+Horde::addScriptFile('folders.js', 'imp');
 
 /* Redirect back to the mailbox if folder use is not allowed. */
 if (!$conf['user']['allow_folders']) {
@@ -50,31 +28,34 @@ if (!$conf['user']['allow_folders']) {
 $subscribe = $prefs->getValue('subscribe');
 $showAll = (!$subscribe || $_SESSION['imp']['showunsub']);
 
+$charset = Horde_Nls::getCharset();
+
 /* Get the base URL for this page. */
 $folders_url = Horde::selfUrl();
 
-/* Initialize the IMP_Folder object. */
-$imp_folder = &IMP_Folder::singleton();
+/* This JS define is required by all folder pages. */
+Horde::addInlineScript(array(
+    'ImpFolders.folders_url = ' . Horde_Serialize::serialize($folders_url, Horde_Serialize::JSON, $charset)
+));
 
-/* Initialize the IMP_IMAP_Tree object. */
-$imaptree = &IMP_IMAP_Tree::singleton();
+/* Initialize the IMP_Folder object. */
+$imp_folder = IMP_Folder::singleton();
+
+/* Initialize the IMP_Imap_Tree object. */
+$imaptree = IMP_Imap_Tree::singleton();
 
 /* $folder_list is already encoded in UTF7-IMAP. */
-$charset = NLS::getCharset();
-$folder_list = Util::getFormData('folder_list', array());
+$folder_list = Horde_Util::getFormData('folder_list', array());
 
 /* Set the URL to refresh the page to in the META tag */
 $refresh_url = Horde::applicationUrl('folders.php', true);
 $refresh_time = $prefs->getValue('refresh_time');
 
-/* Other variables. */
-$open_compose_window = null;
-
 /* Run through the action handlers. */
-$actionID = Util::getFormData('actionID');
+$actionID = Horde_Util::getFormData('actionID');
 if ($actionID) {
     try {
-        IMP::checkRequestToken('imp.folders', Util::getFormData('folders_token'));
+        Horde::checkRequestToken('imp.folders', Horde_Util::getFormData('folders_token'));
     } catch (Horde_Exception $e) {
         $notification->push($e);
         $actionID = null;
@@ -84,7 +65,7 @@ if ($actionID) {
 switch ($actionID) {
 case 'collapse_folder':
 case 'expand_folder':
-    $folder = Util::getFormData('folder');
+    $folder = Horde_Util::getFormData('folder');
     if (!empty($folder)) {
         ($actionID == 'expand_folder') ? $imaptree->expand($folder) : $imaptree->collapse($folder);
     }
@@ -105,7 +86,7 @@ case 'rebuild_tree':
 
 case 'expunge_folder':
     if (!empty($folder_list)) {
-        $imp_message = &IMP_Message::singleton();
+        $imp_message = IMP_Message::singleton();
         $imp_message->expungeMailbox(array_flip($folder_list));
     }
     break;
@@ -117,8 +98,9 @@ case 'delete_folder':
     break;
 
 case 'delete_search_query':
-    $queryid = Util::getFormData('queryid');
+    $queryid = Horde_Util::getFormData('queryid');
     if (!empty($queryid)) {
+        $notification->push(sprintf(_("Deleted Virtual Folder \"%s\"."), $imp_search->getLabel($queryid)), 'horde.success');
         $imp_search->deleteSearchQuery($queryid);
     }
     break;
@@ -128,24 +110,35 @@ case 'download_folder_zip':
     if (!empty($folder_list)) {
         $mbox = $imp_folder->generateMbox($folder_list);
         if ($actionID == 'download_folder') {
-            $browser->downloadHeaders($folder_list[0] . '.mbox', null, false, strlen($mbox));
+            $data = $mbox;
+            fseek($data, 0, SEEK_END);
+            $browser->downloadHeaders($folder_list[0] . '.mbox', null, false, ftell($data));
         } else {
-            $horde_compress = &Horde_Compress::singleton('zip');
-            $mbox = $horde_compress->compress(array(array('data' => $mbox, 'name' => $folder_list[0] . '.mbox')));
-            $browser->downloadHeaders($folder_list[0] . '.zip', 'application/zip', false, strlen($mbox));
+            $horde_compress = Horde_Compress::factory('zip');
+            try {
+                $data = $horde_compress->compress(array(array('data' => $mbox, 'name' => $folder_list[0] . '.mbox')), array('stream' => true));
+                fclose($mbox);
+            } catch (Horde_Exception $e) {
+                fclose($mbox);
+                $notification->push($e, 'horde.error');
+                break;
+            }
+            fseek($data, 0, SEEK_END);
+            $browser->downloadHeaders($folder_list[0] . '.zip', 'application/zip', false, ftell($data));
         }
-        echo $mbox;
+        rewind($data);
+        fpassthru($data);
         exit;
     }
     break;
 
 case 'import_mbox':
-    $import_folder = Util::getFormData('import_folder');
+    $import_folder = Horde_Util::getFormData('import_folder');
     if (!empty($import_folder)) {
         $res = $browser->wasFileUploaded('mbox_upload', _("mailbox file"));
-        if (!is_a($res, 'PEAR_Error')) {
-            $res = $imp_folder->importMbox(String::convertCharset($import_folder, $charset, 'UTF7-IMAP'), $_FILES['mbox_upload']['tmp_name']);
-            $mbox_name = basename(Util::dispelMagicQuotes($_FILES['mbox_upload']['name']));
+        if (!($res instanceof PEAR_Error)) {
+            $res = $imp_folder->importMbox(Horde_String::convertCharset($import_folder, $charset, 'UTF7-IMAP'), $_FILES['mbox_upload']['tmp_name']);
+            $mbox_name = basename(Horde_Util::dispelMagicQuotes($_FILES['mbox_upload']['name']));
             if ($res === false) {
                 $notification->push(sprintf(_("There was an error importing %s."), $mbox_name), 'horde.error');
             } else {
@@ -161,10 +154,10 @@ case 'import_mbox':
     break;
 
 case 'create_folder':
-    $new_mailbox = Util::getFormData('new_mailbox');
+    $new_mailbox = Horde_Util::getFormData('new_mailbox');
     if (!empty($new_mailbox)) {
         try {
-            $new_mailbox = $imaptree->createMailboxName(array_shift($folder_list), String::convertCharset($new_mailbox, $charset, 'UTF7-IMAP'));
+            $new_mailbox = $imaptree->createMailboxName(array_shift($folder_list), Horde_String::convertCharset($new_mailbox, $charset, 'UTF7-IMAP'));
             $imp_folder->create($new_mailbox, $subscribe);
         } catch (Horde_Exception $e) {
             $notification->push($e);
@@ -174,15 +167,27 @@ case 'create_folder':
 
 case 'rename_folder':
     // $old_names already in UTF7-IMAP
-    $old_names = explode("\n", Util::getFormData('old_names'));
-    $new_names = explode("\n", Util::getFormData('new_names'));
+    $old_names = array_map('trim', explode("\n", Horde_Util::getFormData('old_names')));
+    $new_names = array_map('trim', explode("\n", Horde_Util::getFormData('new_names')));
 
     $iMax = count($new_names);
     if (!empty($new_names) &&
         !empty($old_names) &&
         ($iMax == count($old_names))) {
         for ($i = 0; $i < $iMax; ++$i) {
-            $imp_folder->rename(trim($old_names[$i], "\r\n"), String::convertCharset(IMP::appendNamespace(trim($new_names[$i], "\r\n")), $charset, 'UTF7-IMAP'));
+            $old_ns = $imp_imap->getNamespace($old_names[$i]);
+            $new = trim($new_names[$i], $old_ns['delimiter']);
+
+            /* If this is a personal namespace, then anything goes as far as
+             * the input. Just append the personal namespace to it. For
+             * others, add the  */
+            if (($old_ns['type'] == 'personal') ||
+                ($old_ns['name'] &&
+                 (stripos($new_names[$i], $old_ns['name']) !== 0))) {
+                $new = $old_ns['name'] . $new;
+            }
+
+            $imp_folder->rename($old_names[$i], Horde_String::convertCharset($new, $charset, 'UTF7-IMAP'));
         }
     }
     break;
@@ -218,8 +223,7 @@ case 'nopoll_folder':
 
 case 'folders_empty_mailbox':
     if (!empty($folder_list)) {
-        include_once IMP_BASE . '/lib/Message.php';
-        $imp_message = &IMP_Message::singleton();
+        $imp_message = IMP_Message::singleton();
         $imp_message->emptyMailbox($folder_list);
     }
     break;
@@ -227,14 +231,9 @@ case 'folders_empty_mailbox':
 case 'mark_folder_seen':
 case 'mark_folder_unseen':
     if (!empty($folder_list)) {
-        include_once IMP_BASE . '/lib/Message.php';
-        $imp_message = &IMP_Message::singleton();
+        $imp_message = IMP_Message::singleton();
         $imp_message->flagAllInMailbox(array('seen'), $folder_list, ($actionID == 'mark_folder_seen'));
     }
-    break;
-
-case 'login_compose':
-    $open_compose_window = IMP::openComposeWin();
     break;
 
 case 'delete_folder_confirm':
@@ -263,16 +262,17 @@ case 'folders_empty_mailbox_confirm':
         }
 
         $title = _("Folder Actions - Confirmation");
+        IMP::prepareMenu();
         require IMP_TEMPLATES . '/common-header.inc';
         IMP::menu();
 
-        $template = new IMP_Template();
+        $template = new Horde_Template();
         $template->setOption('gettext', true);
         $template->set('delete', ($actionID == 'delete_folder_confirm'));
         $template->set('empty', ($actionID == 'folders_empty_mailbox_confirm'));
         $template->set('folders', $loop);
         $template->set('folders_url', $folders_url);
-        $template->set('folders_token', IMP::getRequestToken('imp.folders'));
+        $template->set('folders_token', Horde::getRequestToken('imp.folders'));
         echo $template->fetch(IMP_TEMPLATES . '/folders/folders_confirm.html');
 
         require $registry->get('templates', 'horde') . '/common-footer.inc';
@@ -282,8 +282,10 @@ case 'folders_empty_mailbox_confirm':
 
 case 'mbox_size':
     if (!empty($folder_list)) {
-        Horde::addScriptFile('tables.js', 'horde', true);
+        Horde::addScriptFile('tables.js', 'horde');
+
         $title = _("Folder Sizes");
+        IMP::prepareMenu();
         require IMP_TEMPLATES . '/common-header.inc';
         IMP::menu();
         IMP::status();
@@ -292,7 +294,7 @@ case 'mbox_size':
         $loop = array();
         $rowct = $sum = 0;
 
-        $imp_message = &IMP_Message::singleton();
+        $imp_message = IMP_Message::singleton();
 
         foreach ($folder_list as $val) {
             $size = $imp_message->sizeMailbox($val, false);
@@ -306,7 +308,7 @@ case 'mbox_size':
             $loop[] = $data;
         }
 
-        $template = new IMP_Template();
+        $template = new Horde_Template();
         $template->setOption('gettext', true);
         $template->set('folders', $loop);
         $template->set('folders_url', $folders_url);
@@ -320,23 +322,24 @@ case 'mbox_size':
 }
 
 /* Token to use in requests */
-$folders_token = IMP::getRequestToken('imp.folders');
+$folders_token = Horde::getRequestToken('imp.folders');
 
-$folders_url = Util::addParameter($folders_url, 'folders_token', $folders_token);
+$folders_url = Horde_Util::addParameter($folders_url, 'folders_token', $folders_token);
 
 if ($_SESSION['imp']['file_upload'] && ($actionID == 'import_mbox')) {
     $title = _("Folder Navigator");
+    IMP::prepareMenu();
     require IMP_TEMPLATES . '/common-header.inc';
     IMP::menu();
     IMP::status();
     IMP::quota();
 
     /* Prepare import template. */
-    $i_template = new IMP_Template();
+    $i_template = new Horde_Template();
     $i_template->setOption('gettext', true);
     $i_template->set('folders_url', $folders_url);
     $i_template->set('import_folder', $folder_list[0]);
-    $i_template->set('folder_name', htmlspecialchars(String::convertCharset($folder_list[0], 'UTF7-IMAP'), ENT_COMPAT, $charset));
+    $i_template->set('folder_name', htmlspecialchars(Horde_String::convertCharset($folder_list[0], 'UTF7-IMAP'), ENT_COMPAT, $charset));
     $i_template->set('folders_token', $folders_token);
     echo $i_template->fetch(IMP_TEMPLATES . '/folders/import.html');
     require $registry->get('templates', 'horde') . '/common-footer.inc';
@@ -344,16 +347,28 @@ if ($_SESSION['imp']['file_upload'] && ($actionID == 'import_mbox')) {
 }
 
 /* Build the folder tree. */
-list($raw_rows, $newmsgs, $displayNames) = $imaptree->build();
+list($raw_rows, $newmsgs) = $imaptree->build();
 
-IMP::addInlineScript(array(
+/* Build the list of display names. */
+reset($raw_rows);
+$displayNames = $fullNames = array();
+while (list($k, $r) = each($raw_rows)) {
+    $displayNames[] = $r['display'];
+
+    $tmp = IMP::displayFolder($r['value'], true);
+    if ($tmp != $r['display']) {
+        $fullNames[$k] = $tmp;
+    }
+}
+
+Horde::addInlineScript(array(
     'ImpFolders.displayNames = ' . Horde_Serialize::serialize($displayNames, Horde_Serialize::JSON, $charset),
-    'ImpFolders.folders_url = ' . Horde_Serialize::serialize($folders_url, Horde_Serialize::JSON, $charset)
+    'ImpFolders.fullNames = ' . Horde_Serialize::serialize($fullNames, Horde_Serialize::JSON, $charset)
 ));
 
 /* Prepare the header template. */
 $refresh_title = _("Reload View");
-$head_template = new IMP_Template();
+$head_template = new Horde_Template();
 $head_template->setOption('gettext', true);
 $head_template->set('title', $refresh_title);
 $head_template->set('folders_url', $folders_url);
@@ -362,11 +377,11 @@ $refresh_title = Horde::stripAccessKey($refresh_title);
 if (!empty($refresh_ak)) {
     $refresh_title .= sprintf(_(" (Accesskey %s)"), $refresh_ak);
 }
-$head_template->set('refresh', Horde::link($folders_url, $refresh_title, '', '', '', $refresh_title, $refresh_ak) . Horde::img('reload.png', _("Refresh"), null, $registry->getImageDir('horde')) . '</a>');
+$head_template->set('refresh', Horde::link($folders_url, $refresh_title, '', '', '', $refresh_title, $refresh_ak));
 $head_template->set('folders_token', $folders_token);
 
 /* Prepare the actions template. */
-$a_template = new IMP_Template();
+$a_template = new Horde_Template();
 $a_template->setOption('gettext', true);
 $a_template->set('id', 0);
 $a_template->set('javascript', $browser->hasFeature('javascript'));
@@ -377,29 +392,31 @@ if ($a_template->get('javascript')) {
     $a_template->set('go', _("Go"));
 }
 
-$a_template->set('create_folder', !empty($GLOBALS['conf']['hooks']['permsdenied']) || (IMP::hasPermission('create_folders') && IMP::hasPermission('max_folders')));
+$a_template->set('create_folder', !empty($GLOBALS['conf']['hooks']['permsdenied']) || ($GLOBALS['perms']->hasAppPermission('create_folders') && $GLOBALS['perms']->hasAppPermission('max_folders')));
 if ($prefs->getValue('subscribe')) {
     $a_template->set('subscribe', true);
     $subToggleText = ($showAll) ? _("Hide Unsubscribed") : _("Show Unsubscribed");
-    $a_template->set('toggle_subscribe', Horde::widget(Util::addParameter($folders_url, array('actionID' => 'toggle_subscribed_view', 'folders_token' => $folders_token)), $subToggleText, 'widget', '', '', $subToggleText, true));
+    $a_template->set('toggle_subscribe', Horde::widget(Horde_Util::addParameter($folders_url, array('actionID' => 'toggle_subscribed_view', 'folders_token' => $folders_token)), $subToggleText, 'widget', '', '', $subToggleText, true));
 }
 $a_template->set('nav_poll', !$prefs->isLocked('nav_poll') && !$prefs->getValue('nav_poll_all'));
 $a_template->set('notrash', !$prefs->getValue('use_trash'));
 $a_template->set('file_upload', $_SESSION['imp']['file_upload']);
-$a_template->set('help', Help::link('imp', 'folder-options'));
-$a_template->set('expand_all', Horde::widget(Util::addParameter($folders_url, array('actionID' => 'expand_all_folders', 'folders_token' => $folders_token)), _("Expand All Folders"), 'widget', '', '', _("Expand All"), true));
-$a_template->set('collapse_all', Horde::widget(Util::addParameter($folders_url, array('actionID' => 'collapse_all_folders', 'folders_token' => $folders_token)), _("Collapse All Folders"), 'widget', '', '', _("Collapse All"), true));
+$a_template->set('help', Horde_Help::link('imp', 'folder-options'));
+$a_template->set('expand_all', Horde::widget(Horde_Util::addParameter($folders_url, array('actionID' => 'expand_all_folders', 'folders_token' => $folders_token)), _("Expand All Folders"), 'widget', '', '', _("Expand All"), true));
+$a_template->set('collapse_all', Horde::widget(Horde_Util::addParameter($folders_url, array('actionID' => 'collapse_all_folders', 'folders_token' => $folders_token)), _("Collapse All Folders"), 'widget', '', '', _("Collapse All"), true));
 
 /* Check to see if user wants new mail notification */
 if (!empty($newmsgs)) {
     /* Open the mailbox R/W so we ensure the 'recent' flags are cleared from
      * the current mailbox. */
     foreach ($newmsgs as $mbox => $nm) {
-        $imp_imap->ob->openMailbox($mbox, Horde_Imap_Client::OPEN_READWRITE);
+        $imp_imap->ob()->openMailbox($mbox, Horde_Imap_Client::OPEN_READWRITE);
     }
 
     if ($prefs->getValue('nav_popup')) {
-        $notification->push(IMP::getNewMessagePopup($newmsgs), 'javascript');
+        Horde::addInlineScript((
+            IMP::getNewMessagePopup($newmsgs)
+        ), 'dom');
     }
 
     if (($sound = $prefs->getValue('nav_audio'))) {
@@ -407,90 +424,51 @@ if (!empty($newmsgs)) {
     }
 }
 
+/* Get the tree images. */
+$imp_ui_folder = new IMP_UI_Folder();
+$tree_imgs = $imp_ui_folder->getTreeImages($raw_rows, array('expand_url' => $folders_url));
+
 /* Add some further information to the $raw_rows array. */
-$name_url = Util::addParameter(Horde::applicationUrl('mailbox.php'), 'no_newmail_popup', 1);
+$rows = array();
+$name_url = Horde_Util::addParameter(Horde::applicationUrl('mailbox.php'), 'no_newmail_popup', 1);
 $rowct = 0;
-$morembox = $rows = array();
-foreach ($raw_rows as $val) {
+
+foreach ($raw_rows as $key => $val) {
     $val['nocheckbox'] = !empty($val['vfolder']);
-    if (!empty($val['vfolder']) && ($val['value'] != $imaptree->VFOLDER_KEY)) {
-        $val['delvfolder'] = Horde::link($imp_search->deleteURL($val['value']), _("Delete Virtual Folder")) . _("Delete") . '</a>';
-        $val['editvfolder'] = Horde::link($imp_search->editURL($val['value']), _("Edit Virtual Folder")) . _("Edit") . '</a>';
+    if (!empty($val['vfolder']) && $val['editvfolder']) {
+        $val['delvfolder'] = Horde::link($imp_search->deleteUrl($val['value']), _("Delete Virtual Folder")) . _("Delete") . '</a>';
+        $val['editvfolder'] = Horde::link($imp_search->editUrl($val['value']), _("Edit Virtual Folder")) . _("Edit") . '</a>';
     }
 
-    $val['class'] = (++$rowct % 2) ? 'item0' : 'item1';
+    $val['cname'] = (++$rowct % 2) ? 'item0' : 'item1';
 
     /* Highlight line differently if folder/mailbox is unsubscribed. */
     if ($showAll &&
         $subscribe &&
         !$val['container'] &&
         !$imaptree->isSubscribed($val['base_elt'])) {
-        $val['class'] .= ' folderunsub';
+        $val['cname'] .= ' folderunsub';
     }
 
     if (!$val['container']) {
         if (!empty($val['unseen'])) {
             $val['name'] = '<strong>' . $val['name'] . '</strong>';
         }
-        $val['name'] = Horde::link(Util::addParameter($name_url, 'mailbox', $val['value']), sprintf(_("View messages in %s"), ($val['vfolder']) ? $val['base_elt']['l'] : $val['display'])) . $val['name'] . '</a>';
+        $val['name'] = Horde::link(Horde_Util::addParameter($name_url, 'mailbox', $val['value']), $val['vfolder'] ? $val['base_elt']['l'] : $val['display']) . $val['name'] . '</a>';
     }
 
-    $dir2 = _image($val, null, 'folder');
+    $val['line'] = $tree_imgs[$key];
 
-    if ($val['children']) {
-        $dir = Util::addParameter($folders_url, 'folder', $val['value']);
-        if ($imaptree->isOpen($val['base_elt'])) {
-            $dir = Util::addParameter($dir, 'actionID', 'collapse_folder');
-            if ($val['value'] == 'INBOX') {
-                $minus_img = 'minustop.png';
-            } else {
-                $minus_img = ($val['peek']) ? 'minus.png' : 'minusbottom.png';
-            }
-            if (!empty($GLOBALS['nls']['rtl'][$GLOBALS['language']])) {
-                $minus_img = 'rev-' . $minus_img;
-            }
-            $dir = Horde::link($dir, _("Collapse Folder")) . _image($minus_img, _("Collapse"), 'tree') . "</a>$dir2";
-        } else {
-            $dir = Util::addParameter($dir, 'actionID', 'expand_folder');
-            if ($val['value'] == 'INBOX') {
-                $plus_img = 'plustop.png';
-            } else {
-                $plus_img = ($val['peek']) ? 'plus.png' : 'plusbottom.png';
-            }
-            if (!empty($GLOBALS['nls']['rtl'][$GLOBALS['language']])) {
-                $plus_img = 'rev-' . $plus_img;
-            }
-            $dir = Horde::link($dir, _("Expand Folder")) . _image($plus_img, _("Expand"), 'tree') . "</a>$dir2";
-        }
-    } else {
-        if ($val['value'] == 'INBOX') {
-            $join_img = ($val['peek']) ? 'joinbottom-down.png' : 'blank.png';
-        } else {
-            $join_img = ($val['peek']) ? 'join.png' : 'joinbottom.png';
-        }
-        if (!empty($GLOBALS['nls']['rtl'][$GLOBALS['language']])) {
-            $join_img = 'rev-' . $join_img;
-        }
-        $dir = _image($join_img, '', 'tree') . $dir2;
-    }
-
-    $line = '';
-    $morembox[$val['level']] = $val['peek'];
-    for ($i = 0; $i < $val['level']; $i++) {
-        $line .= _image(($morembox[$i]) ?
-            (empty($GLOBALS['nls']['rtl'][$GLOBALS['language']]) ? 'line.png' : 'rev-line.png') :
-            'blank.png', '', 'tree');
-    }
-    $val['line'] = $line . $dir;
     $rows[] = $val;
 }
 
 /* Render the rows now. */
-$template = new IMP_Template();
+$template = new Horde_Template();
 $template->setOption('gettext', true);
 $template->set('rows', $rows);
 
 $title = _("Folder Navigator");
+IMP::prepareMenu();
 require IMP_TEMPLATES . '/common-header.inc';
 IMP::menu();
 IMP::status();
@@ -506,14 +484,6 @@ if (count($rows) > 10) {
 
 /* No need for extra template - close out the tags here. */
 echo '</form></div>';
-
-if ($open_compose_window === false) {
-    if (!isset($options)) {
-        $options = array();
-    }
-    Horde::addScriptFile('imp.js', 'imp', true);
-    IMP::addInlineScript(IMP::popupIMPString('compose.php', array_merge(array('popup' => 1), $options, IMP::getComposeArgs())));
-}
 
 $notification->notify(array('listeners' => 'audio'));
 require $registry->get('templates', 'horde') . '/common-footer.inc';

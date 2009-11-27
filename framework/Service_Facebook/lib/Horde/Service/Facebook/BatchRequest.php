@@ -2,7 +2,11 @@
 /**
  * Horde_Service_Facebook_BatchRequest::
  *
+ * Copyright 2009 The Horde Project (http://www.horde.org)
  *
+ * @author Michael J. Rubinsky <mrubinsk@horde.org>
+ * @category Horde
+ * @package Horde_Service_Facebook
  */
 class Horde_Service_Facebook_BatchRequest extends Horde_Service_Facebook_Request
 {
@@ -26,12 +30,9 @@ class Horde_Service_Facebook_BatchRequest extends Horde_Service_Facebook_Request
     const BATCH_MODE_SERIAL_ONLY = 2;
 
     /**
-     *
-     *
-     * @param $facebook
-     * @param $http_client
-     * @param $params
-     * @return unknown_type
+     * @param Horde_Service_Facebook $facebook
+     * @param Horde_Http_Client      $http_client
+     * @param array                  $params
      */
     public function __construct($facebook, $http_client, $params = array())
     {
@@ -48,9 +49,12 @@ class Horde_Service_Facebook_BatchRequest extends Horde_Service_Facebook_Request
     /**
      * Add a method call to the queue
      *
-     * @param $method
-     * @param $params
-     * @return unknown_type
+     * @param  $method
+     * @param  $params
+     * @return unknown_type  Returns a reference to the results that will be
+     *                       produced when the batch is run. This reference
+     *                       should be saved until after the batch is run and
+     *                       the results can be examined.
      */
     public function &add($method, $params)
     {
@@ -79,9 +83,11 @@ class Horde_Service_Facebook_BatchRequest extends Horde_Service_Facebook_Request
 
         $serial_only = ($this->_batchMode == self::BATCH_MODE_SERIAL_ONLY);
         $params = array('method_feed' => $method_feed_json,
-                        'serial_only' => $serial_only);
+                        'serial_only' => $serial_only,
+                        'session_key' => $this->_facebook->auth->getSessionKey());
         $json = $this->_postRequest('batch.run', $params);
         $result = json_decode($json, true);
+
         if (is_array($result) && isset($result['error_code'])) {
           throw new Horde_Service_Facebook_Exception($result['error_msg'],
                                                      $result['error_code']);

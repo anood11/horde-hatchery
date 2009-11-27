@@ -19,11 +19,7 @@ if ($atdir) {
     exit;
 }
 
-if (!$VC->isFile($fullname)) {
-    Chora::fatal(sprintf(_("$fullname: no such file or directory"), $where), '404 Not Found');
-}
-
-$onb = Util::getFormData('onb');
+$onb = Horde_Util::getFormData('onb');
 try {
     $fl = $VC->getFileObject($where, array('branch' => $onb));
 } catch (Horde_Vcs_Exception $e) {
@@ -50,18 +46,30 @@ if ($VC->hasFeature('branches')) {
     }
 }
 
-Horde::addScriptFile('QuickFinder.js', 'horde', true);
-Horde::addScriptFile('revlog.js', 'chora', true);
+Horde::addScriptFile('tables.js', 'horde');
+Horde::addScriptFile('QuickFinder.js', 'horde');
+Horde::addScriptFile('revlog.js', 'chora');
 require CHORA_TEMPLATES . '/common-header.inc';
 require CHORA_TEMPLATES . '/menu.inc';
 require CHORA_TEMPLATES . '/headerbar.inc';
 require CHORA_TEMPLATES . '/log/header.inc';
 
 $i = 0;
+$diff_img = Horde::img('diff.png');
 reset($logs);
 while (list(,$lg) = each($logs)) {
     $rev = $lg->queryRevision();
     $branch_info = $lg->queryBranch();
+
+    $added = $deleted = null;
+    $fileinfo = $lg->queryFiles($where);
+    if ($fileinfo && isset($fileinfo['added'])) {
+        $added = $fileinfo['added'];
+        $deleted = $fileinfo['deleted'];
+    }
+
+    // TODO: Remove in favor of getting info from queryFiles()
+    $changedlines = $lg->queryChangedLines();
 
     $textUrl = Chora::url('co', $where, array('r' => $rev));
     $commitDate = Chora::formatDate($lg->queryDate());
@@ -80,7 +88,7 @@ while (list(,$lg) = each($logs)) {
 
     require CHORA_TEMPLATES . '/log/rev.inc';
 
-    if (($i++ > 100) && !Util::getFormData('all')) {
+    if (($i++ > 100) && !Horde_Util::getFormData('all')) {
         break;
     }
 }

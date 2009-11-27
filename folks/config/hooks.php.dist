@@ -1,7 +1,5 @@
 <?php
 /**
- * $Id$
- *
  * Folks Hooks configuration file.
  *
  * THE HOOKS PROVIDED IN THIS FILE ARE EXAMPLES ONLY.  DO NOT ENABLE THEM
@@ -9,15 +7,17 @@
  * TO MATCH YOUR SPECIFIC NEEDS AND SYSTEM ENVIRONMENT.
  *
  * For more information please see the horde/config/hooks.php.dist file.
+ *
+ * $Id$
  */
 
+class Folks_Hooks
+{
 // Example count used data hook function. Thera are two examples. One as
 // registry calls and one much faster with direct DB access but requres your
 // monitorig for application structure changes.
 
-if (!function_exists('_folks_hook_countService')) {
-
-    function _folks_hook_countService($service, $user)
+    public function countService($service, $user)
     {
         switch ($service) {
 
@@ -32,14 +32,10 @@ if (!function_exists('_folks_hook_countService')) {
 
         case 'wishes':
             $result = $GLOBALS['registry']->callByPackage('genie', 'listUserItems', array($user));
-            if ($result instanceof PEAR_Error) {
-                return $result;
-            } else {
-                return count($result);
-            }
+            return count($result);
 
         case 'galleries':
-            return $GLOBALS['registry']->callByPackage('ansel', 'countGalleries', array('ansel', PERMS_SHOW, $user));
+            return $GLOBALS['registry']->callByPackage('ansel', 'countGalleries', array('ansel', Horde_Perms::SHOW, $user));
 
         case 'blogs':
             return $GLOBALS['registry']->callByPackage('thomas', 'countPosts', array(array('user' => $user)));
@@ -52,13 +48,10 @@ if (!function_exists('_folks_hook_countService')) {
         }
 
     }
-}
 
 // DB optimized version
 //
-// if (!function_exists('_folks_hook_countService')) {
-//
-//     function _folks_hook_countService($service, $user)
+//     public function countService($service, $user)
 //     {
 //         switch ($service) {
 //
@@ -110,14 +103,12 @@ if (!function_exists('_folks_hook_countService')) {
 //         }
 //
 //     }
-// }
 
 // Example get data hook function. Thera are two examples. One as
 // registry calls and one much faster with direct DB access but requres your
 // monitorig for application structure changes.
 
-if (!function_exists('_folks_hook_getService')) {
-    function _folks_hook_getService($service, $user)
+    public function getService($service, $user)
     {
         switch ($service) {
 
@@ -134,10 +125,10 @@ if (!function_exists('_folks_hook_getService')) {
             return $GLOBALS['registry']->callByPackage('genie', 'listUserItems', array($user));
 
         case 'galleries':
-            return $GLOBALS['registry']->callByPackage('ansel', 'listGalleries', array('ansel', PERMS_SHOW, null, true, 0, 3, $user));
+            return $GLOBALS['registry']->callByPackage('ansel', 'listGalleries', array('ansel', Horde_Perms::SHOW, null, true, 0, 3, $user));
 
         case 'blogs':
-            return $GLOBALS['registry']->callByPackage('thomas', 'getRecentPosts', array($user, Auth::getAuth(), '', 3));
+            return $GLOBALS['registry']->callByPackage('thomas', 'getRecentPosts', array($user, Horde_Auth::getAuth(), '', 3));
 
         case 'classifieds':
             return $GLOBALS['registry']->callByPackage('classified', 'listAds', array(array('user_uid' => $user), 0, 3));
@@ -146,12 +137,10 @@ if (!function_exists('_folks_hook_getService')) {
             return array();
         }
     }
-}
 
 // DB optimized version
 //
-// if (!function_exists('_folks_hook_getService')) {
-//     function _folks_hook_getService($service, $user)
+//     public function getService($service, $user)
 //     {
 //         switch ($service) {
 //
@@ -209,7 +198,6 @@ if (!function_exists('_folks_hook_getService')) {
 //
 //         return $data;
 //     }
-// }
 
 // This hook is called when a user tries to login
 // Perorm some actions before redirecting to various services
@@ -217,19 +205,17 @@ if (!function_exists('_folks_hook_getService')) {
 // paid service and perform autologin or redirect to a wikipage with
 // additional information
 
-if (!function_exists('_folks_hook_prelogin')) {
-
-    function _folks_hook_prelogin($app)
+    public function prelogin($app)
     {
         require_once 'Horde/Group.php';
         $group = Group::singleton();
-        $user_uid = Auth::getAuth();
+        $user_uid = Horde_Auth::getAuth();
 
         switch ($app) {
 
         case 'gollem':
 
-            if (Auth::isAdmin() || $group->userIsInGroup($user_uid, 1, false)) {
+            if (Horde_Auth::isAdmin() || $group->userIsInGroup($user_uid, 1, false)) {
                 $_GET['backend_key'] = 'kjbnzi78';
                 require $GLOBALS['registry']->get('fileroot', 'gollem') .  '/redirect.php';
                 exit;
@@ -241,7 +227,7 @@ if (!function_exists('_folks_hook_prelogin')) {
 
         case 'imp':
 
-            if (Auth::isAdmin()
+            if (Horde_Auth::isAdmin()
                 || $group->userIsInGroup($user_uid, 1, false)
                 || $group->userIsInGroup($user_uid, 2, false)) {
 
@@ -266,27 +252,24 @@ if (!function_exists('_folks_hook_prelogin')) {
             break;
         }
     }
-}
-
 
 // This hook is called when a user submits a signup request.  It allows
 // a chance to alter or validate the data submitted by a user before any
 // attempts are made to add them to the system. Here we lowecase the useranme
 // and check if username or email is already taken
 
-if (!function_exists('_horde_hook_signup_preprocess')) {
-    function _horde_hook_signup_preprocess($info)
+    public function signup_preprocess($info)
     {
         if (isset($info['extra']['username'])) {
-            $info['extra']['username'] = String::lower($info['extra']['username']);
+            $info['extra']['username'] = Horde_String::lower($info['extra']['username']);
             $username = $info['extra']['username'];
         } else {
-            $info['user_name'] = String::lower($info['user_name']);
+            $info['user_name'] = Horde_String::lower($info['user_name']);
             $username = $info['user_name'];
         }
 
         if (!eregi("^[_a-z0-9-]*$", $username)) {
-            return PEAR::raiseError(_("Username can contain only alphanumeric characters, underscore and minus."));
+            throw new Horde_Exception(_("Username can contain only alphanumeric characters, underscore and minus."));
         }
 
         $_db = DB::connect($GLOBALS['conf']['sql'], true);
@@ -295,26 +278,24 @@ if (!function_exists('_horde_hook_signup_preprocess')) {
         $result = $_db->getRow($query, array($username, $info['extra']['email']), DB_FETCHMODE_ASSOC);
 
         if ($result instanceof PEAR_Error) {
-            return $result;
+            throw new Horde_Exception($result);
         } elseif (empty($result)) {
             return $info;
         } elseif ($result['user_uid'] == $username) {
-            return PEAR::raiseError(_("There is already an user registered with this username"));
+            throw new Horde_Exception(_("There is already an user registered with this username"));
         } elseif ($result['user_email'] == $info['extra']['email']) {
-            return PEAR::raiseError(_("There is already an user registered with this email"));
+            throw new Horde_Exception(_("There is already an user registered with this email"));
         }
 
         return $info;
     }
-}
 
 // Following on from the example in the above function, this is how a sample
 // _horde_hook_signup_addextra function would look like.
 // Here we connect to the database and update folks user table
 // with additional user data and send confirmation code to check his email
 
-if (!function_exists('_horde_hook_signup_addextra')) {
-     function _horde_hook_signup_addextra($userID, $extra)
+     public function signup_addextra($userID, $extra)
      {
         global $conf;
 
@@ -328,8 +309,8 @@ if (!function_exists('_horde_hook_signup_addextra')) {
             if ($field == 'password') {
                 $value = hash('md5', $value);
             }
-            $fields[] = 'user_' . String::lower($field);
-            $values[] = String::convertCharset($value, NLS::getCharset(), $conf['sql']['charset']);
+            $fields[] = 'user_' . Horde_String::lower($field);
+            $values[] = Horde_String::convertCharset($value, Horde_Nls::getCharset(), $conf['sql']['charset']);
         }
 
         $values[] = $userID;
@@ -338,19 +319,19 @@ if (!function_exists('_horde_hook_signup_addextra')) {
 
         $result = $_db->query($query, $values);
         if ($result instanceof PEAR_Error) {
-            return $result;
+            throw new Horde_Exception($result);
         }
 
         require_once $GLOBALS['registry']->get('fileroot', 'folks') . '/lib/Folks.php';
         $code = Folks::encodeString($userID, 'activate' . hash('md5', $extra['password']));
-        $link = Util::addParameter(Horde::applicationUrl('account/approve.php', true, -1),
+        $link = Horde_Util::addParameter(Horde::applicationUrl('account/approve.php', true, -1),
                                     array('user' => $userID, 'code' => $code),
                                     null, false);
 
         $body = sprintf(_("Your username on %s %s is: %s. \n\n Please confirm the registration by going to this link \n %s"),
                             $GLOBALS['registry']->get('name', 'horde'),
                             Horde::url($GLOBALS['registry']->get('webroot', 'horde'), true),
-                            $user['user_uid'],
+                            $userID,
                             $link);
 
         $result = Folks::sendMail($extra['email'], _("Confirmation code"), $body);
@@ -360,15 +341,13 @@ if (!function_exists('_horde_hook_signup_addextra')) {
 
         return $result;
      }
-}
 
 // This is an example of a post-push hook; it is called right after an
 // application is pushed successfully onto the app stack. Here we check
 // If the user has a authentication cookie code. Compara it with one in DB
 // and autologin the user.
 
-if (!function_exists('_horde_hook_post_pushapp')) {
-    function _horde_hook_post_pushapp($app)
+    public function pushapp()
     {
         if ($app != 'horde' ||
             !isset($_COOKIE['folks_login_code']) ||
@@ -376,7 +355,7 @@ if (!function_exists('_horde_hook_post_pushapp')) {
             return;
         }
 
-        $user = Auth::getAuth();
+        $user = Horde_Auth::getAuth();
         if ($user) {
             return;
         }
@@ -403,7 +382,6 @@ if (!function_exists('_horde_hook_post_pushapp')) {
             return;
         }
 
-        $auth = &Auth::singleton('folks');
-        return $auth->setAuth($_COOKIE['folks_login_user'], array('transparent' => 1, 'password' => null));
+        return Horde_Auth::setAuth($_COOKIE['folks_login_user'], array('transparent' => 1, 'password' => null));
     }
 }

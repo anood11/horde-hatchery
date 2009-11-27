@@ -8,7 +8,7 @@
  * @category Horde
  * @package Horde_Service_Facebook
  */
-class Horde_Servce_Facebook_Friends extends Horde_Service_Facebook_Base
+class Horde_Service_Facebook_Friends extends Horde_Service_Facebook_Base
 {
     /**
      * Returns whether or not pairs of users are friends.
@@ -29,41 +29,41 @@ class Horde_Servce_Facebook_Friends extends Horde_Service_Facebook_Base
     public function &areFriends($uids1, $uids2)
     {
         // Session key is *required*
-        if (!$this->_facebook->auth->getSessionKey()) {
+        if (!$skey = $this->_facebook->auth->getSessionKey()) {
             throw new Horde_Service_Facebook_Exception('session_key is required',
                                                Horde_Service_Facebook_ErrorCodes::API_EC_SESSION_REQUIRED);
         }
 
-        return $this->_facebook->call_method('facebook.friends.areFriends',
+        return $this->_facebook->callMethod('facebook.friends.areFriends',
             array('uids1' => $uids1,
                   'uids2' => $uids2,
-                  'session_key' => $this->_facebook->auth->getSessionKey()));
+                  'session_key' => $skey));
     }
 
     /**
      * Returns the friends of the current session user.
      *
-     * @param int $flid  (Optional) Only return friends on this friend list.
-     * @param int $uid   (Optional) Return friends for this user.
+     * @param integer $flid  (Optional) Only return friends on this friend list.
+     * @param integer $uid   (Optional) Return friends for this user.
      *
      * @return array  An array of friends
      */
     public function &get($flid = null, $uid = null)
     {
         // Session key is *required*
-        if (!$this->_facebook->auth->getSessionKey()) {
+        if (!$skey = $this->_facebook->auth->getSessionKey()) {
             throw new Horde_Service_Facebook_Exception('session_key is required',
                                                Horde_Service_Facebook_ErrorCodes::API_EC_SESSION_REQUIRED);
         }
-        $params = array();
-        if ($uid) {
+        $params = array('session_key' => $skey);
+        if (!empty($uid)) {
           $params['uid'] = $uid;
         }
-        if ($flid) {
+        if (!empty($flid)) {
           $params['flid'] = $flid;
         }
 
-        return $this->_facebook->call_method('facebook.friends.get', $params);
+        return $this->_facebook->callMethod('facebook.friends.get', $params);
     }
 
     /**
@@ -78,7 +78,7 @@ class Horde_Servce_Facebook_Friends extends Horde_Service_Facebook_Base
             throw new Horde_Service_Facebook_Exception('session_key is required',
                                                Horde_Service_Facebook_ErrorCodes::API_EC_SESSION_REQUIRED);
         }
-        return $this->_facebook->call_method('facebook.friends.getLists',
+        return $this->_facebook->callMethod('facebook.friends.getLists',
              array('session_key' => $this->_facebook->auth->getSessionKey()));
     }
 

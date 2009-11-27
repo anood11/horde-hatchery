@@ -1,6 +1,6 @@
 <?php
 if (isset($language)) {
-    header('Content-type: text/html; charset=' . NLS::getCharset());
+    header('Content-type: text/html; charset=' . Horde_Nls::getCharset());
     header('Vary: Accept-Language');
 }
 ?>
@@ -22,12 +22,12 @@ Horde::includeScriptFiles();
 <title><?php echo htmlspecialchars($page_title) ?></title>
 <link href="<?php echo $GLOBALS['registry']->getImageDir()?>/favicon.ico" rel="SHORTCUT ICON" />
 <link rel="alternate" type="application/rss+xml" href="<?php echo Folks::getUrlFor('feed', 'online') ?>" title="<?php echo _("Online users") ?>" />
-<?php if (Auth::isAuthenticated()): ?>
+<?php if (Horde_Auth::isAuthenticated()): ?>
 <link rel="alternate" type="application/rss+xml" href="<?php echo Folks::getUrlFor('feed', 'friends') ?>" title="<?php echo _("Online friends") ?>" />
 <link rel="alternate" type="application/rss+xml" href="<?php echo Folks::getUrlFor('feed', 'activity') ?>" title="<?php echo _("Friends activity") ?>" />
 <link rel="alternate" type="application/rss+xml" href="<?php echo Folks::getUrlFor('feed', 'know') ?>" title="<?php echo _("People you might know") ?>" />
 <?php endif; ?>
-<?php echo Horde::stylesheetLink('folks') ?>
+<?php Horde::includeStylesheetFiles() ?>
 </head>
 
-<body<?php if ($bc = Util::nonInputVar('bodyClass')) echo ' class="' . $bc . '"' ?><?php if ($bi = Util::nonInputVar('bodyId')) echo ' id="' . $bi . '"'; ?>>
+<body<?php if ($bc = Horde_Util::nonInputVar('bodyClass')) echo ' class="' . $bc . '"' ?><?php if ($bi = Horde_Util::nonInputVar('bodyId')) echo ' id="' . $bi . '"'; ?>>
