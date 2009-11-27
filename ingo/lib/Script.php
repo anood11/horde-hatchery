@@ -14,12 +14,12 @@ class Ingo_Script
     /**
      * Only filter unseen messages.
      */
-    const INGO_SCRIPT_FILTER_UNSEEN = 1;
+    const FILTER_UNSEEN = 1;
 
     /**
      * Only filter seen messages.
      */
-    const INGO_SCRIPT_FILTER_SEEN = 2;
+    const FILTER_SEEN = 2;
 
     /**
      * The script class' additional parameters.
@@ -115,7 +115,7 @@ class Ingo_Script
     static public function factory($script, $params = array())
     {
         $script = basename($script);
-        $class = 'Ingo_Script_' . $script;
+        $class = 'Ingo_Script_' . ucfirst($script);
 
         return class_exists($class)
             ? new $class($params)

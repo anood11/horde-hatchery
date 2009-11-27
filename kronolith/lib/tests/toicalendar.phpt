@@ -3,23 +3,23 @@ Kronolith_Event::toiCalendar() test.
 --FILE--
 <?php
 
-require 'Horde/CLI.php';
-Horde_CLI::init();
-define('AUTH_HANDLER', true);
+require 'Horde/Cli.php';
+Horde_Cli::init();
+$kronolith_authentication = 'none';
 require dirname(__FILE__) . '/../base.php';
 require 'Horde/iCalendar.php';
 
 $driver = new Kronolith_Driver();
-$object = new Kronolith_Event($driver);
+$object = new Kronolith_Event_Sql($driver);
 $object->start = new Horde_Date('2007-03-15 13:10:20');
 $object->end = new Horde_Date('2007-03-15 14:20:00');
 $object->setCreatorId('joe');
 $object->setUID('20070315143732.4wlenqz3edq8@horde.org');
 $object->setTitle('Hübscher Termin');
 $object->setDescription("Schöne Bescherung\nNew line");
-$object->setCategory('Schöngeistiges');
 $object->setLocation('Allgäu');
 $object->setAlarm(10);
+$object->tags = array('Schöngeistiges');
 $object->recurrence = new Horde_Date_Recurrence($object->start);
 $object->recurrence->setRecurType(Horde_Date_Recurrence::RECUR_DAILY);
 $object->recurrence->setRecurInterval(2);

@@ -16,26 +16,26 @@
 require_once dirname(__FILE__) . '/lib/base.php';
 
 // redirect if not an admin
-$allowed_cats = $news_cat->getAllowed(PERMS_DELETE);
+$allowed_cats = $news_cat->getAllowed(Horde_Perms::DELETE);
 if (empty($allowed_cats)) {
     $notification->push(_("You have not editor permission on any category."));
     header('Location: ' . Horde::applicationUrl('add.php'));
     exit;
 }
 
-$id = (int)Util::getFormData('id', 0);
-$page = (int)Util::getFormData('page', 0);
-$browse_url = Util::addParameter(Horde::applicationUrl('edit.php'), array('page' => $page, 'id' => $id), null, false);
+$id = (int)Horde_Util::getFormData('id', 0);
+$page = (int)Horde_Util::getFormData('page', 0);
+$browse_url = Horde_Util::addParameter(Horde::applicationUrl('edit.php'), array('page' => $page, 'id' => $id), null, false);
 $edit_url = Horde::applicationUrl('add.php');
 $read_url = Horde::applicationUrl('reads.php');
 $has_comments = $registry->hasMethod('forums/doComments');
-$actionID = Util::getFormData('actionID');
+$actionID = Horde_Util::getFormData('actionID');
 
 // save as future version
 if (!empty($actionID) && $id > 0) {
     $version = $news->db->getOne('SELECT MAX(version) FROM ' . $news->prefix . '_versions WHERE id = ?', array($id));
     $result  = $news->write_db->query('INSERT INTO ' . $news->prefix . '_versions (id, version, action, created, user_uid) VALUES (?,?,?,NOW(),?)',
-                                        array($id, $version + 1, $actionID, Auth::getAuth()));
+                                        array($id, $version + 1, $actionID, Horde_Auth::getAuth()));
 }
 
 if ($id) {
@@ -112,7 +112,7 @@ case 'unlock';
 break;
 case 'renew';
 
-    $version = Util::getFormData('version');
+    $version = Horde_Util::getFormData('version');
 
     $version_data = $news->db->getRow('SELECT content FROM ' . $news->prefix . '_versions WHERE id = ? AND version = ?',
                                       array($id, $version), DB_FETCHMODE_ASSOC);
@@ -142,7 +142,7 @@ case 'renew';
     /* save as future version */
     $version = $news->db->getOne('SELECT MAX(version) FROM ' . $news->prefix . '_versions WHERE id = ?', array($id)) + 1;
     $result  = $news->write_db->query('INSERT INTO ' . $news->prefix . '_versions (id, version, created, user_uid, content) VALUES (?,?,NOW(),?,?)',
-                                array($id, $version, Auth::getAuth(), serialize($new_version)));
+                                array($id, $version, Horde_Auth::getAuth(), serialize($new_version)));
 
     $notification->push(sprintf(_("News \"%s\" (%s): %s"), $article['title'], $id, _("renewed")), 'horde.success');
     header('Location: ' . $browse_url);
@@ -152,12 +152,12 @@ break;
 }
 
 $title = _("Edit");
-$vars = Variables::getDefaultVariables();
+$vars = Horde_Variables::getDefaultVariables();
 $form = new News_Search($vars);
 $form->getInfo(null, $info);
 
 /* prepare query */
-$binds = $news->buildQuery(PERMS_DELETE, $info);
+$binds = $news->buildQuery(Horde_Perms::DELETE, $info);
 $sql = 'SELECT n.id, n.sortorder, n.category1, n.category2, n.source, n.status, n.editor, n.publish, ' .
        'n.user, n.comments, n.unpublish, n.picture, n.chars, n.view_count, n.attachments, l.title, n.selling '
        . $binds[0];
@@ -172,14 +172,14 @@ if (!isset($info['sort_dir'])) {
 $sql .= ' ORDER BY ' . $info['sort_by'] . ' ' . $info['sort_dir'];
 
 // Count rows
-$count = $news->countNews($info, PERMS_DELETE);
+$count = $news->countNews($info, Horde_Perms::DELETE);
 if ($count instanceof PEAR_Error) {
     echo $count->getMessage() . ': ' . $count->getDebugInfo();
     exit;
 }
 
 // Select rows
-$page = Util::getGet('news_page', 0);
+$page = Horde_Util::getGet('news_page', 0);
 $per_page = $prefs->getValue('per_page');
 $sql = $news->db->modifyLimitQuery($sql, $page*$per_page, $per_page);
 $rows = $news->db->getAll($sql, $binds[1], DB_FETCHMODE_ASSOC);
@@ -192,8 +192,7 @@ if ($rows instanceof PEAR_Error) {
 $pager = News_Search::getPager($binds[1], $count, $browse_url);
 
 // Output
-Horde::addScriptFile('tables.js', 'horde', true);
-Horde::addScriptFile('popup.js', 'horde', true);
+Horde::addScriptFile('tables.js', 'horde');
 
 require_once NEWS_TEMPLATES . '/common-header.inc';
 require_once NEWS_TEMPLATES . '/menu.inc';

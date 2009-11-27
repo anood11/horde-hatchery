@@ -16,13 +16,13 @@
 $no_compress = true;
 require_once dirname(__FILE__) . '/lib/base.php';
 
-$news_id = Util::getFormData('news_id', false);
-$actionID = Util::getFormData('actionID');
-$file_id = Util::getFormData('file_id');
-$file_name = Util::getFormData('file_name');
-$news_lang = Util::getFormData('news_lang', News::getLang());
-$file_type = Util::getFormData('file_type');
-$file_size = Util::getFormData('file_size');
+$news_id = Horde_Util::getFormData('news_id', false);
+$actionID = Horde_Util::getFormData('actionID');
+$file_id = Horde_Util::getFormData('file_id');
+$file_name = Horde_Util::getFormData('file_name');
+$news_lang = Horde_Util::getFormData('news_lang', News::getLang());
+$file_type = Horde_Util::getFormData('file_type');
+$file_size = Horde_Util::getFormData('file_size');
 
 /* Run through action handlers. */
 switch ($actionID) {
@@ -30,8 +30,8 @@ case 'download_file':
 
     $data = News::getFile($file_id);
     if ($data instanceof PEAR_Error) {
-        if (Auth::isAdmin('news:admin')) {
-            Horde::fatal($data, __FILE__, __LINE__);
+        if (Horde_Auth::isAdmin('news:admin')) {
+            throw new Horde_Exception($data);
         } else {
             header('HTTP/1.0 404 Not Found');
             echo '<h1>HTTP/1.0 404 Not Found</h1>';
@@ -47,8 +47,8 @@ case 'view_file':
 
     $data = News::getFile($file_id);
     if ($data instanceof PEAR_Error) {
-        if (Auth::isAdmin('news:admin')) {
-            Horde::fatal($data, __FILE__, __LINE__);
+        if (Horde_Auth::isAdmin('news:admin')) {
+            throw new Horde_Exception($data);
         } else {
             header('HTTP/1.0 404 Not Found');
             echo '<h1>HTTP/1.0 404 Not Found</h1>';
@@ -69,6 +69,7 @@ case 'view_file':
             $key = key($render);
             $browser->downloadHeaders($file_name, $render[$key]['type'], true, strlen($render[$key]['data']));
             echo $render[$key]['data'];
+            exit;
         }
     }
 
@@ -79,7 +80,6 @@ case 'view_file':
 break;
 
 case 'download_zip_all':
-
     $file_id = sprintf(_("FilesOfNews-%s"), $news_id);
     $zipfiles = array();
     foreach ($news->getFiles($news_id) as $file) {
@@ -95,19 +95,18 @@ case 'download_zip_all':
         exit;
     }
 
-    $zip = Horde_Compress::singleton('zip');
-    $body = @$zip->compress($zipfiles);
+    $zip = Horde_Compress::factory('zip');
+    $body = $zip->compress($zipfiles);
     $browser->downloadHeaders($news_id . '.zip', 'application/zip', false, strlen($body));
     echo $body;
 
 break;
 
 case 'download_zip':
-
     $data = News::getFile($file_id);
     if ($data instanceof PEAR_Error) {
-        if (Auth::isAdmin('news:admin')) {
-            Horde::fatal($data, __FILE__, __LINE__);
+        if (Horde_Auth::isAdmin('news:admin')) {
+            throw new Horde_Exception($data);
         } else {
             header('HTTP/1.0 404 Not Found');
             echo '<h1>HTTP/1.0 404 Not Found</h1>';
@@ -116,8 +115,9 @@ case 'download_zip':
     }
 
     $zipfiles = array('data' => $data, 'name' => $file_id);
-    $zip = Horde_Compress::singleton('zip');
-    $body = @$zip->compress($zipfiles);
+
+    $zip = Horde_Compress::factory('zip');
+    $body = $zip->compress($zipfiles);
     $browser->downloadHeaders($file_id . '.zip', 'application/zip', false, strlen($body));
     echo $body;
 

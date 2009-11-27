@@ -11,15 +11,13 @@
  */
 
 /* Only admin should be using this. */
-if (!Auth::isAdmin('news:admin')) {
+if (!Horde_Auth::isAdmin('news:admin')) {
     $notification->push(_("You are not authorised for this action."), 'horde.warning');
-    Horde::authenticationFailureRedirect();
+    Horde_Auth::authenticateFailure('news');
 }
 
-require_once 'Horde/Variables.php';
-
-$vars = Variables::getDefaultVariables();
-$tabs = new Horde_UI_Tabs('admin', $vars);
+$vars = Horde_Variables::getDefaultVariables();
+$tabs = new Horde_Ui_Tabs('admin', $vars);
 
 $tabs->addTab(_("Sources"), Horde::applicationUrl('admin/sources/index.php'), 'sources');
 $tabs->addTab(_("Categories"), Horde::applicationUrl('admin/categories/index.php'), 'categories');

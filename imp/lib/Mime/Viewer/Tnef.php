@@ -23,7 +23,8 @@ class IMP_Horde_Mime_Viewer_Tnef extends Horde_Mime_Viewer_Tnef
         'forceinline' => true,
         'full' => true,
         'info' => true,
-        'inline' => false
+        'inline' => false,
+        'raw' => false
     );
 
     /**
@@ -35,10 +36,11 @@ class IMP_Horde_Mime_Viewer_Tnef extends Horde_Mime_Viewer_Tnef
      * </pre>
      *
      * @return array  See Horde_Mime_Viewer_Driver::render().
+     * @throws Horde_Exception
      */
     protected function _render()
     {
-        if (!Util::getFormData('tnef_attachment')) {
+        if (!Horde_Util::getFormData('tnef_attachment')) {
             $ret = $this->_renderInfo();
             reset($ret);
             $ret[key($ret)]['data'] = '<html><body>' . $ret[key($ret)]['data'] . '</body></html>';
@@ -46,12 +48,12 @@ class IMP_Horde_Mime_Viewer_Tnef extends Horde_Mime_Viewer_Tnef
         }
 
         /* Get the data from the attachment. */
-        $tnef = &Horde_Compress::singleton('tnef');
+        $tnef = Horde_Compress::factory('tnef');
         $tnefData = $tnef->decompress($this->_mimepart->getContents());
 
         /* Display the requested file. Its position in the $tnefData
          * array can be found in 'tnef_attachment'. */
-        $tnefKey = Util::getFormData('tnef_attachment') - 1;
+        $tnefKey = Horde_Util::getFormData('tnef_attachment') - 1;
 
         /* Verify that the requested file exists. */
         if (isset($tnefData[$tnefKey])) {
@@ -76,11 +78,12 @@ class IMP_Horde_Mime_Viewer_Tnef extends Horde_Mime_Viewer_Tnef
      * Return the rendered information about the Horde_Mime_Part object.
      *
      * @return array  See Horde_Mime_Viewer_Driver::render().
+     * @throws Horde_Exception
      */
     protected function _renderInfo()
     {
         /* Get the data from the attachment. */
-        $tnef = &Horde_Compress::singleton('tnef');
+        $tnef = Horde_Compress::factory('tnef');
         $tnefData = $tnef->decompress($this->_mimepart->getContents());
 
         $text = '';
@@ -117,7 +120,7 @@ class IMP_Horde_Mime_Viewer_Tnef extends Horde_Mime_Viewer_Tnef
             $this->_mimepart->getMimeId() => array(
                 'data' => $text,
                 'status' => array($status),
-                'type' => 'text/html; charset=' . NLS::getCharset()
+                'type' => 'text/html; charset=' . Horde_Nls::getCharset()
             )
         );
     }

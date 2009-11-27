@@ -93,15 +93,16 @@ function updateMessage()
             var address = list.options[i].text;
             var fullname = decodeURIComponent(list.options[i].value);
         }
-        if (address.indexOf(':') != -1) {
-            continue;
+        if (address.indexOf(':') == -1) {
+            fullname = fullname.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            address = '"' + fullname + '" <' + address + '>';
         }
 
-        fullname = fullname.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-        address = '"' + fullname + '" <' + address + '>';
-
         if (field.value) {
-            field.value = field.value + ', ' + address;
+            if (!field.value.match(/;\s*$/)) {
+                field.value = field.value + ',';
+            }
+            field.value = field.value + ' ' + address;
         } else {
             field.value = address;
         }
@@ -133,7 +134,7 @@ window.onload = function() {
 </script>
 <form method="post" name="contacts" onsubmit="passAddresses();" action="contacts.php?nocache=<?php echo hash('md5', mt_rand()) ?>">
 <input type="hidden" name="sa" />
-<?php Util::pformInput() ?>
+<?php Horde_Util::pformInput() ?>
 
 <div class="header"><?php echo _("Address Book") ?></div>
 
@@ -160,7 +161,7 @@ window.onload = function() {
     <label for="search_results" class="hidden"><?php echo _("Search results") ?></label>
     <select id="search_results" name="search_results" multiple="multiple" size="10" style="width:250px" onchange="document.contacts.search_results[0].selected=false" ondblclick="addAddress()">
       <option value=""><?php echo _("* Please select address(es) *") ?></option>
-      <?php foreach ($addresses as $addr): if ($display == 'email'): ?>
+      <?php foreach ($addresses as $addr): if (strpos($addr['email'], ',') !== false && strpos($addr['email'], ':') === false) $addr['email'] = $addr['name'] . ': ' . $addr['email']; if ($display == 'email'): ?>
       <option value="<?php echo rawurlencode($addr['name']) ?>"><?php echo htmlspecialchars($addr['email']) ?></option>
       <?php else: ?>
       <option value="<?php echo rawurlencode($addr['email']) ?>"><?php echo htmlspecialchars($addr['name']) ?></option>
@@ -196,6 +197,6 @@ window.onload = function() {
 <div class="rightAlign">
   <input type="button" class="button" onclick="updateMessage();" value="<?php echo _("Add to attendees") ?>" />
   <input type="button" class="button" onclick="window.close();" value="<?php echo _("Close window") ?>" />
-  <?php echo Help::link('kronolith', 'invite-addressbook') ?>
+  <?php echo Horde_Help::link('kronolith', 'invite-addressbook') ?>
 </div>
 </form>

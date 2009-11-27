@@ -61,6 +61,11 @@
    </field>
 
    <field>
+    <name>event_resources</name>
+    <type>clob</type>
+   </field>
+   
+   <field>
     <name>event_exceptions</name>
     <type>clob</type>
    </field>
@@ -301,7 +306,7 @@
    </field>
 
    <index>
-    <name>kronolith_shares_share_name</name>
+    <name>kronolith_share_name</name>
     <field>
      <name>share_name</name>
      <sorting>ascending</sorting>
@@ -309,7 +314,7 @@
    </index>
 
    <index>
-    <name>kronolith_shares_share_owner</name>
+    <name>kronolith_share_owner</name>
     <field>
      <name>share_owner</name>
      <sorting>ascending</sorting>
@@ -317,7 +322,7 @@
    </index>
 
    <index>
-    <name>kronolith_shares_perm_creator</name>
+    <name>kronolith_perm_creator</name>
     <field>
      <name>perm_creator</name>
      <sorting>ascending</sorting>
@@ -325,7 +330,7 @@
    </index>
 
    <index>
-    <name>kronolith_shares_perm_default</name>
+    <name>kronolith_perm_default</name>
     <field>
      <name>perm_default</name>
      <sorting>ascending</sorting>
@@ -333,7 +338,7 @@
    </index>
 
    <index>
-    <name>kronolith_shares_perm_guest</name>
+    <name>kronolith_perm_guest</name>
     <field>
      <name>perm_guest</name>
      <sorting>ascending</sorting>
@@ -384,7 +389,7 @@
    </field>
 
    <index>
-    <name>kronolith_shares_groups_share_id</name>
+    <name>kronolith_groups_share_id</name>
     <field>
      <name>share_id</name>
      <sorting>ascending</sorting>
@@ -392,7 +397,7 @@
    </index>
 
    <index>
-    <name>kronolith_shares_groups_group_uid</name>
+    <name>kronolith_groups_group_uid</name>
     <field>
      <name>group_uid</name>
      <sorting>ascending</sorting>
@@ -400,7 +405,7 @@
    </index>
 
    <index>
-    <name>kronolith_shares_groups_perm</name>
+    <name>kronolith_groups_perm</name>
     <field>
      <name>perm</name>
      <sorting>ascending</sorting>
@@ -442,7 +447,7 @@
    </field>
 
    <index>
-    <name>kronolith_shares_users_share_id</name>
+    <name>kronolith_users_share_id</name>
     <field>
      <name>share_id</name>
      <sorting>ascending</sorting>
@@ -450,7 +455,7 @@
    </index>
 
    <index>
-    <name>kronolith_shares_users_user_uid</name>
+    <name>kronolith_users_user_uid</name>
     <field>
      <name>user_uid</name>
      <sorting>ascending</sorting>
@@ -458,7 +463,7 @@
    </index>
 
    <index>
-    <name>kronolith_shares_users_perm</name>
+    <name>kronolith_users_perm</name>
     <field>
      <name>perm</name>
      <sorting>ascending</sorting>
@@ -469,4 +474,72 @@
 
  </table>
 
+ <table>
+ 
+  <name>kronolith_resources</name>
+  
+  <declaration>
+  
+   <field>
+    <name>resource_id</name>
+    <type>integer</type>
+    <notnull>true</notnull>
+    <length>4</length>
+   </field>
+   
+   <field>
+    <name>resource_name</name>
+    <type>text</type>
+    <length>255</length>
+   </field>
+    
+   <field>
+    <name>resource_calendar</name>
+    <type>text</type>
+    <length>255</length>
+   </field>
+   
+   <field>
+    <name>resource_description</name>
+    <type>clob</type>
+   </field>
+   
+   <field>
+    <name>resource_response_type</name>
+    <type>integer</type>
+    <length>4</length>
+   </field>
+   
+   <field>
+    <name>resource_type</name>
+    <type>text</type>
+    <notnull>true</notnull>
+    <length>255</length>
+   </field>
+
+   <field>
+    <name>resource_members</name>
+    <type>clob</type>
+   </field>
+   
+   <index>
+    <name>kronolith_resources_type_idx</name>
+    <field>
+     <name>resource_type</name>
+     <sorting>ascending</sorting>
+    </field>
+   </index>
+   
+   <index>
+    <name>kronolith_resources_calendar_idx</name>
+    <field>
+     <name>resource_calendar</name>
+     <sorting>ascending</sorting>
+    </field>
+   </index>
+   
+  </declaration>
+  
+ </table>
+ 
 </database>

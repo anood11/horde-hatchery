@@ -49,13 +49,24 @@ class Horde_Service_Facebook_Auth
 
     /** EXTEND_PERMS constants **/
     const EXTEND_PERMS_OFFLINE = 'offline_access';
+
+    // These perms are now wrapped up in the publish_stream permission, but are
+    // left here for BC and to allow atomic setting of the perms if desired.
     const EXTEND_PERMS_STATUSUPDATE = 'status_update';
     const EXTEND_PERMS_SHAREITEM = 'share_item';
     const EXTEND_PERMS_UPLOADPHOTO = 'photo_upload';
 
+    const EXTEND_PERMS_PUBLISHSTREAM = 'publish_stream';
+    const EXTEND_PERMS_READSTREAM = 'read_stream';
+
+
+
     /**
-     * TODO: Probably abstract out a Base class for these?
-     * @return unknown_type
+     * Const'r
+     *
+     * @param Horde_Service_Facebook         $facebook
+     * @param Horde_Service_Facebook_Request $request
+     * @param array $params
      */
     public function __construct($facebook, $request, $params = array())
     {
@@ -66,7 +77,9 @@ class Horde_Service_Facebook_Auth
     /**
      *  Return a valid FB login URL with necessary GET parameters appended.
      *
-     *  @return string
+     * @param string $next  URL to return to
+     *
+     * @return string  The Facebook Login Url
      */
     public function getLoginUrl($next)
     {
@@ -98,7 +111,7 @@ class Horde_Service_Facebook_Auth
      *
      * @param string $perm         An EXTEND_PERMS_* constant
      * @param string $success_url  URL to redirect to on success
-     * @param strint $cancel_url   URL to redirect to on cancel
+     * @param string $cancel_url   URL to redirect to on cancel
      *
      * @return string
      */
@@ -346,9 +359,9 @@ class Horde_Service_Facebook_Auth
      * Validates that a given set of parameters match their signature.
      * Parameters all match a given input prefix, such as "fb_sig".
      *
-     * @param array $fb_params  An array of all Facebook-sent parameters, not
-     *                          including the signature itself.
-     * @param $expected_sig     The expected result to check against.
+     * @param array  $fb_params     An array of all Facebook-sent parameters, not
+     *                              including the signature itself.
+     * @param string $expected_sig  The expected result to check against.
      *
      * @return boolean
      */
@@ -371,11 +384,11 @@ class Horde_Service_Facebook_Auth
      *
      * @return string  Hash to be checked against the FB provided signature.
      */
-    public static function generateSignature($params_array, $secret)
+    public static function generateSignature($params, $secret)
     {
         $str = '';
-        ksort($params_array);
-        foreach ($params_array as $k => $v) {
+        ksort($params);
+        foreach ($params as $k => $v) {
             $str .= "$k=$v";
         }
         $str .= $secret;
@@ -385,8 +398,8 @@ class Horde_Service_Facebook_Auth
     /**
      * Set session cookies.
      *
-     * @param string $user  FB userid
-     * @param string $session_key  The current session key
+     * @param string $user        FB userid
+     * @param string $sessionKey  The current session key
      * @param timestamp $expires
      *
      * @return void
@@ -413,15 +426,16 @@ class Horde_Service_Facebook_Auth
     /**
      * Set the current session user in the object and in a cookie.
      *
-     * @param string $user  The FB userid
-     * @param string $sessionKey
-     * @param timestamp $expires
+     * @param string $user        The FB userid
+     * @param string $sessionKey  The current sessionkey
+     * @param timestamp $expires  Expire time
+     * @param boolean $noCookie   If true, do not set a user cookie.
      *
      * @return void
      */
-    public function setUser($user, $sessionKey, $expires = null, $no_cookie = false)
+    public function setUser($user, $sessionKey, $expires = null, $noCookie = false)
     {
-        if (!$no_cookie && (!$this->_request->getCookie($this->_facebook->apiKey . '_user') ||
+        if (!$noCookie && (!$this->_request->getCookie($this->_facebook->apiKey . '_user') ||
             $this->_request->getCookie($this->_facebook->apiKey . '_user') != $user)) {
 
             $this->setCookies($user, $sessionKey, $expires);
@@ -434,8 +448,9 @@ class Horde_Service_Facebook_Auth
     /**
      * Revoke a previously authorizied extended permission
      *
-     * @param $perm
-     * @param $uid
+     * @param string $perm  The extended permission to remove.
+     * @param string $uid   The FB userid to remove permission from
+     *
      * @return unknown_type
      */
     public function revokeExtendedPermission($perm, $uid)

@@ -15,6 +15,13 @@
 class IMP_Horde_Mime_Viewer_Plain extends Horde_Mime_Viewer_Plain
 {
     /**
+     * Cached data.
+     *
+     * @var array
+     */
+    static protected $_cache = array();
+
+    /**
      * Return the rendered inline version of the Horde_Mime_Part object.
      *
      * @return array  See Horde_Mime_Viewer_Driver::render().
@@ -24,7 +31,12 @@ class IMP_Horde_Mime_Viewer_Plain extends Horde_Mime_Viewer_Plain
         global $conf, $prefs;
 
         $mime_id = $this->_mimepart->getMimeId();
-        $type = 'text/html; charset=' . NLS::getCharset();
+
+        if (isset(self::$_cache[$mime_id])) {
+            return null;
+        }
+
+        $type = 'text/html; charset=' . Horde_Nls::getCharset();
 
         // Trim extra whitespace in the text.
         $text = trim($this->_mimepart->getContents());
@@ -39,7 +51,7 @@ class IMP_Horde_Mime_Viewer_Plain extends Horde_Mime_Viewer_Plain
         }
 
         // Convert to the local charset.
-        $text = String::convertCharset($text, $this->_mimepart->getCharset());
+        $text = Horde_String::convertCharset($text, $this->_mimepart->getCharset());
 
         // Check for 'flowed' text data.
         if ($this->_mimepart->getContentTypeParameter('format') == 'flowed') {
@@ -67,11 +79,10 @@ class IMP_Horde_Mime_Viewer_Plain extends Horde_Mime_Viewer_Plain
         }
 
         // Build filter stack. Starts with HTML markup and tab expansion.
-        require_once 'Horde/Text/Filter.php';
         $filters = array(
             'text2html' => array(
-                'parselevel' => TEXT_HTML_MICRO,
-                'charset' => NLS::getCharset()
+                'parselevel' => Horde_Text_Filter_Text2html::MICRO,
+                'charset' => Horde_Nls::getCharset()
             ),
             'tabs2spaces' => array(),
         );
@@ -105,7 +116,7 @@ class IMP_Horde_Mime_Viewer_Plain extends Horde_Mime_Viewer_Plain
         }
 
         // Run filters.
-        $text = Text_Filter::filter($text, array_keys($filters), array_values($filters));
+        $text = Horde_Text_Filter::filter($text, array_keys($filters), array_values($filters));
 
         // Wordwrap.
         $text = str_replace(array('  ', "\n "), array(' &nbsp;', "\n&nbsp;"), $text);
@@ -115,7 +126,7 @@ class IMP_Horde_Mime_Viewer_Plain extends Horde_Mime_Viewer_Plain
 
         return array(
             $mime_id => array(
-                'data' => '<div class="fixed leftAlign">' . "\n" . $text . '</div>',
+                'data' => "<div class=\"fixed leftAlign\">\n" . $text . '</div>',
                 'status' => array(),
                 'type' => $type
             )
@@ -130,22 +141,21 @@ class IMP_Horde_Mime_Viewer_Plain extends Horde_Mime_Viewer_Plain
      */
     public function embeddedMimeParts()
     {
-        return (!empty($GLOBALS['conf']['utils']['gnupg']) && $GLOBALS['prefs']->getValue('pgp_scan_body')) || $this->getConfigParam('uudecode');
+        return (!empty($GLOBALS['conf']['gnupg']['path']) && $GLOBALS['prefs']->getValue('pgp_scan_body')) || $this->getConfigParam('uudecode');
     }
 
     /**
-     * If this MIME part can contain embedded MIME parts, and those embedded
-     * MIME parts exist, return a list of MIME parts that contain the embedded
-     * MIME part information.
+     * If this MIME part can contain embedded MIME part(s), and those part(s)
+     * exist, return a representation of that data.
      *
-     * @return mixed  An array of Horde_Mime_Part objects, with the key as
-     *                the ID, or null if no embedded MIME parts exist.
+     * @return mixed  A Horde_Mime_Part object representing the embedded data.
+     *                Returns null if no embedded MIME part(s) exist.
      */
-    public function getEmbeddedMimeParts()
+    protected function _getEmbeddedMimeParts()
     {
         $ret = null;
 
-        if (!empty($GLOBALS['conf']['utils']['gnupg']) &&
+        if (!empty($GLOBALS['conf']['gnupg']['path']) &&
             $GLOBALS['prefs']->getValue('pgp_scan_body')) {
             $ret = $this->_parsePGP();
         }
@@ -233,8 +243,14 @@ class IMP_Horde_Mime_Viewer_Plain extends Horde_Mime_Viewer_Plain
                     $part1->setContents(substr($part1_data, strpos($part1_data, "\n\n") + 2));
 
                     $part2 = new Horde_Mime_Part();
-                    $part2->setType('application/x-imp-pgp-signature');
-                    $part2->setContents(String::convertCharset(implode("\n", $val['data']) . "\n" . implode("\n", $sig['data']), $charset));
+                    $part2->setType('application/pgp-signature');
+                    $part2->setContents(Horde_String::convertCharset(implode("\n", $val['data']) . "\n" . implode("\n", $sig['data']), $charset));
+                    // A true pgp-signature part would only contain the
+                    // detached signature. However, we need to carry around
+                    // the entire armored text to verify correctly. Use a
+                    // IMP-specific content-type parameter to clue the PGP
+                    // driver into this fact.
+                    $part2->setMetadata('imp-pgp-signature', true);
 
                     $part->addPart($part1);
                     $part->addPart($part2);
@@ -245,9 +261,9 @@ class IMP_Horde_Mime_Viewer_Plain extends Horde_Mime_Viewer_Plain
             }
         }
 
-        $new_part->buildMimeIds($mime_id);
+        self::$_cache[$mime_id] = true;
 
-        return array($mime_id => $new_part);
+        return $new_part;
     }
 
     /**
@@ -258,11 +274,9 @@ class IMP_Horde_Mime_Viewer_Plain extends Horde_Mime_Viewer_Plain
      */
     protected function _parseUUencode()
     {
-        $text = String::convertCharset($this->_mimepart->getContents(), $this->_mimepart->getCharset());
+        $text = Horde_String::convertCharset($this->_mimepart->getContents(), $this->_mimepart->getCharset());
 
-        /* Don't want to use convert_uudecode() here as there may be multiple
-         * files residing in the text. */
-        $files = &Mail_mimeDecode::uudecode($text);
+        $files = Horde_Mime::uudecode($text);
         if (empty($files)) {
             return null;
         }
@@ -273,21 +287,45 @@ class IMP_Horde_Mime_Viewer_Plain extends Horde_Mime_Viewer_Plain
 
         $text_part = new Horde_Mime_Part();
         $text_part->setType('text/plain');
-        $text_part->setCharset(NLS::getCharset());
-        $text_part->setContents(preg_replace("/begin ([0-7]{3}) (.+)\r?\n(.+)\r?\nend/Us", "\n", $text));
+        $text_part->setCharset(Horde_Nls::getCharset());
+        $text_part->setContents(preg_replace("/begin [0-7]{3} .+\r?\n.+\r?\nend/Us", "\n", $text));
         $new_part->addPart($text_part);
 
         reset($files);
         while (list(,$file) = each($files)) {
             $uupart = new Horde_Mime_Part();
             $uupart->setType('application/octet-stream');
-            $uupart->setContents($file['filedata']);
-            $uupart->setName(strip_tags($file['filename']));
+            $uupart->setContents($file['data']);
+            $uupart->setName(strip_tags($file['name']));
             $new_part->addPart($uupart);
         }
 
-        $new_part->buildMimeIds($mime_id);
-
-        return array($mime_id => $new_part);
+        return $new_part;
     }
+
+    /**
+     * Output to use if text size is over the limit.
+     * See IMP_Contents::renderMIMEPart().
+     *
+     * @return string  The text to display inline.
+     */
+    public function overLimitText()
+    {
+        $stream = $this->_mimepart->getContents(array('stream' => true));
+        rewind($stream);
+
+        // Escape text
+        $filters = array(
+            'text2html' => array(
+                'parselevel' => Horde_Text_Filter_Text2html::MICRO,
+                'charset' => Horde_Nls::getCharset()
+            ),
+            'tabs2spaces' => array(),
+        );
+
+        return '<div class="fixed">' .
+            Horde_Text_Filter::filter(Horde_String::convertCharset(fread($stream, 1024), $this->_mimepart->getCharset()), array_keys($filters), array_values($filters)) .
+            ' [...]</div>';
+    }
+
 }

@@ -26,7 +26,7 @@ class IMP_Maillog
      */
     static public function log($type, $msg_ids, $data = null)
     {
-        $history = &Horde_History::singleton();
+        $history = Horde_History::singleton();
 
         if (!is_array($msg_ids)) {
             $msg_ids = array($msg_ids);
@@ -57,7 +57,7 @@ class IMP_Maillog
              * is just a waste of time and a potential point of confusion,
              * especially since they most likely don't even know the message
              * is being logged. */
-            if (is_a($r, 'PEAR_Error')) {
+            if ($r instanceof PEAR_Error) {
                 $entry = sprintf('Could not log message details to Horde_History. Error returned: %s', $r->getMessage());
                 Horde::logMessage($entry, __FILE__, __LINE__, PEAR_LOG_ERR);
             }
@@ -75,10 +75,10 @@ class IMP_Maillog
      */
     static public function getLog($msg_id)
     {
-        $history = &Horde_History::singleton();
+        $history = Horde_History::singleton();
 
         $res = $history->getHistory(self::_getUniqueHistoryId($msg_id));
-        if (is_a($res, 'PEAR_Error')) {
+        if ($res instanceof PEAR_Error) {
             throw new Horde_Exception($res);
         }
 
@@ -115,31 +115,44 @@ class IMP_Maillog
     }
 
     /**
-     * Retrieve any history for the given Message-ID and display via the
-     * Horde notification system.
+     * Retrieve any history for the given Message-ID and (optionally) display
+     * via the Horde notification system.
      *
      * @param string $msg_id  The Message-ID of the message.
      */
     static public function displayLog($msg_id)
     {
+        foreach (self::parseLog($msg_id) as $entry) {
+            $GLOBALS['notification']->push($entry['msg'], 'imp.' . $entry['action']);
+        }
+    }
+
+    /**
+     * TODO
+     */
+    static public function parseLog($msg_id)
+    {
         try {
-            $msg_history = self::getLog($msg_id);
+            if (!$msg_history = self::getLog($msg_id)) {
+                return array();
+            }
         } catch (Horde_Exception $e) {
-            return;
+            return array();
         }
 
-        if (!$msg_history) {
-            return;
-        }
+        $df = $GLOBALS['prefs']->getValue('date_format');
+        $tf = $GLOBALS['prefs']->getValue('time_format');
+        $ret = array();
 
         foreach ($msg_history->getData() as $entry) {
             $msg = null;
+
             if (isset($entry['desc'])) {
                 $msg = $entry['desc'];
             } else {
                 switch ($entry['action']) {
                 case 'forward':
-                    $msg = sprintf(_("You forwarded this message on %%s to the following recipients: %s."), $entry['recipients']);
+                    $msg = sprintf(_("You forwarded this message on %%s to: %s."), $entry['recipients']);
                     break;
 
                 case 'mdn':
@@ -155,10 +168,16 @@ class IMP_Maillog
                     break;
                 }
             }
+
             if ($msg) {
-                $GLOBALS['notification']->push(htmlspecialchars(@sprintf($msg, strftime($GLOBALS['prefs']->getValue('date_format') . ' ' . $GLOBALS['prefs']->getValue('time_format'), $entry['ts']))), 'imp.' . $entry['action']);
+                $ret[] = array(
+                    'action' => $entry['action'],
+                    'msg' => @sprintf($msg, strftime($df . ' ' . $tf, $entry['ts']))
+                );
             }
         }
+
+        return $ret;
     }
 
     /**
@@ -174,7 +193,7 @@ class IMP_Maillog
         }
         $msg_ids = array_map(array('IMP_Maillog', '_getUniqueHistoryId'), $msg_ids);
 
-        $history = &Horde_History::singleton();
+        $history = Horde_History::singleton();
         return $history->removeByNames($msg_ids);
     }
 
@@ -191,7 +210,7 @@ class IMP_Maillog
             return '';
         }
 
-        return implode('.', array('imp', str_replace('.', '*', Auth::getAuth()), $msgid));
+        return implode('.', array('imp', str_replace('.', '*', Horde_Auth::getAuth()), $msgid));
     }
 
 }

@@ -33,48 +33,42 @@
 
 function _sanitizeName($name)
 {
-    $name = String::convertCharset($name, NLS::getCharset(), 'UTF-8');
-    return String::convertCharset(trim(preg_replace('/[^\pL\pN-+_. ]/u', '_', $name), ' _'), 'UTF-8');
+    $name = Horde_String::convertCharset($name, Horde_Nls::getCharset(), 'UTF-8');
+    return Horde_String::convertCharset(trim(preg_replace('/[^\pL\pN-+_. ]/u', '_', $name), ' _'), 'UTF-8');
 }
+
+require_once dirname(__FILE__) . '/lib/Application.php';
 
 /* Don't compress if we are already sending in compressed format. */
-if ((isset($_GET['actionID']) && ($_GET['actionID'] == 'download_all')) ||
-    !empty($_GET['zip'])) {
-    $no_compress = true;
-}
+$actionID = Horde_Util::getFormData('actionID');
+new IMP_Application(array('init' => array(
+    'session_control' => 'readonly',
+    'nocompress' => (($actionID == 'download_all') || Horde_Util::getFormData('zip'))
+)));
 
-$session_control = 'readonly';
-require_once dirname(__FILE__) . '/lib/base.php';
-
-$actionID = Util::getFormData('actionID');
-$ctype = Util::getFormData('ctype');
-$id = Util::getFormData('id');
+$ctype = Horde_Util::getFormData('ctype');
+$id = Horde_Util::getFormData('id');
 
 /* 'compose_attach_preview' doesn't use IMP_Contents since there is no
  * IMAP message data - rather, we must use the IMP_Compose object to
  * get the necessary Horde_Mime_Part. */
 if ($actionID == 'compose_attach_preview') {
     /* Initialize the IMP_Compose:: object. */
-    $imp_compose = &IMP_Compose::singleton(Util::getFormData('composeCache'));
+    $imp_compose = IMP_Compose::singleton(Horde_Util::getFormData('composeCache'));
     $mime = $imp_compose->buildAttachment($id);
+    $mime->setMimeId($id);
 
     /* Create a dummy IMP_Contents() object so we can use the view code below.
      * Then use the 'view_attach' handler to output. */
-    $contents = &IMP_Contents::singleton($mime);
-    $actionID = 'view_attach';
-    $id = $mime->getMimeId();
+    $contents = IMP_Contents::singleton($mime);
 } else {
-    $uid = Util::getFormData('uid');
-    $mailbox = Util::getFormData('mailbox');
+    $uid = Horde_Util::getFormData('uid');
+    $mailbox = Horde_Util::getFormData('mailbox');
     if (!$uid || !$mailbox) {
         exit;
     }
 
-    try {
-        $contents = &IMP_Contents::singleton($uid . IMP::IDX_SEP . $mailbox);
-    } catch (Horde_Exception $e) {
-        Horde::fatal($e, __FILE__, __LINE__);
-    }
+    $contents = IMP_Contents::singleton($uid . IMP::IDX_SEP . $mailbox);
 }
 
 /* Run through action handlers */
@@ -95,14 +89,16 @@ case 'download_all':
         if (!$name) {
             $name = sprintf(_("part %s"), $val);
         }
-        $tosave[] = array('data' => $mime->getContents(), 'name' => $name);
+        $tosave[] = array('data' => $mime->getContents(array('stream' => true)), 'name' => $name);
     }
 
     if (!empty($tosave)) {
-        $horde_compress = &Horde_Compress::singleton('zip');
-        $body = $horde_compress->compress($tosave);
-        $browser->downloadHeaders($zipfile, 'application/zip', false, strlen($body));
-        echo $body;
+        $horde_compress = Horde_Compress::factory('zip');
+        $body = $horde_compress->compress($tosave, array('stream' => true));
+        fseek($body, 0, SEEK_END);
+        $browser->downloadHeaders($zipfile, 'application/zip', false, ftell($body));
+        rewind($body);
+        fpassthru($body);
     }
     exit;
 
@@ -111,38 +107,54 @@ case 'download_render':
     switch ($actionID) {
     case 'download_attach':
         $mime = $contents->getMIMEPart($id);
-        $body = $mime->getContents();
-        $type = $mime->getType(true);
-        $name = $mime->getName(true);
+        if ($contents->canDisplay($id, IMP_Contents::RENDER_RAW)) {
+            $render = $contents->renderMIMEPart($id, IMP_Contents::RENDER_RAW);
+            reset($render);
+            $mime->setContents($render[key($render)]['data']);
+        }
+
+        if (!$name = $mime->getName(true)) {
+            $name = _("unnamed");
+        }
+
+        /* Compress output? */
+        if (Horde_Util::getFormData('zip')) {
+            $horde_compress = Horde_Compress::factory('zip');
+            $body = $horde_compress->compress(array(array('data' => $mime->getContents(), 'name' => $name)), array('stream' => true));
+            $name .= '.zip';
+            $type = 'application/zip';
+        } else {
+            $body = $mime->getContents(array('stream' => true));
+            $type = $mime->getType(true);
+        }
         break;
 
     case 'download_render':
-        $render = $contents->renderMIMEPart($id, Util::getFormData('mode', IMP_Contents::RENDER_FULL), array('type' => $ctype));
+        $render = $contents->renderMIMEPart($id, Horde_Util::getFormData('mode', IMP_Contents::RENDER_FULL), array('type' => $ctype));
         reset($render);
         $key = key($render);
         $body = $render[$key]['data'];
         $type = $render[$key]['type'];
-        $name = $render[$key]['name'];
+        if (!$name = $render[$key]['name']) {
+            $name = _("unnamed");
+        }
         break;
     }
 
-    if (empty($name)) {
-        $name = _("unnamed");
+    if (is_resource($body)) {
+        fseek($body, 0, SEEK_END);
+        $browser->downloadHeaders($name, $type, false, ftell($body));
+        rewind($body);
+        fpassthru($body);
+    } else {
+        $browser->downloadHeaders($name, $type, false, strlen($body));
+        echo $body;
     }
-
-    /* Compress output? */
-    if (($actionID == 'download_attach') && Util::getFormData('zip')) {
-        $horde_compress = &Horde_Compress::singleton('zip');
-        $body = $horde_compress->compress(array(array('data' => $body, 'name' => $name)));
-        $name .= '.zip';
-        $type = 'application/zip';
-    }
-    $browser->downloadHeaders($name, $type, false, strlen($body));
-    echo $body;
     exit;
 
+case 'compose_attach_preview':
 case 'view_attach':
-    $render = $contents->renderMIMEPart($id, Util::getFormData('mode', IMP_Contents::RENDER_FULL), array('type' => $ctype));
+    $render = $contents->renderMIMEPart($id, Horde_Util::getFormData('mode', IMP_Contents::RENDER_FULL), array('params' => array('raw' => ($actionID == 'compose_attach_preview'), 'type' => $ctype)));
     if (!empty($render)) {
         reset($render);
         $key = key($render);
@@ -152,9 +164,11 @@ case 'view_attach':
     exit;
 
 case 'view_source':
-    $msg = $contents->fullMessageText();
-    $browser->downloadHeaders('Message Source', 'text/plain', true, strlen($msg));
-    echo $msg;
+    $msg = $contents->fullMessageText(array('stream' => true));
+    fseek($msg, 0, SEEK_END);
+    $browser->downloadHeaders('Message Source', 'text/plain', true, ftell($msg));
+    rewind($msg);
+    fpassthru($msg);
     exit;
 
 case 'save_message':
@@ -172,8 +186,12 @@ case 'save_message':
 
     $date = new DateTime($mime_headers->getValue('date'));
 
-    $body = 'From ' . $from . ' ' . $date->format('D M d H:i:s Y') . "\r\n" . $contents->fullMessageText();
-    $browser->downloadHeaders($name . '.eml', 'message/rfc822', false, strlen($body));
-    echo $body;
+    $hdr = 'From ' . $from . ' ' . $date->format('D M d H:i:s Y') . "\r\n";
+    $msg = $contents->fullMessageText(array('stream' => true));
+    fseek($msg, 0, SEEK_END);
+    $browser->downloadHeaders($name . '.eml', 'message/rfc822', false, strlen($hdr) + ftell($msg));
+    echo $hdr;
+    rewind($msg);
+    fpassthru($msg);
     exit;
 }

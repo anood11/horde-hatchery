@@ -16,13 +16,13 @@
 require_once dirname(__FILE__) . '/lib/base.php';
 
 $title = _("Diff");
-$id = Util::getFormData('id', 0);
-$version = Util::getFormData('version', 0);
+$id = Horde_Util::getFormData('id', 0);
+$version = Horde_Util::getFormData('version', 0);
 
 /* Set up the diff renderer. */
-$render_type = Util::getFormData('render', 'inline');
+$render_type = Horde_Util::getFormData('render', 'inline');
 $class = 'Text_Diff_Renderer_' . $render_type;
-$renderer = &new $class();
+$renderer = new $class();
 
 /* get current version content */
 $current_data = array();
@@ -46,7 +46,7 @@ if ($version_data instanceof PEAR_Error) {
 
 $version_data = unserialize($version_data);
 
-echo Horde::stylesheetLink('news');
+Horde::includeStylesheetFiles();
 
 while (list($k, $v) = each($current_data)) {
     echo '<hr><strong>' . $nls['languages'][$k] . '</strong><hr>' . "\n";

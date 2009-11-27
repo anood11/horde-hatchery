@@ -26,8 +26,7 @@ $vac_id = $filters->findRuleId(Ingo_Storage::ACTION_VACATION);
 $vac_rule = $filters->getRule($vac_id);
 
 /* Load libraries. */
-require_once 'Horde/Variables.php';
-$vars = Variables::getDefaultVariables();
+$vars = Horde_Variables::getDefaultVariables();
 if ($vars->get('submitbutton') == _("Return to Rules List")) {
     header('Location: ' . Horde::applicationUrl('filters.php', true));
     exit;
@@ -45,11 +44,8 @@ $v->setHelp('vacation-subject');
 $v = &$form->addVariable(_("Reason:"), 'reason', 'longtext', false, false, null, array(10, 40));
 $v->setHelp('vacation-reason');
 $form->setSection('advanced', _("Advanced Settings"));
-if (empty($conf['hooks']['vacation_addresses']) ||
-    empty($conf['hooks']['vacation_only'])) {
-    $v = &$form->addVariable(_("My email addresses:"), 'addresses', 'longtext', true, false, null, array(5, 40));
-    $v->setHelp('vacation-myemail');
-}
+$v = &$form->addVariable(_("My email addresses:"), 'addresses', 'longtext', true, false, null, array(5, 40));
+$v->setHelp('vacation-myemail');
 $v = &$form->addVariable(_("Addresses to not send responses to:"), 'excludes', 'longtext', false, false, null, array(10, 40));
 $v->setHelp('vacation-noresponse');
 $v = &$form->addVariable(_("Do not send responses to bulk or list messages?"), 'ignorelist', 'boolean', false);
@@ -115,13 +111,12 @@ $form->appendButtons(_("Return to Rules List"));
 
 /* Make sure we have at least one address. */
 if (!$vacation->getVacationAddresses()) {
-    require_once 'Horde/Identity.php';
-    $identity = &Identity::singleton('none');
+    $identity = Horde_Prefs_Identity::singleton('none');
     $addresses = implode("\n", $identity->getAll('from_addr'));
     /* Remove empty lines. */
     $addresses = preg_replace('/\n+/', "\n", $addresses);
     if (empty($addresses)) {
-        $addresses = Auth::getAuth();
+        $addresses = Horde_Auth::getAuth();
     }
     $vacation->setVacationAddresses($addresses);
 }
@@ -149,10 +144,11 @@ $form_title = _("Vacation");
 if (!empty($vac_rule['disable'])) {
     $form_title .= ' [<span class="form-error">' . _("Disabled") . '</span>]';
 }
-$form_title .= ' ' . Help::link('ingo', 'vacation');
+$form_title .= ' ' . Horde_Help::link('ingo', 'vacation');
 $form->setTitle($form_title);
 
 $title = _("Vacation Edit");
+Ingo::prepareMenu();
 require INGO_TEMPLATES . '/common-header.inc';
 require INGO_TEMPLATES . '/menu.inc';
 $form->renderActive(new Horde_Form_Renderer(array('encode_title' => false)), $vars, 'vacation.php', 'post');

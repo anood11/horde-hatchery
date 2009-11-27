@@ -1,9 +1,6 @@
 <loop:filter>
 <tr>
  <td class="nowrap">
-<if:edit_allowed>
-  <tag:filter.editlink /><tag:filter.editimg /></a>
-</if:edit_allowed>
 <if:delete_allowed>
 <if:filter.dellink>
   <tag:filter.dellink /><tag:filter.delimg /></a>
@@ -29,7 +26,7 @@
   <if:filter.downlink><tag:filter.downlink /><tag:down_img /></a></if:filter.downlink>
  </td>
  <td class="nowrap">
-  <label><gettext>To:</gettext>&nbsp;<input type="text" size="2" onchange="moveFromTo(<tag:filter.number />, this.value, '<tag:filter.upurl />', '<tag:filter.downurl />');"/></label>
+  <label><gettext>To:</gettext>&nbsp;<input type="text" size="2" onchange="IngoFilters.moveFromTo(<tag:filter.number />, this.value, '<tag:filter.upurl />', '<tag:filter.downurl />');"/></label>
  </td>
 </if:edit_allowed>
 </tr>

@@ -2,14 +2,76 @@
 v5.0-git
 --------
 
-[mms] Disable some advanced functions if using POP3 driver (caching,
-      searching, sorting) because it is too resource intensive.
+[mms] Use LIST-EXTENDED IMAP extension (RFC 5258) to get subscribed
+      mailbox information, if available.
+[mms] Split ham/spam reporting actions into two separate preferences (Request
+      #8221).
+[mms] When clicking on base reply button, auto-determine the best way to
+      reply to a message based on the header information.
+[mms] Add vertical-pane preview layout to DIMP.
+[mms] Wrap content-related MIME parts in a border when viewing inline to
+      indicate their relationship.
+[mms] For drafts, save the original message index for forwards/replies so when
+      eventually sent, log information can be updated (Request #8663).
+[mms] Upgrade RTE to CKEditor v3.
+[mms] Sort by display name for to/from fields if supported on IMAP server.
+[mms] Add ability to quickly filter by flags in DIMP.
+[mms] Add ability to select sent-mail mailbox when composing in DIMP.
+[mms] Add ability to save drafts in MIMP.
+[mms] Add spam reporting in MIMP.
+[mms] Added contextmenu support in DIMP for Opera.
+[mms] Display HTML parts inline by using IFRAMEs (based on code by
+      rui.carneiro@portugalmail.net; Request #8592).
+[mms] Add ability to search by relative date intervals (Request #3438).
+[mms] Add advanced search query interface to DIMP (Request #6875).
+[mms] Add ability to search by a custom defined header (Request #6875).
+[mms] Improved advanced search query interface (Request #6875).
+[mms] More intelligent ordering of autocomplete search results.
+[mms] Add a mini search query interface to IMP (Request #6875).
+[mms] Make DIMP quicksearch field selection persist across sessions.
+[mms] Move JS/CSS caching to Horde framework.
+[mms] Add simple search function to MIMP.
+[mms] DIMP now honors the 'mailbox_start' preference.
+[mms] Logins now handled by Horde login handler.
+[mms] When generating and sending compressed ZIP data, use server-side temp
+      streams to minimize memory usage.
+[mms] Decode bodypart data on server if possible (RFC 3516).
+[mms] Use PHP temporary streams when working with message body data to reduce
+      memory usage (Request #3359).
+[mms] Add ability to expand/collapse all folders in DIMP.
+[mms] Add Folder Options menu to DIMP.
+[mms] Add save link to full message display in DIMP.
+[mms] Allow on-demand filter application (if filter backend supports) in DIMP.
+[mms] Add full IMAP subscription support to DIMP.
+[mms] Add message information to preview screen (DIMP).
+[mms] Add Alt + PGUP/PGDN shortcut to scroll through preview message (DIMP).
+[jan] Show possible event conflicts in iTip viewer (Request #3991, Gonçalo
+      Queirós <goncalo.queiros@portugalmail.net>).
+[mms] Move subfolders of special folders to lower folder display tree in
+      DIMP (Bug #8127).
+[mms] Simplify quicksearch UI in DIMP.
+[mms] Improve notification display (DIMP).
+[mms] Use mailbox names in folder confirmation actions (DIMP) (Request #8162).
+[mms] Optimize viewport row insertion/updating (DIMP).
+[mms] Add support for defining and displaying custom IMAP flags and for
+      configuring the highlighting of system flags (Request #937).
+[mms] Move attachment display on mailbox page from hook to preference.
+[mms] Always do X-Priority header processing by default.
+[mms] Support $MDNSent keyword (RFC 3503) on IMAP server.
+[mms] Link URLs/e-mails in subjects in message views (Request #7487).
+[mms] Implement spellcheck on send in DIMP.
+[mms] Sanity check - don't do message operations reliant on UID list if
+      UIDVALIDITY of mailbox has changed.
+[mms] Simplify forwarding - always attach entire message.
+[mms] Remember splitbar position on login/refresh (DIMP).
+[mms] Disable advanced functions if using POP3 driver (caching, on-demand
+      filtering, searching, sorting) because it is too resource intensive.
 [mms] Use native PHP code for POP3 driver (c-client no longer required).
 [mms] All native IMP code now uses exceptions instead of PEAR_Errors.
 [mms] Fix wrong charset on filenames when stripping attachments (Bug #7220).
 [mms] Use effects queue to prevent issues with users clicking on effects
       elements too quickly.
-[mms] Trim leading/trailing whitespace from reply text.
+[mms] Trim leading/trailing whitespace from reply/forwarded text.
 [mms] Add full IMAP message flagging capabilities to DIMP.
 [mms] Decode IDN (RFC 3490) names in addresses (Request #5836).
 [mms] Add ability to download attachments in MIMP (Request #2925).
@@ -26,8 +88,6 @@ v5.0-git
 [mms] Add support for '$Forwarded' IMAP keyword (Request #3402).
 [mms] Attachments in a signed message now can be downloaded via the
       download all attachments link (Bug #2939).
-[mms] Added separate Fetch Mail action to DIMP (Request #7370).
-[mms] Improved fetchmail dialog screen.
 [mms] Remember preview toggle header preference (Request #7264) (DIMP).
 [mms] Fix stripping attachments when saving to sent-mail folder when attaching
       the PGP public key (Bug #4221).
@@ -46,7 +106,7 @@ v5.0-git
 [mms] Added an alerts log (Request #7173) (DIMP).
 [mms] Added support to access IMP's Virtual Folders (DIMP).
 [mms] Shift-drag for messages will copy instead of move (DIMP).
-[mms] Only support FCKeditor as GUI HTML editor.
+[mms] Remove support for Xinha as GUI HTML editor.
 [mms] Strip extra 'Fwd' and 'Re' cruft from subject line when replying to or
       forwarding a message.
 [mms] Cache results of address parsing.
@@ -57,20 +117,67 @@ v5.0-git
 
 
 ----------
-v4.3.4-cvs
+v4.3.6-cvs
 ----------
+
+[mms] Make sure sent-mail folders exist if using the drop-down selection list
+      on the compose page (Bug #8520).
+[mms] When replying to list, correctly extract e-mail address if multiple
+      entries exist in the List-Post header (Bug #8719).
+[mms] For messages marked as innocent but not moved to Inbox, don't report
+      them as deleted within the current mailbox (Bug #8221).
+[jan] Don't show address book preference group if address books are disabled
+      (Bug #8692).
+[mms] Save References/In-Reply-To header info when saving a draft (Bug #8661).
+[jan] Fix viewing S/MIME encrypted and signed messages from Outlook (Express)
+      (Bug #8629).
+[jan] Add Oracle-specific SQL script.
+[jan] Add Croatian translation (Matej Vela <matej.vela@carnet.hr>,
+      Iva Rumora <iva.rumora@zg.t-com.hr>).
+[mms] Don't use translated folder prefixes in rename dialog (Bug #8554).
+[jan] Add hook to retrieve public S/MIME and PGP keys.
+
+
+------
+v4.3.5
+------
+
+[mms] Upgrade prototype.js to v1.6.1.
+[jan] Add example hook for the search_sources preference (dom.lalot@gmail.com,
+      Request #7796).
+[mms] Fix renaming shared folders contained in empty namespaces (Bug #8468).
+[mms] Correctly handle NO untagged responses on login (Bug #8478).
+[mms] Correctly set charset of Bcc header in sent mail (Bug #8362).
+[mms] Fix spellcheck in text-mode for certain words in non-English locales
+      (Bug #8330).
+[mms] Fix some javascript if using IE 8 (uses IE 7 compatibility mode) (Bug
+      #8345).
+[jan] Allow to lock default_encrypt preference.
+[mjr] Add example hook for the add_source preference (Bug #8285).
+[mms] Fix unqualified domain preference (Bug #8272).
+[jan] Highlight signed messages depending on the signature verification.
+[mms] Fix display_folder hook (m.gabriel@das-netzwerkteam.de, Bug #8254).
+[jan] Use correct charset when rendering inline PGP data.
+
+
+------
+v4.3.4
+------
 
 [mms] SECURITY: Don't cache local PGP public keys retrieved from the
       addressbook (found by Peter Meier <peter.meier@immerda.ch>).
+[mms] If using spellcheck on send, automatically send if no spelling errors
+      exist (Request #6892).
+[jan] Show all addresses when printing messages.
 [mms] Fix cache issues in folder tree when deleting a mailbox (Bug #7745).
 [mms] Fix updating POP3 indices when deleting in mailbox view (Bug #8035).
 [jan] If updating a calendar event fails, try to import it instead (Bug #7589).
 [mms] Fix [un]escaping of various URLs on message screen caused by security
       fixes in v4.3.3 (Bug #7926).
-[mms] Add hook to allow hiding of IMAP folders (Request #7353, Gunnar
-      Wrobel <p@rdus.de>).
 [jan] Fix rendering of subjects in RTL scripts when using LTR translations
       (vilius@lnk.lt, Bug #3511).
+[mms] Add hook to allow hiding of IMAP folders (Gunnar Wrobel <p@rdus.de>,
+      Request #7353).
 [jan] Fix logging of messages forwarded with attachments (Bug #7911).
 
 
@@ -78,7 +185,7 @@ v4.3.4-cvs
 v4.3.3
 ------
 
-[cjh] SECURITY: Escape output in pgp.php and smime.php
+[cjh] SECURITY: Escape output in message.php, pgp.php and smime.php
       (found by Gunnar Wrobel <p@rdus.de>).
 [jan] Use all credentials and mailer settings for iTip replies (Bug #7388).
 [mms] Show translated 'INBOX' prefix for subfolders (Request #7759).
@@ -106,7 +213,6 @@ v4.3.1
 [jan] Use mailer configuration when sending iTip replies (Bug #7388).
 [jan] Always display multipart/appledouble attachments.
 [mms] Upgrade prototype.js to v1.6.0.3.
-[jan] Escape output in test.php.
 
 
 ----
@@ -2263,9 +2369,28 @@ OLD DIMP CHANGELOG
 ==================
 
 ------
+v1.1.4
+------
+[mms] Fix sizing fckeditor compose editor frame in IE (Bug #8616).
+
+
+------
+v1.1.3
+------
+
+[mms] Fix deleting messages after undeleting (Bug #8298).
+[mms] Fix renaming folders with non-7bit characters
+      (rainer.groesslinger@gmail.com, Bug #8286).
+
+
+------
 v1.1.2
 ------
 
+[mms] Make dimp work with IE 8 (uses IE 7 compatibility mode) (requires IMP
+      4.3.4+).
+[mms] Add confirmation box if attempting to send message without subject
+      (Request #8076).
 [mms] Fix address autocomplete display on IE (Bug #7982).
 
 
@@ -2464,10 +2589,12 @@ v1.0-ALPHA
 OLD MIMP CHANGELOG
 ==================
 
-----------
-v1.1.2-cvs
-----------
+------
+v1.1.2
+------
 
+[mms] Ignore 'compose_html' preference in IMP (Bug #8415) (Requires IMP 4.3.5).
+[mms] Fix showing Cc and Bcc fields (Bug #8167).
 [cjh] Implement custom menu items (Bug #7630).
 
 

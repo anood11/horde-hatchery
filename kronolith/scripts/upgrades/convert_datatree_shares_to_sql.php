@@ -4,29 +4,24 @@
  * This script migrates Kronolith's share data from the datatree Horde_Share
  * driver to the new SQL Horde_Share driver. You should run the appropriate
  * 2.1_to_2.2.sql upgrade script for your RDBMS before executing this script.
- *
- * $Horde: kronolith/scripts/upgrades/convert_datatree_shares_to_sql.php,v 1.7 2008/10/23 15:45:05 jan Exp $
  */
 
-@define('AUTH_HANDLER', true);
-@define('HORDE_BASE', dirname(__FILE__) . '/../../..');
-
 /* Set up the CLI environment */
+require_once dirname(__FILE__) . '/../../lib/base.load.php';
 require_once HORDE_BASE . '/lib/core.php';
-require_once 'Horde/CLI.php';
-if (!Horde_CLI::runningFromCli()) {
+if (!Horde_Cli::runningFromCli()) {
     exit("Must be run from the command line\n");
 }
-$cli = &Horde_CLI::singleton();
+$cli = Horde_Cli::singleton();
 $cli->init();
 
 /* Grab what we need to steal the DB config */
 require_once HORDE_BASE . '/config/conf.php';
-require_once 'MDB2.php';
 
 $config = $GLOBALS['conf']['sql'];
 unset($config['charset']);
 $db = MDB2::factory($config);
+$db->setOption('seqcol_name', 'id');
 
 $error_cnt = 0;
 $delete_dt_data = false;
@@ -40,23 +35,26 @@ if ($answer != 'y') {
 }
 
 /* Get the share entries */
-$sql = 'SELECT datatree_id, datatree_name FROM horde_datatree WHERE '
-    . 'group_uid = \'horde.shares.kronolith\'';
-$shares_result = $db->query($sql);
+$shares_result = $db->query('SELECT datatree_id, datatree_name FROM horde_datatree WHERE group_uid = \'horde.shares.kronolith\'');
 if (is_a($shares_result, 'PEAR_Error')) {
     die($shares_result->toString());
 }
 
+$query = $db->prepare('SELECT attribute_name, attribute_key, attribute_value FROM horde_datatree_attributes WHERE datatree_id = ?');
 while ($row = $shares_result->fetchRow(MDB2_FETCHMODE_ASSOC)) {
     $share_id = $row['datatree_id'];
     $share_name = $row['datatree_name'];
 
     /* Build an array to hold the new row data */
-    $data = array('share_id' => $db->nextId('kronolith_shares'),
+    $nextId = $db->nextId('kronolith_shares');
+    if (is_a($nextId, 'PEAR_Error')) {
+        $cli->message($nextId->toString(), 'cli.error');
+        $error_cnt++;
+        continue;
+    }
+    $data = array('share_id' => $nextId,
                   'share_name' => $share_name);
 
-    $sql = 'SELECT attribute_name, attribute_key, attribute_value FROM horde_datatree_attributes WHERE datatree_id = ?';
-    $query = $db->prepare($sql);
     $query_result = $query->execute($share_id);
     $rows = $query_result->fetchAll(MDB2_FETCHMODE_ASSOC);
     $users = array();

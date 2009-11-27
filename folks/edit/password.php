@@ -14,16 +14,17 @@ define('FOLKS_BASE', dirname(__FILE__) . '/..');
 require_once FOLKS_BASE . '/lib/base.php';
 require_once 'tabs.php';
 
+/*
 // Make sure auth backend allows passwords to be updated.
-$auth = Auth::singleton($conf['auth']['driver']);
+$auth = Horde_Auth::singleton($conf['auth']['driver']);
 if (!$auth->hasCapability('resetpassword')) {
     $notification->push(_("Cannot update password, contact your administrator."), 'horde.error');
-    header('Location: ' . Auth::getLoginScreen('', Util::getFormData('url')));
-    exit;
+    Horde_Auth::authenticateFailure('folks');
 }
+*/
 
 $title = _("Change Your Password");
-$vars = Variables::getDefaultVariables();
+$vars = Horde_Variables::getDefaultVariables();
 $form = new Horde_Form($vars, $title, 'password');
 $form->setButtons(_("Continue"));
 $form->addVariable(_("Current password"), 'old', 'password', true);
@@ -54,7 +55,6 @@ do {
     // Check some password policy
     $password_policy = Horde::loadConfiguration('password_policy.php', 'password_policy', 'folks');
     if (is_array($password_policy)) {
-
         // Check max/min lengths if specified in the backend config.
         if (isset($password_policy['minLength']) &&
             strlen($info['new']) < $password_policy['minLength']) {
@@ -150,7 +150,7 @@ do {
     }
 
     // try to chage it
-    $result = $folks_driver->changePassword($info['new'], Auth::getAuth());
+    $result = $folks_driver->changePassword($info['new'], Horde_Auth::getAuth());
     if ($result instanceof PEAR_Error) {
         $notification->push($result);
         break;
@@ -159,13 +159,13 @@ do {
     $notification->push(_("Password changed."), 'horde.success');
 
     // reset credentials so user is not forced to relogin
-    if (Auth::getCredential('password') == $info['old']) {
-        Auth::setCredential('password', $info['new']);
-        if (Auth::getProvider() == 'imp' || !empty($_SESSION['imp']['pass'])) {
-            $_SESSION['imp']['pass'] = Secret::write(Secret::getKey('imp'),
+    if (Horde_Auth::getCredential('password') == $info['old']) {
+        Horde_Auth::setCredential('password', $info['new']);
+        if (Horde_Auth::getProvider() == 'imp' || !empty($_SESSION['imp']['pass'])) {
+            $_SESSION['imp']['pass'] = Horde_Secret::write(Horde_Secret::getKey('imp'),
                                                         $info['new']);
-        } elseif (Auth::getProvider() == 'mimp' || !empty($_SESSION['mimp']['pass'])) {
-            $_SESSION['mimp']['pass'] = Secret::write(Secret::getKey('mimp'),
+        } elseif (Horde_Auth::getProvider() == 'mimp' || !empty($_SESSION['mimp']['pass'])) {
+            $_SESSION['mimp']['pass'] = Horde_Secret::write(Horde_Secret::getKey('mimp'),
                                                         $info['new']);
         }
     }
@@ -173,13 +173,13 @@ do {
 } while (false);
 
 // update password reminder prefs
-if (Util::getPost('formname') == 'security') {
-    if ($prefs->getValue('security_question') != Util::getPost('security_question')) {
-        $prefs->setValue('security_question', Util::getPost('security_question'));
+if (Horde_Util::getPost('formname') == 'security') {
+    if ($prefs->getValue('security_question') != Horde_Util::getPost('security_question')) {
+        $prefs->setValue('security_question', Horde_Util::getPost('security_question'));
     }
 
-    if ($prefs->getValue('security_answer') != Util::getPost('security_answer')) {
-        $prefs->setValue('security_answer', Util::getPost('security_answer'));
+    if ($prefs->getValue('security_answer') != Horde_Util::getPost('security_answer')) {
+        $prefs->setValue('security_answer', Horde_Util::getPost('security_answer'));
     }
 
     $notification->push(_("Your securiy questions was updated."), 'horde.success');

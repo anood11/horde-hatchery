@@ -92,21 +92,6 @@ class Kronolith_Driver
     }
 
     /**
-     * Generates a universal / unique identifier for a task.
-     *
-     * This is NOT something that we expect to be able to parse into a
-     * calendar and an event id.
-     *
-     * @return string  A nice unique string (should be 255 chars or less).
-     */
-    public function generateUID()
-    {
-        return date('YmdHis') . '.'
-            . substr(str_pad(base_convert(microtime(), 10, 36), 16, uniqid(mt_rand()), STR_PAD_LEFT), -16)
-            . '@' . $GLOBALS['conf']['server']['name'];
-    }
-
-    /**
      * Renames a calendar.
      *
      * @param string $from  The current name of the calendar.
@@ -122,12 +107,12 @@ class Kronolith_Driver
     /**
      * Searches a calendar.
      *
-     * @param object Kronolith_Event $query  A Kronolith_Event object with the
-     *                                       criteria to search for.
+     * @param object $query  An object with the criteria to search for.
+     * @param boolean $json  Store the results of the events' toJson() method?
      *
      * @return mixed  An array of Kronolith_Events or a PEAR_Error.
      */
-    public function search($query)
+    public function search($query, $json = false)
     {
         /* Our default implementation first gets <em>all</em> events in a
          * specific period, and then filters based on the actual values that
@@ -140,30 +125,27 @@ class Kronolith_Driver
             return $events;
         }
 
-        foreach ($events as $eventid) {
-            $event = $this->getEvent($eventid);
-            if (is_a($event, 'PEAR_Error')) {
-                return $event;
-            }
-
-            if ((((!isset($query->start) ||
-                   $event->end->compareDateTime($query->start) > 0) &&
-                  (!isset($query->end) ||
-                   $event->end->compareDateTime($query->end) < 0)) ||
-                 ($event->recurs() &&
-                  $event->end->compareDateTime($query->start) >= 0 &&
-                  $event->start->compareDateTime($query->end) <= 0)) &&
-                (empty($query->title) ||
-                 stristr($event->getTitle(), $query->title)) &&
-                (empty($query->location) ||
-                 stristr($event->getLocation(), $query->location)) &&
-                (empty($query->description) ||
-                 stristr($event->getDescription(), $query->description)) &&
-                (empty($query->creatorID) ||
-                 stristr($event->getCreatorID(), $query->creatorID))  &&
-                (!isset($query->status) ||
-                 $event->getStatus() == $query->status)) {
-                $results[] = $event;
+        foreach ($events as $day => $day_events) {
+            foreach ($day_events as $event) {
+                if ((((!isset($query->start) ||
+                       $event->end->compareDateTime($query->start) > 0) &&
+                      (!isset($query->end) ||
+                       $event->end->compareDateTime($query->end) < 0)) ||
+                     ($event->recurs() &&
+                      $event->end->compareDateTime($query->start) >= 0 &&
+                      $event->start->compareDateTime($query->end) <= 0)) &&
+                    (empty($query->title) ||
+                     stristr($event->getTitle(), $query->title)) &&
+                    (empty($query->location) ||
+                     stristr($event->getLocation(), $query->location)) &&
+                    (empty($query->description) ||
+                     stristr($event->getDescription(), $query->description)) &&
+                    (empty($query->creatorID) ||
+                     stristr($event->getCreatorID(), $query->creatorID))  &&
+                    (!isset($query->status) ||
+                     $event->getStatus() == $query->status)) {
+                    Kronolith::addEvents($results, $event, $event->start, $event->end, false, $json, false);
+                }
             }
         }
 
@@ -311,7 +293,7 @@ class Kronolith_Driver
      */
     public function deleteEvent($eventId)
     {
-        return PEAR::raiseError('Not supported');
+
     }
 
     /**
@@ -322,4 +304,11 @@ class Kronolith_Driver
         return PEAR::raiseError(_("Removing user data is not supported with the current calendar storage backend."));
     }
 
+    /**
+     * Stub to be overridden in the child class if it can implement.
+     */
+    public function filterEventsByCalendar($uids, $calendar)
+    {
+        return PEAR::raiseError('Not supported');
+    }
 }

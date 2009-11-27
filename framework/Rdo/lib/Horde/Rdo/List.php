@@ -12,8 +12,14 @@
  * @category Horde
  * @package  Horde_Rdo
  */
-class Horde_Rdo_List implements Iterator
+class Horde_Rdo_List implements Iterator, Countable
 {
+    /**
+     * Rdo Query
+     * @var mixed
+     */
+    protected $_query;
+
     /**
      * Rdo Mapper
      * @var Horde_Rdo_Mapper
@@ -57,6 +63,12 @@ class Horde_Rdo_List implements Iterator
     protected $_eof;
 
     /**
+     * The number of objects in the list.
+     * @var integer
+     */
+    protected $_count;
+
+    /**
      * Constructor.
      *
      * @param mixed $query The query to run when results are
@@ -89,7 +101,11 @@ class Horde_Rdo_List implements Iterator
             list($this->_sql, $this->_bindParams) = $query;
         }
 
-        // Keep a handle on the Mapper object for running the query.
+        if (!$mapper) {
+            throw new Horde_Rdo_Exception('Mapper must be provided either explicitly or in a Query object');
+        }
+
+        $this->_query = $query;
         $this->_mapper = $mapper;
     }
 
@@ -188,6 +204,19 @@ class Horde_Rdo_List implements Iterator
             $this->rewind();
         }
         return !$this->_eof;
+    }
+
+    /**
+     * Implementation of count() for Countable
+     *
+     * @return integer Number of elements in the list
+     */
+    public function count()
+    {
+        if (is_null($this->_count)) {
+            $this->_count = $this->_mapper->count($this->_query);
+        }
+        return $this->_count;
     }
 
 }

@@ -1,27 +1,5 @@
-/* Menu bottom margin, added for BC. */
-#menu {
-    margin-bottom: 8px;
-}
-
-/* Image alignment, added for BC. */
-img {
-    vertical-align: middle;
-}
-
-/* Table CSS, added for BC. */
 th {
-    color: #333;
     border-bottom: 1px solid #999;
-}
-
-/* Sort arrow styles, added for BC. */
-.sortup {
-    background: #bbcbff url("graphics/za.png") center left no-repeat;
-    padding-left: 10px;
-}
-.sortdown {
-    background: #bbcbff url("graphics/az.png") center left no-repeat;
-    padding-left: 10px;
 }
 
 .QuickFinderNoMatch {
@@ -33,31 +11,31 @@ form#repository-picker {
 }
 
 /* Options boxes. */
-table.options {
-    width: 99%;
+div.options, div.browsefileoptions {
     margin: 0 0 8px 5px;
 }
-table.options td {
-    font-size: 80%;
-    width: 33%;
+div.options span, div.browsefileoptions span {
+    display: -moz-inline-stack;
+    display: inline-block;
     border: 1px solid #ccc;
-    padding: 2px;
+    padding: 6px;
     background: #e9e9e9;
     vertical-align: top;
 }
-table.options td.spacer {
-    width: 10px;
-    background: none;
-    border: none;
+div.browsefileoptions span {
+    width: 31.3%;
 }
-table.options em {
-    display: block;
+div.options em, div.browsefileoptions em {
     margin-top: 4px;
+}
+div.browsefileoptions form {
+    margin-bottom: 4px;
 }
 
 /* Tables. */
 table.revlog, table.headerbar, table.browse, table.stats {
     width: 99%;
+    font-size: 100%;
     margin: 0 0 8px 5px;
     border-top: 1px solid #ddd;
     border-left: 1px solid #ddd;
@@ -84,14 +62,6 @@ table.headerbar tr {
 }
 table.headerbar td {
     border-right: none;
-}
-table.revlog th.sortup, table.headerbar th.sortup, table.browse th.sortup {
-    background: #bbcbff url("graphics/za.png") center left no-repeat;
-    padding-left: 10px;
-}
-table.revlog th.sortdown, table.headerbar th.sortdown, table.browse th.sortdown {
-    background: #bbcbff url("graphics/az.png") center left no-repeat;
-    padding-left: 10px;
 }
 
 /* History View. */
@@ -153,6 +123,7 @@ h3.revision_log, h3.checkout {
     margin-bottom: 4px;
 }
 .revlog .branch {
+    display: block;
     font-style: italic;
 }
 .revlog .message {
@@ -163,20 +134,14 @@ h3.revision_log, h3.checkout {
     margin-top: 4px;
     margin-bottom: 0;
 }
-.revlog .sdiff {
+.revlog .sdiff, .revlog .selection .selected .sdiff, .revlog .selection .pdiff {
     display: none;
 }
-.revlog .selection .sdiff {
+.revlog .selection .sdiff, .revlog .selection .selected .pdiff {
     display: inline;
 }
-.revlog .selection .selected .sdiff {
-    display: none;
-}
-.revlog .selection .pdiff {
-    display: none;
-}
-.revlog .selection .selected .pdiff {
-    display: inline;
+.revlog .difflines {
+    display: block;
 }
 
 /* Patchset logs. */
@@ -188,6 +153,33 @@ h3.revision_log, h3.checkout {
 }
 #patchsets td.files, #patchsets td.log {
     width: 35%;
+}
+
+.singleps span.headerLabel {
+    font-size: 110%;
+    font-weight: bold;
+    padding-right: 5px;
+}
+.singleps span.ago a:hover {
+    text-decoration: none;
+}
+.singlepslog {
+    padding: 10px 0 20px 20px;
+}
+ul.singlepsfiles {
+    list-style: none;
+    padding: 10px 0 0 20px;
+}
+ul.singlepsfiles li {
+    padding-bottom: 4px;
+}
+
+/* Diff stat information. */
+.diffadd {
+    color: blue;
+}
+.diffdel {
+    color: red;
 }
 
 /* Checkout. */
@@ -231,6 +223,7 @@ table.annotate .logentry {
 /* Diff styles. */
 table.hrdiff {
     width: 99%;
+    font-size: 100%;
     margin: 0 0 8px 5px;
 }
 table.hrdiff th {
@@ -289,4 +282,32 @@ div.difflog {
 }
 div.diffclear {
     clear: both;
+}
+
+/* Browsefile definitions. */
+td.browseLocation em {
+    display: block;
+}
+
+.historybg {
+    background: #e9e9e9;
+    text-align: center;
+}
+.historybg1 {
+    background: #ccdeff;
+}
+.historybg2 {
+    background: #ecf;
+}
+.historybg3 {
+    background: #fec;
+}
+.historybg4 {
+    background: #efc;
+}
+.historybg5 {
+    background: #cfd;
+}
+.historybg6 {
+    background: #dcdba0;
 }

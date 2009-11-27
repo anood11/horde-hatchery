@@ -9,22 +9,21 @@
  * @package Kronolith
  */
 
-@define('AUTH_HANDLER', true);
-@define('KRONOLITH_BASE', dirname(__FILE__));
-$session_control = 'none';
-require_once KRONOLITH_BASE . '/lib/base.php';
+$kronolith_authentication = 'none';
+$kronolith_session_control = 'none';
+require_once dirname(__FILE__) . '/lib/base.php';
 
 // We want to always generate UTF-8 iCalendar data.
-NLS::setCharset('UTF-8');
+Horde_Nls::setCharset('UTF-8');
 
 // Determine the username to show free/busy time for.
-$cal = Util::getFormData('c');
-$user = Util::getFormData('u');
+$cal = Horde_Util::getFormData('c');
+$user = Horde_Util::getFormData('u');
 if (!empty($cal)) {
     if (is_array($cal)) {
         $cal = implode('|', $cal);
     }
-} elseif ($pathInfo = Util::getPathInfo()) {
+} elseif ($pathInfo = Horde_Util::getPathInfo()) {
     $user = basename($pathInfo);
 }
 
@@ -33,9 +32,9 @@ $key = 'kronolith.fb.' . ($user ? 'u.' . $user : 'c.' . $cal);
 $fb = $cache->get($key, 360);
 if (!$fb) {
     if ($user) {
-        $prefs = &Prefs::singleton($conf['prefs']['driver'], 'kronolith', $user, '', null, false);
+        $prefs = Horde_Prefs::singleton($conf['prefs']['driver'], 'kronolith', $user, '', null, false);
         $prefs->retrieve();
-        NLS::setTimeZone();
+        Horde_Nls::setTimeZone();
         $cal = @unserialize($prefs->getValue('fb_cals'));
         if (is_array($cal)) {
             $cal = implode('|', $cal);
@@ -61,7 +60,7 @@ if (!$fb) {
 }
 
 $browser->downloadHeaders(($user ? $user : $cal) . '.vfb',
-                          'text/calendar; charset=' . NLS::getCharset(),
+                          'text/calendar; charset=' . Horde_Nls::getCharset(),
                           true,
                           strlen($fb));
 echo $fb;

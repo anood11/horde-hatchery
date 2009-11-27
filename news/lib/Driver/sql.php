@@ -71,7 +71,7 @@ class News_Driver_sql extends News_Driver {
                 ' WHERE n.id = ? AND n.id=l.id AND l.lang = ?';
 
         /** TODO Allow for now to allow static linked news, but not shown in list
-        if (!Auth::isAdmin('news:admin')) {
+        if (!Horde_Auth::isAdmin('news:admin')) {
             $query .= ' AND n.status = ' . News::CONFIRMED;
         }
         */
@@ -203,7 +203,7 @@ class News_Driver_sql extends News_Driver {
 
         /* Log it */
         $sql = 'INSERT INTO ' . $this->prefix . '_user_reads (id,user,ip,useragent,readdate) VALUES (?, ?, ? , ?, NOW())';
-        $result = $this->write_db->query($sql, array($id, Auth::getAuth(), $_SERVER['REMOTE_ADDR'], $_SERVER['HTTP_USER_AGENT']));
+        $result = $this->write_db->query($sql, array($id, Horde_Auth::getAuth(), $_SERVER['REMOTE_ADDR'], $_SERVER['HTTP_USER_AGENT']));
         if ($result instanceof PEAR_Error) {
             return $result;
         }
@@ -371,7 +371,8 @@ class News_Driver_sql extends News_Driver {
     /**
      * Attempts to open a persistent connection to the SQL server.
      *
-     * @return boolean  True on success; exits (Horde::fatal()) on error.
+     * @return boolean  True on success.
+     * @throws Horde_Exception
      */
     private function _connect()
     {
@@ -396,7 +397,7 @@ class News_Driver_sql extends News_Driver {
         $this->write_db = &DB::connect($this->_params,
                                         array('persistent' => !empty($this->_params['persistent'])));
         if ($this->write_db instanceof PEAR_Error) {
-            Horde::fatal($this->write_db, __FILE__, __LINE__);
+            throw new Horde_Exception($this->write_db);
         }
 
         // Set DB portability options.
@@ -414,7 +415,7 @@ class News_Driver_sql extends News_Driver {
             $this->db = &DB::connect($params,
                                       array('persistent' => !empty($params['persistent'])));
             if ($this->db instanceof PEAR_Error) {
-                Horde::fatal($this->db, __FILE__, __LINE__);
+                throw new Horde_Exception($this->db);
             }
 
             // Set DB portability options.
@@ -437,7 +438,7 @@ class News_Driver_sql extends News_Driver {
    /**
      * Build whare search
      */
-    public function buildQuery($perms = PERMS_READ, $criteria = array())
+    public function buildQuery($perms = Horde_Perms::READ, $criteria = array())
     {
         static $parts;
 
@@ -448,9 +449,9 @@ class News_Driver_sql extends News_Driver {
 
         $sql = 'FROM ' . $GLOBALS['news']->prefix . ' AS n, ' . $GLOBALS['news']->prefix . '_body AS l '
             . ' WHERE n.id = l.id AND l.lang = ?';
-        $params = array('_lang' => NLS::select());
+        $params = array('_lang' => Horde_Nls::select());
 
-        if ($perms == PERMS_READ) {
+        if ($perms == Horde_Perms::READ) {
             $sql .= ' AND n.publish <= ? ';
             $params['_perms'] = date('Y-m-d H:i:s');
             $sql .= ' AND n.status = ? ';
@@ -526,7 +527,7 @@ class News_Driver_sql extends News_Driver {
      *
      * @return Nimber of news
      */
-    public function countNews($criteria = array(), $perms = PERMS_READ)
+    public function countNews($criteria = array(), $perms = Horde_Perms::READ)
     {
         $binds = $this->buildQuery($perms, $criteria);
         $binds[0] = 'SELECT COUNT(*) ' . $binds[0];
@@ -544,7 +545,7 @@ class News_Driver_sql extends News_Driver {
      *
      * @return array of news data
      */
-    public function listNews($criteria = array(), $from = 0, $count = 0, $perms = PERMS_READ)
+    public function listNews($criteria = array(), $from = 0, $count = 0, $perms = Horde_Perms::READ)
     {
         $binds = $this->buildQuery($perms, $criteria);
 
@@ -587,7 +588,7 @@ class News_Driver_sql extends News_Driver {
                . $this->prefix . ' AS n WHERE l.lang = ? AND n.id = l.id AND n.status = ? ORDER BY n.publish DESC LIMIT 0, '
                . ($minimize ? '100' : '500');
 
-        $result = $this->db->query($sql, array(NLS::select(), News::CONFIRMED));
+        $result = $this->db->query($sql, array(Horde_Nls::select(), News::CONFIRMED));
         if ($result instanceof PEAR_Error) {
             return $result;
         }
@@ -619,7 +620,7 @@ class News_Driver_sql extends News_Driver {
         $tag_link = Horde::applicationUrl('search.php');
         foreach ($tags_elemets as $tag => $time) {
             sort($time);
-            $tags->addElement($tag, Util::addParameter($tag_link, array('word' => $tag)),
+            $tags->addElement($tag, Horde_Util::addParameter($tag_link, array('word' => $tag)),
                               count($tags_elemets[$tag]), $time[0]);
         }
 

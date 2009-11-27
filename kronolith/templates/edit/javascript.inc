@@ -1,7 +1,7 @@
 <script type="text/javascript">
-
-<?php if (!Util::nonInputVar('issearch')): ?>
 KronolithEventForm = new Object();
+
+<?php if (!Horde_Util::nonInputVar('issearch')): ?>
 KronolithEventForm.setInterval = function(field)
 {
     elt = document.eventform[field];
@@ -79,12 +79,12 @@ KronolithEventForm.updateWday = function(span)
         day = $('end_day').value;
         month = $('end_month').value - 1;
         year = $('end_year').value;
-<?php if (!Util::nonInputVar('issearch')): ?>
+<?php if (!Horde_Util::nonInputVar('issearch')): ?>
     } else if (span == 'recur_end_wday') {
         spanObj = $('recur_end_wday');
-        day = $('recur_enddate_day').value;
-        month = $('recur_enddate_month').value - 1;
-        year = $('recur_enddate_year').value;
+        day = $('recur_end_day').value;
+        month = $('recur_end_month').value - 1;
+        year = $('recur_end_year').value;
 <?php endif; ?>
     }
     date = new Date(year, month, day)
@@ -248,7 +248,7 @@ KronolithEventForm.setStartDate = function(date)
     $('su').checked = false;
 }
 
-<?php if (Util::getFormData('allday') == 1): ?>
+<?php if (Horde_Util::getFormData('allday') == 1): ?>
 Event.observe(window, 'load', function() {
     $('allday').click;
 });
@@ -257,6 +257,9 @@ Event.observe(window, 'load', function() {
 KronolithEventForm.toggleSection = function(section)
 {
     var dir = '<?php echo $GLOBALS['registry']->getImageDir() ?>';
+    if (!$('section_' + section)) {
+        return;
+    }
     $('section_' + section).toggle();
     if ($('section_' + section).visible()) {
         $('toggle_' + section).src = dir + '/minus.png';
@@ -273,11 +276,11 @@ KronolithEventForm.toggleSection = function(section)
     }
 }
 Event.observe(window, 'load', function() {
-	KronolithEventForm.toggleSection('alarm');
-	KronolithEventForm.toggleSection('description');
-	KronolithEventForm.toggleSection('attendees');
-	KronolithEventForm.toggleSection('recurrence');
-	KronolithEventForm.toggleSection('tags');
+    KronolithEventForm.toggleSection('alarm');
+    KronolithEventForm.toggleSection('description');
+    KronolithEventForm.toggleSection('attendees');
+    KronolithEventForm.toggleSection('recurrence');
+    KronolithEventForm.toggleSection('tags');
 });
 
 </script>

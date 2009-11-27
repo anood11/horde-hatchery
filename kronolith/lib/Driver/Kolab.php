@@ -1,7 +1,6 @@
 <?php
 
 require_once 'Horde/Kolab.php';
-require_once 'Horde/Identity.php';
 
 /**
  * Horde Kronolith driver for the Kolab IMAP Server.
@@ -196,7 +195,7 @@ class Kronolith_Driver_Kolab extends Kronolith_Driver
      *                                   $startDate - $endDate range.
      * @param boolean $hasAlarm          Only return events with alarms?
      * @param boolean $json              Store the results of the events'
-     *                                   toJSON() method?
+     *                                   toJson() method?
      *
      * @return array  Events in the given time range.
      */
@@ -256,7 +255,7 @@ class Kronolith_Driver_Kolab extends Kronolith_Driver
 
     public function getEvent($eventId = null)
     {
-        if (is_null($eventId)) {
+        if (!strlen($eventId)) {
             return new Kronolith_Event_Kolab($this);
         }
 
@@ -285,7 +284,7 @@ class Kronolith_Driver_Kolab extends Kronolith_Driver
     public function getByUID($uid, $calendars = null, $getAll = false)
     {
         if (!is_array($calendars)) {
-            $calendars = array_keys(Kronolith::listCalendars(true, PERMS_READ));
+            $calendars = array_keys(Kronolith::listCalendars(true, Horde_Perms::READ));
         }
 
         foreach ($calendars as $calendar) {

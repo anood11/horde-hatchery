@@ -501,7 +501,11 @@ class Horde_Vcs
 
         if (!empty($this->_cache)) {
             // TODO: Can't use filemtime() - Git bare repos contain no files
-            $ctime = time() - filemtime($filename);
+            if (file_exists($filename)) {
+                $ctime = time() - filemtime($filename);
+            } else {
+                $ctime = 60;
+            }
             if ($this->_cache->exists($cacheId, $ctime)) {
                 $ob = unserialize($this->_cache->get($cacheId, $ctime));
                 $ob->setRepository($this);
@@ -548,23 +552,35 @@ class Horde_Vcs
 
     /**
      * TODO
+     *
+     * @param array $opts  Options:
+     * <pre>
+     * 'file' - (string) TODO
+     * 'range' - (array) TODO
+     * </pre>
+     *
+     * @return Horde_Vcs_Patchset  Patchset object.
      */
-    public function getPatchsetObject($filename, $opts = array())
+    public function getPatchsetObject($opts = array())
     {
         $class = 'Horde_Vcs_Patchset_' . $this->_driver;
 
         ksort($opts);
-        $cacheId = implode('|', array($class, $this->sourceroot(), $filename, serialize($opts), $this->_cacheVersion));
+        $cacheId = implode('|', array($class, $this->sourceroot(), serialize($opts), $this->_cacheVersion));
 
         if (!empty($this->_cache)) {
-            // TODO: Can't use filemtime() - Git bare repos contain no files
-            $ctime = time() - filemtime($filename);
+            if (isset($opts['file']) && file_exists($opts['file'])) {
+                $ctime = time() - filemtime($opts['file']);
+            } else {
+                $ctime = 60;
+            }
+
             if ($this->_cache->exists($cacheId, $ctime)) {
                 return unserialize($this->_cache->get($cacheId, $ctime));
             }
         }
 
-        $ob = new $class($this, $filename, $opts);
+        $ob = new $class($this, $opts);
 
         if (!empty($this->_cache)) {
             $this->_cache->set($cacheId, serialize($ob));
@@ -591,6 +607,14 @@ class Horde_Vcs
     public function abbrev($rev)
     {
         return $rev;
+    }
+
+    /**
+     * @TODO ?
+     */
+    public function getDefaultBranch()
+    {
+        return 'HEAD';
     }
 
 }
@@ -833,7 +857,7 @@ abstract class Horde_Vcs_File
     /**
      * TODO
      */
-    protected $_branch;
+    protected $_branch = null;
 
     /**
      * Create a repository file object, and give it information about
@@ -1021,7 +1045,9 @@ abstract class Horde_Vcs_File
      */
     public function queryLogs($rev = null)
     {
-        return is_null($rev) ? $this->_logs : (isset($this->_logs[$rev]) ? $this->_logs[$rev] : null);
+        return is_null($rev)
+            ? $this->_logs
+            : (isset($this->_logs[$rev]) ? $this->_logs[$rev] : null);
     }
 
     /**
@@ -1051,6 +1077,7 @@ abstract class Horde_Vcs_Log
 {
     protected $_rep;
     protected $_file;
+    protected $_files = array();
     protected $_rev;
     protected $_author;
     protected $_tags = array();
@@ -1155,6 +1182,16 @@ abstract class Horde_Vcs_Log
         return $symBranches;
     }
 
+    /**
+     * TODO
+     */
+    public function queryFiles($file = null)
+    {
+        return is_null($file)
+            ? $this->_files
+            : (isset($this->_files[$file]) ? $this->_files[$file] : array());
+    }
+
 }
 
 /**
@@ -1164,8 +1201,9 @@ abstract class Horde_Vcs_Log
  */
 abstract class Horde_Vcs_Patchset
 {
-    const INITIAL = 1;
-    const DEAD = 2;
+    const MODIFIED = 0;
+    const ADDED = 1;
+    const DELETED = 2;
 
     /**
      * @var array

@@ -21,21 +21,6 @@
 </entry>
 -->
 
-<entry id="message-forward">
-  <title>Forwarding Email</title>
-  <para>When forwarding an email, you have several choices.</para>
-
-  <heading>Forwarding from the Mailbox View</heading>
-  <para>In the mailbox view, you can forward multiple messages at the same time. Each message that you select will be sent, in its entirety, to your recipients. You will see each message as an attachment in your compose window. On the receiving end, the recipient(s) will see each email as an embedded email.</para>
-
-  <heading>Forwarding from the Message View</heading>
-  <para>When forwarding individual messages in the message view, you can choose three different options:</para>
-  <para><b>1. Entire Message</b>: This option will attach the entire message to your email. The compose area will not contain any text from the forwarded message. This is the same as forwading a single email from the mailbox view, except that the Subject: line will be set for you.</para>
-  <para><b>2. Body Text Only</b>: If you only want to forward the body of the email, choose this option. Any attachments to the original email will not be included in your forward. The text will appear in the compose area, and you can edit it if you wish or add your own comments.</para>
-  <para><b>3. Body Text with Attachments</b>: To forward the attachments of an email along, along with the body as described in #2 Body Text Only, use this option. The body text will be placed in the compose area for you to edit, and all attachments to the original message will be copied to your forward.</para>
-
-</entry>
-
 <entry id="compose-buttons">
     <title>Message Composition: Actions</title>
     <heading>Actions</heading>
@@ -217,29 +202,6 @@
     <title>Message Composition: Link Attachments</title>
     <para>
     Determines whether the attachments in your composition are sent as a part of the mail message or whether those attachments are kept on a local server.  If attachments are linked, the recipient(s) of your message will be provided a weblink where they can download the attachment(s).  Linking attachments has the advantage of tremendously reducing the size of outgoing messages.  Linking attachments has the disadvantage that the content of the attachments cannot be guaranteed to be available in the future since the attachment data is not located within the e-mail message.
-    </para>
-</entry>
-
-<entry id="search">
-    <title>Message Search</title>
-    <heading>Search Criteria</heading>
-    <para>
-    You may search for messages from your folders using different search criteria.
-    </para>
-    <para>
-        Step 1: Select whether you want to match <b>all</b> queries (an AND search) or match <b>any</b> query (an OR search).
-    </para>
-    <para>
-        Step 2: Choose the fields(s) to add to your search criteria and, if necessary, identify the search parameters for these fields.
-    </para>
-    <para>
-        Step 3: Choose the folder(s) from which to search for the messages.
-    </para>
-    <para>
-        Step 4: Click &quot;Search&quot;.
-    </para>
-    <para>
-    If any messages matched your search criteria, then the subjects of these messages will be shown in the &quot;Search Results&quot; view.
     </para>
 </entry>
 
@@ -816,16 +778,29 @@
 <entry id="prefs-delete_spam_after_report">
     <title>Preferences: Delete Spam After Reporting</title>
     <para>
-    You may elect to do one of three items after reporting a message as either spam or innocent.
+    You may elect to do one of three items after reporting a message as spam.
     </para>
     <para>
-    First, you can decide to do nothing - the message will be reported as either spam or innocent but will otherwise remain unchanged in your mailbox.
+    First, you can decide to do nothing - the message will be reported as spam but will otherwise remain unchanged in your mailbox.
     </para>
     <para>
-    Second, if reporting a message as spam, you can instead have the message be immediately deleted.  This setting has no effect on reporting a message as innocent.
+    Second, if reporting a message as spam, you can instead have the message be immediately deleted.
     </para>
     <para>
-    Third, after reporting a message as spam the message will be deleted from the current mailbox and moved to your spam folder.  Alternatively, if reporting a message as innocent the message will be deleted from the current mailbox and moved to your INBOX.
+    Third, after reporting a message as spam the message will be deleted from the current mailbox and moved to your spam folder.
+    </para>
+</entry>
+
+<entry id="prefs-move_ham_after_report">
+    <title>Preferences: Move Spam After Reporting As Innocent</title>
+    <para>
+    You may elect to do one of two items after reporting a message previously maked as spam as innocent.
+    </para>
+    <para>
+    First, you can decide to do nothing - the message will be reported as innocent but will otherwise remain unchanged in your mailbox.
+    </para>
+    <para>
+    Second, if reporting a message as innocent the message will be deleted from the current mailbox and moved to your Inbox.
     </para>
 </entry>
 

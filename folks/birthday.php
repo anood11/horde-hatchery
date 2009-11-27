@@ -12,7 +12,6 @@
  */
 
 require_once dirname(__FILE__) . '/lib/base.php';
-require_once 'Horde/Variables.php';
 
 $title = _("Birthday");
 
@@ -22,19 +21,19 @@ if ($count instanceof PEAR_Error) {
     $count = 0;
 }
 
-if (($sort_by = Util::getFormData('sort_by')) !== null) {
+if (($sort_by = Horde_Util::getFormData('sort_by')) !== null) {
     $prefs->setValue('sort_by', $sort_by);
 } else {
     $sort_by = $prefs->getValue('sort_by');
 }
 
-if (($sort_dir = Util::getFormData('sort_dir')) !== null) {
+if (($sort_dir = Horde_Util::getFormData('sort_dir')) !== null) {
     $prefs->setValue('sort_dir', $sort_dir);
 } else {
     $sort_dir = $prefs->getValue('sort_dir');
 }
 
-$page = Util::getGet('page', 0);
+$page = Horde_Util::getGet('page', 0);
 $perpage = $prefs->getValue('per_page');
 $criteria = array('birthday' => date('-m-d'), 'sort_by' => $sort_by, 'sort_dir'  => $sort_dir);
 $users = $folks_driver->getUsers($criteria, $page * $perpage, $perpage);
@@ -43,8 +42,8 @@ if ($users instanceof PEAR_Error) {
     $users = array();
 }
 
-$vars = Variables::getDefaultVariables();
-$pager = new Horde_UI_Pager('page',
+$vars = Horde_Variables::getDefaultVariables();
+$pager = new Horde_Ui_Pager('page',
                             $vars, array('num' => $count,
                                          'url' => 'birthday.php',
                                          'perpage' => $perpage));
@@ -52,7 +51,7 @@ $pager = new Horde_UI_Pager('page',
 $pager->preserve($criteria);
 $list_url = Folks::getUrlFor('list', 'birthday');
 
-Horde::addScriptFile('stripe.js', 'horde', true);
+Horde::addScriptFile('stripe.js', 'horde');
 
 require FOLKS_TEMPLATES . '/common-header.inc';
 require FOLKS_TEMPLATES . '/menu.inc';

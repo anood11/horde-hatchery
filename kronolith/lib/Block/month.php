@@ -6,8 +6,6 @@ $block_name = _("This Month");
  * Horde_Block_Kronolith_month:: Implementation of the Horde_Block API
  * to display a mini month view of calendar items.
  *
- * $Horde: kronolith/lib/Block/month.php,v 1.43 2008/10/16 17:39:51 mrubinsk Exp $
- *
  * @package Horde_Block
  */
 class Horde_Block_Kronolith_month extends Horde_Block {
@@ -51,7 +49,7 @@ class Horde_Block_Kronolith_month extends Horde_Block {
         }
         $date = new Horde_Date(time());
 
-        return $title . ', ' . Horde::link(Horde::url(Util::addParameter($registry->getInitialPage(), $url_params), true)) . $date->strftime('%B, %Y') . '</a>';
+        return $title . ', ' . Horde::link(Horde::url(Horde_Util::addParameter($registry->getInitialPage(), $url_params), true)) . $date->strftime('%B, %Y') . '</a>';
     }
 
     /**
@@ -64,9 +62,8 @@ class Horde_Block_Kronolith_month extends Horde_Block {
         global $prefs;
 
         // @TODO Remove this hack when maintenance is refactored.
-        $from_block = true;
+        $no_maint = true;
         require_once dirname(__FILE__) . '/../base.php';
-        require_once KRONOLITH_BASE . '/lib/Day.php';
 
         if (isset($this->_params['calendar']) && $this->_params['calendar'] != '__all') {
             if (empty($this->_share)) {
@@ -75,12 +72,15 @@ class Horde_Block_Kronolith_month extends Horde_Block {
             if (is_a($this->_share, 'PEAR_Error')) {
                 return _(sprintf("There was an error accessing the calendar: %s", $this->_share->getMessage()));
             }
-            if (!$this->_share->hasPermission(Auth::getAuth(), PERMS_SHOW)) {
+            if (is_a($this->_share, 'PEAR_Error')) {
+                return $this->_share;
+            }
+            if (!$this->_share->hasPermission(Horde_Auth::getAuth(), Horde_Perms::SHOW)) {
                 return _("Permission Denied");
             }
         }
 
-        Horde::addScriptFile('tooltip.js', 'horde', true);
+        Horde::addScriptFile('tooltips.js', 'horde');
 
         $year = date('Y');
         $month = date('m');
@@ -97,7 +97,7 @@ class Horde_Block_Kronolith_month extends Horde_Block {
             if ($startday == Horde_Date::DATE_SUNDAY) {
                 $daysInView -= 7;
             }
-            $endday = new Horde_Date(array('mday' => Horde_Date::daysInMonth($month, $year),
+            $endday = new Horde_Date(array('mday' => Horde_Date_Utils::daysInMonth($month, $year),
                                            'month' => $month,
                                            'year' => $year));
             $endday = $endday->dayOfWeek();
@@ -174,7 +174,7 @@ class Horde_Block_Kronolith_month extends Horde_Block {
                 $url_params['display_cal'] = $this->_params['calendar'];
             }
             /* Set up the link to the day view. */
-            $url = Util::addParameter(Horde::applicationUrl('day.php', true),
+            $url = Horde_Util::addParameter(Horde::applicationUrl('day.php', true),
                                       $url_params);
 
             $date_stamp = $date_ob->dateString();

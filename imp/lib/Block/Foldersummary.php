@@ -14,8 +14,11 @@ class IMP_Block_Foldersummary extends Horde_Block
 
     function _content()
     {
-        if (!IMP::checkAuthentication(true)) {
-            return '';
+        require_once dirname(__FILE__) . '/../Application.php';
+        try {
+            new IMP_Application(array('init' => array('authentication' => 'throw')));
+        } catch (Horde_Exception $e) {
+            return;
         }
 
         /* Filter on INBOX display, if requested. */
@@ -25,8 +28,8 @@ class IMP_Block_Foldersummary extends Horde_Block
         }
 
         /* Get list of mailboxes to poll. */
-        $imptree = &IMP_Imap_Tree::singleton();
-        $folders = $imptree->getPollList(true, true);
+        $imptree = IMP_Imap_Tree::singleton();
+        $folders = $imptree->getPollList(true);
 
         $anyUnseen = false;
         $newmsgs = array();

@@ -24,6 +24,7 @@ class IMP_Horde_Mime_Viewer_Alternative extends Horde_Mime_Viewer_Driver
         'full' => true,
         'info' => false,
         'inline' => true,
+        'raw' => false
     );
 
     /**
@@ -84,7 +85,7 @@ class IMP_Horde_Mime_Viewer_Alternative extends Horde_Mime_Viewer_Driver
                         'type' => 'info'
                     )
                 ),
-                'type' => 'text/html; charset=' . NLS::getCharset()
+                'type' => 'text/html; charset=' . Horde_Nls::getCharset()
             );
             return $ret;
         }
@@ -110,6 +111,15 @@ class IMP_Horde_Mime_Viewer_Alternative extends Horde_Mime_Viewer_Driver
                     $ret[$id] = $render[$id];
                     unset($display_ids[$id]);
                 }
+            } elseif (($disp_id != $val) && !array_key_exists($val, $ret)) {
+                // Need array_key_exists() here since we are checking if the
+                // key exists AND is null.
+                $ret[$val] = array(
+                    'attach' => true,
+                    'data' => '',
+                    'status' => array(),
+                    'type' => 'application/octet-stream'
+                );
             }
         }
 

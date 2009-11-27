@@ -15,9 +15,9 @@ class Babel {
 	/* Check if an hooks file exist */
 	if (file_exists(BABEL_BASE . '/config/hooks.php')) {
 	    include_once BABEL_BASE . '/config/hooks.php';
-	    
+
 	    $func = '_babel_hook_' . $fname;
-	    
+
 	    if (function_exists($func)) {
 		$res = call_user_func($func, $info);
 	    } else {
@@ -27,47 +27,47 @@ class Babel {
 	    Translate_Display::warning(_("Hook file doesn't exist"));
 	}
     }
-    
+
     function displayLanguage() {
-	global $nls, $lang, $app;
-	
-	if (!isset($nls['languages'][$lang])) {
+	global $lang, $app;
+
+	if (!isset(Horde_Nls::$config['languages'][$lang])) {
 	    return;
 	}
-	
-	$res = sprintf(_("Language: %s (%s)"), $nls['languages'][$lang], $lang);
+
+	$res = sprintf(_("Language: %s (%s)"), Horde_Nls::$config['languages'][$lang], $lang);
 	if ($app) {
 	    $res .= '&nbsp; | &nbsp; ' . sprintf(_("Module: %s"), $app);
 	}
-	
+
 	return $res;
     }
 
-    
+
     function ModuleSelection() {
 	$html = '';
 	$html .= '<span style="float:right">';
 	$html .= '<form action="' . Horde::selfUrl() . '" method="post" name="moduleSelector">';
 	$html .= '<select name="module" onchange="moduleSubmit()">';
-	
+
 	$apps = array('ALL' => _("All Applications")) +  Babel::listApps();
-	
+
 	foreach($apps as $app => $desc) {
 	    if (!Babel::hasPermission("module:$app")) {
 		continue;
 	    }
-	    
-	    if (Util::getFormData('module') == $app) {
+
+	    if (Horde_Util::getFormData('module') == $app) {
 		$html .= '<option class="control" value="' . $app . '" selected>' .  '+ ' . $desc;
 	    } else {
 		$html .= '<option value="' . $app . '">' . '&#8211; ' . $desc;
 	    }
 	}
-	
+
 	$html .= '</select>';
 	$html .= '</form>';
 	$html .= '</span>';
-	
+
 	$html .= '<script language="JavaScript" type="text/javascript">' . "\n";
 	$html .= '<!--' . "\n";
 	$html .= 'var loading;' . "\n";
@@ -80,39 +80,39 @@ class Babel {
 	$html .= '</script>' . "\n";
 	return $html;
     }
-    
+
     function LanguageSelection() {
-	global $nls, $app;
-	
+	global $app;
+
 	$html = '';
 	$html .= '<span style="float:right">';
 	$html .= '<form action="' . Horde::selfUrl() . '" method="post" name="languageSelector">';
 	$html .= '&nbsp;';
 	$html .= '<input type="hidden" name="module" value="' . $app . '">';
 	$html .= '<select name="display_language" onchange="languageSubmit()">';
-	
-	$tests =  $nls['languages'];
-	
+
+	$tests =  Horde_Nls::$config['languages'];
+
 	// Unset English
 	unset($tests['en_US']);
-	
+
 	foreach($tests as $dir => $desc) {
 	    if (!Babel::hasPermission("language:$dir")) {
 		continue;
 	    }
-	    
+
 	    if (isset($_SESSION['babel']['language']) && $dir == $_SESSION['babel']['language']) {
 		$html .= '<option class="control" value="' . $dir . '" selected>' .  '+ ' . $desc;
 	    } else {
 		$html .= '<option value="' . $dir . '">' . '&#8211; ' . $desc;
 	    }
 	}
-	
+
 	$html .= '</select>';
 	$html .= '&nbsp;';
 	$html .= '</form>';
 	$html .= '</span>';
-	
+
 	$html .= '<script language="JavaScript" type="text/javascript">' . "\n";
 	$html .= '<!--' . "\n";
 	$html .= 'var loading;' . "\n";
@@ -125,36 +125,36 @@ class Babel {
 	$html .= '</script>' . "\n";
 	return $html;
     }
-    
+
     function listApps($all = false) {
 	global $registry;
 
 	$res = array();
-	
+
 	if ($all) {
 	    $res['ALL'] = _("All Applications");
 	}
-	
+
 	foreach ($registry->applications as $app => $params) {
 	    if ($params['status'] == 'heading' || $params['status'] == 'block') {
 		continue;
 	    }
-	    
+
 	    if (isset($params['fileroot']) && !is_dir($params['fileroot'])) {
 		continue;
 	    }
-	    
+
 	    if (preg_match('/_reports$/', $app) || preg_match('/_tools$/', $app)) {
 		continue;
 	    }
-	    
+
 	    if (Babel::hasPermission("module:$app")) {
 		$res[$app] = sprintf("%s (%s)", $params['name'], $app);
 	    }
 	}
 	return $res;
     }
-      
+
     /**
      * Returns the value of the specified permission for $userId.
      *
@@ -163,20 +163,20 @@ class Babel {
     function hasPermission($permission, $filter = null, $perm = null)
     {
 	global $perms;
-	
-	$userId = Auth::getAuth();
+
+	$userId = Horde_Auth::getAuth();
 	$admin = ($userId == 'admin') ? true : false;
-	
+
 	if ($admin || !$perms->exists('babel:' . $permission)) {
 	    return true;
 	}
-	
+
 	$allowed = $perms->getPermissions('babel:' . $permission);
-	
+
 	switch ($filter) {
 	 case 'tabs':
 	    if ($perm) {
-		$allowed  = $perms->hasPermission('babel:' . $permission, Auth::getAuth(), $perm);
+		$allowed  = $perms->hasPermission('babel:' . $permission, Horde_Auth::getAuth(), $perm);
 	    }
 	    break;
 	}
@@ -186,73 +186,68 @@ class Babel {
     /**
      * Get the module main Menu.
      **/
-    function getMenu($returnType = 'object')
+    function getMenu()
     {
         global $registry;
 
-	require_once 'Horde/Menu.php';
-	$menu = &new Menu();
-	
+        $menu = new Horde_Menu();
+
         $menu->addArray(array('url' => Horde::applicationUrl('index.php'),
-			      'text' => _("_General"),
-			      'icon' => 'list.png'));
+            'text' => _("_General"),
+            'icon' => 'list.png'));
 
-	if (Babel::hasPermission('view')) {
-	    $menu->addArray(array('url' => Horde::applicationUrl('view.php'),
-				  'text' => _("_View"),
-				  'icon' => 'view.png'));
-	}
-	
-	if (Babel::hasPermission('stats')) {
-	    $menu->addArray(array('url' => Horde::applicationUrl('stats.php'),
-				  'text' => _("_Stats"),
-				  'icon' => 'extract.png'));
-	}
-	
-	if (Babel::hasPermission('extract')) {
-	    $menu->addArray(array('url' => Horde::applicationUrl('extract.php'),
-				  'text' => _("_Extract"),
-				  'icon' => 'extract.png'));
-	}
-	
-	if (Babel::hasPermission('make')) {
-	    $menu->addArray(array('url' => Horde::applicationUrl('make.php'),
-				  'text' => _("_Make"),
-				  'icon' => 'make.png'));
-	}
+        if (Babel::hasPermission('view')) {
+            $menu->addArray(array('url' => Horde::applicationUrl('view.php'),
+                'text' => _("_View"),
+                'icon' => 'view.png'));
+        }
 
-	if (Babel::hasPermission('upload')) {
-	    $menu->addArray(array('url' => Horde::applicationUrl('upload.php'),
-				  'text' => _("_Upload"),
-				  'icon' => 'upload.png'));
-	}
-	if ($returnType == 'object') {
-	    return $menu;
-	} else {
-	    return $menu->render();
-	}
+        if (Babel::hasPermission('stats')) {
+            $menu->addArray(array('url' => Horde::applicationUrl('stats.php'),
+                'text' => _("_Stats"),
+                'icon' => 'extract.png'));
+        }
+
+        if (Babel::hasPermission('extract')) {
+            $menu->addArray(array('url' => Horde::applicationUrl('extract.php'),
+                'text' => _("_Extract"),
+                'icon' => 'extract.png'));
+        }
+
+        if (Babel::hasPermission('make')) {
+            $menu->addArray(array('url' => Horde::applicationUrl('make.php'),
+                'text' => _("_Make"),
+                'icon' => 'make.png'));
+        }
+
+        if (Babel::hasPermission('upload')) {
+            $menu->addArray(array('url' => Horde::applicationUrl('upload.php'),
+                'text' => _("_Upload"),
+                'icon' => 'upload.png'));
+        }
+
+        return $menu;
     }
-
 
     /**
      * Send an Email.
      **/
     function sendEmail($email, $type = 'html', $attachments = array()) {
 	global $client, $scopserv;
-	
+
 	include_once("Mail.php");
 	include_once("Mail/mime.php");
 
 	$headers["From"]    = $email['from'];
 	$headers["Subject"] = $email['subject'];
-	
+
 	$mime = new Mail_Mime();
 	if ($type == 'html') {
 	    $mime->setHtmlBody($email['content']);
 	} else {
 	    $mime->setTxtBody($email['content']);
 	}
-	
+
 	if (!empty($attachments)) {
 	    foreach ($attachments as $info) {
 		$mime->addAttachment($info['file'],
@@ -260,23 +255,22 @@ class Babel {
 				     $info['name'], false);
 	    }
 	}
-	
+
 	$body = $mime->get();
 	$hdrs = $mime->headers($headers);
-	
+
 	$mail_object = &Mail::factory("mail");
 	return $mail_object->send($email['to'], $hdrs, $body);
     }
 
 
     function RB_init() {
-	Horde::addScriptFile('prototype.js', 'horde', true);
-	Horde::addScriptFile('effects.js', 'horde', true);
-	Horde::addScriptFile('redbox.js', 'horde', true);
+	Horde::addScriptFile('effects.js', 'horde');
+	Horde::addScriptFile('redbox.js', 'horde');
     }
-    
+
     function RB_start($secs = 30) {
-	
+
 	$msg = '';
 	$msg .= '<table width=100% id="RB_confirm"><tr><td>';
 	$msg .= '<b>' . _("Please be patient ...") . '</b>';
@@ -292,9 +286,9 @@ class Babel {
 		$msg .= addslashes(sprintf(_("Can take up to %d minutes !"), $min));
 	    }
 	}
-	
+
 	$msg .= '</td><td><img src="themes/graphics/redbox_spinner.gif">';
-	
+
 	$msg .= '</td></tr></table>';
 	echo '<script>';
 	echo 'RedBox.loading();';
@@ -308,5 +302,5 @@ class Babel {
 	echo 'RedBox.close();';
 	echo '</script>';
     }
-    
+
 }

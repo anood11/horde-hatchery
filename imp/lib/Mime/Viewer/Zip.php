@@ -23,10 +23,11 @@ class IMP_Horde_Mime_Viewer_Zip extends Horde_Mime_Viewer_Zip
      * </pre>
      *
      * @return array  See Horde_Mime_Viewer_Driver::render().
+     * @throws Horde_Exception
      */
     protected function _render()
     {
-        if (!Util::getFormData('zip_attachment')) {
+        if (!Horde_Util::getFormData('zip_attachment')) {
             $this->_callback = array(&$this, '_IMPcallback');
             return parent::_render();
         }
@@ -34,13 +35,13 @@ class IMP_Horde_Mime_Viewer_Zip extends Horde_Mime_Viewer_Zip
         /* Send the requested file. Its position in the zip archive is located
          * in 'zip_attachment'. */
         $data = $this->_mimepart->getContents();
-        $zip = &Horde_Compress::singleton('zip');
-        $fileKey = Util::getFormData('zip_attachment') - 1;
-        $zipInfo = $zip->decompress($data, array('action' => HORDE_COMPRESS_ZIP_LIST));
+        $zip = Horde_Compress::factory('zip');
+        $fileKey = Horde_Util::getFormData('zip_attachment') - 1;
+        $zipInfo = $zip->decompress($data, array('action' => Horde_Compress_Zip::ZIP_LIST));
 
         /* Verify that the requested file exists. */
         if (isset($zipInfo[$fileKey])) {
-            $text = $zip->decompress($data, array('action' => HORDE_COMPRESS_ZIP_DATA, 'info' => &$zipInfo, 'key' => $fileKey));
+            $text = $zip->decompress($data, array('action' => Horde_Compress_Zip::ZIP_DATA, 'info' => $zipInfo, 'key' => $fileKey));
             if (!empty($text)) {
                 return array(
                     $this->_mimepart->getMimeId() => array(
@@ -81,7 +82,7 @@ class IMP_Horde_Mime_Viewer_Zip extends Horde_Mime_Viewer_Zip
         $name = preg_replace('/(&nbsp;)+$/', '', $val['name']);
 
         if (!empty($val['size']) && (strstr($val['attr'], 'D') === false) &&
-            ((($val['method'] == 0x8) && Util::extensionExists('zlib')) ||
+            ((($val['method'] == 0x8) && Horde_Util::extensionExists('zlib')) ||
              ($val['method'] == 0x0))) {
             $mime_part = $this->_mimepart;
             $mime_part->setName(basename($name));

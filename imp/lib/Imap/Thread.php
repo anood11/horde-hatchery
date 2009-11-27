@@ -1,7 +1,7 @@
 <?php
 /**
- * The IMP_Imap_Thread class provides functions to generate thread tree
- * images.
+ * The IMP_Imap_Thread class provides functions to manipulate threaded sorts
+ * of messages.
  *
  * Copyright 2005-2009 The Horde Project (http://www.horde.org/)
  *
@@ -126,9 +126,61 @@ class IMP_Imap_Thread
         foreach ($this->getThreadTreeOb($indices, $sortdir) as $k => $v) {
             $tree[$k] = '';
             for ($i = 0, $length = strlen($v); $i < $length; ++$i) {
-                $tree[$k] .= '<span class="threadImg threadImg' . $v[$i] . '"></span>';
+                $tree[$k] .= '<span class="treeImg treeImg' . $v[$i] . '"></span>';
             }
         }
+        return $tree;
+    }
+
+    /**
+     * Generate the thread representation text for the given index list.
+     *
+     * @param array $indices    The list of indices to create a tree for.
+     * @param boolean $sortdir  True for newest first, false for oldest first.
+     *
+     * @return array  An array with the index as the key and the thread image
+     *                representation as the value.
+     */
+    public function getThreadTextTree($indices, $sortdir)
+    {
+        $tree = array();
+
+        foreach ($this->getThreadTreeOb($indices, $sortdir) as $k => $v) {
+            $tmp = '';
+
+            if (!empty($v)) {
+                foreach (str_split($v) as $c) {
+                    switch (intval($c)) {
+                    case 0:
+                        $tmp .= '  ';
+                        break;
+
+                    case '1':
+                        $tmp .= '| ';
+                        break;
+
+                    case '2':
+                        $tmp .= '|-';
+                        break;
+
+                    case '3':
+                        $tmp .= '/-';
+                        break;
+
+                    case '4':
+                        $tmp .= '\-';
+                        break;
+
+                    case '5':
+                        // TODO
+                        break;
+                    }
+                }
+            }
+
+            $tree[$k] = $tmp;
+        }
+
         return $tree;
     }
 

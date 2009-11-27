@@ -47,7 +47,7 @@ class Kronolith_Driver_Ical extends Kronolith_Driver
      *                                   $startDate - $endDate range.
      * @param boolean $hasAlarm          Only return events with alarms?
      * @param boolean $json              Store the results of the events'
-     *                                   toJSON() method?
+     *                                   toJson() method?
      *
      * @return array  Events in the given time range.
      */
@@ -58,6 +58,17 @@ class Kronolith_Driver_Ical extends Kronolith_Driver
         $iCal = $this->_getRemoteCalendar();
         if (is_a($iCal, 'PEAR_Error')) {
             return $iCal;
+        }
+
+        if (is_null($startDate)) {
+            $startDate = new Horde_Date(array('mday' => 1,
+                                              'month' => 1,
+                                              'year' => 0000));
+        }
+        if (is_null($endDate)) {
+            $endDate = new Horde_Date(array('mday' => 31,
+                                            'month' => 12,
+                                            'year' => 9999));
         }
 
         $startDate = clone $startDate;
@@ -77,7 +88,8 @@ class Kronolith_Driver_Ical extends Kronolith_Driver
                 $event->status = Kronolith::STATUS_FREE;
                 $event->fromiCalendar($component);
                 $event->remoteCal = $this->_calendar;
-                $event->eventID = $i;
+                // Force string so JSON encoding is consistent across drivers.
+                $event->eventID = 'ical' . $i;
 
                 /* Catch RECURRENCE-ID attributes which mark single recurrence
                  * instances. */
@@ -125,6 +137,10 @@ class Kronolith_Driver_Ical extends Kronolith_Driver
 
     public function getEvent($eventId = null)
     {
+        if (!$eventId) {
+            return new Kronolith_Event_Ical($this);
+        }
+        $eventId = str_replace('ical', '', $eventId);
         $iCal = $this->_getRemoteCalendar();
         if (is_a($iCal, 'PEAR_Error')) {
             return $iCal;
@@ -196,7 +212,7 @@ class Kronolith_Driver_Ical extends Kronolith_Driver
 
         /* Log fetch at DEBUG level. */
         Horde::logMessage(sprintf('Retrieved remote calendar for %s: url = "%s"',
-                                  Auth::getAuth(), $url),
+                                  Horde_Auth::getAuth(), $url),
                           __FILE__, __LINE__, PEAR_LOG_DEBUG);
 
         $data = $http->getResponseBody();

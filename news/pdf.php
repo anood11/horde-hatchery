@@ -16,7 +16,7 @@
 $no_compress = true;
 require_once dirname(__FILE__) . '/lib/base.php';
 
-$id = Util::getFormData('id');
+$id = Horde_Util::getFormData('id');
 $row = $news->get($id);
 
 // Check if the news exists
@@ -42,8 +42,10 @@ if ($row['picture']) {
     $file = $conf['vfs']['params']['vfsroot'] . '/'
             . News::VFS_PATH . '/images/news/big/'
             . $id . '.' . $conf['images']['image_type'];
-    if (file_exists($file)) {
+    try {
         $pdf->image($file, 120, 20);
+    } catch (Horde_Pdf_Exception $e) {
+        Horde::logMessage($e, __FILE__, __LINE__, PEAR_LOG_INFO);
     }
 }
 
@@ -53,7 +55,7 @@ $pdf->newLine(4);
 
 $pdf->write(12, _("On") . ': ' . News::dateFormat($row['publish']) . "\n");
 $pdf->write(12, _("Link") . ': ' . News::getUrlFor('news', $id, true) . "\n\n", News::getUrlFor('news', $id, true));
-$pdf->multiCell(0, 12, String::convertCharset(strip_tags($row['content']), NLS::getCharset(), 'UTF-8'));
+$pdf->multiCell(0, 12, Horde_String::convertCharset(strip_tags($row['content']), Horde_Nls::getCharset(), 'UTF-8'));
 
 $browser->downloadHeaders($id . '.pdf', 'application/pdf');
 echo $pdf->getOutput();

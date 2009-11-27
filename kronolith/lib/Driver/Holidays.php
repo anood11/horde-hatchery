@@ -33,7 +33,7 @@ class Kronolith_Driver_Holidays extends Kronolith_Driver
      * @param boolean $hasAlarm          Only return events with alarms? Has no
      *                                   effect in this driver.
      * @param boolean $json              Store the results of the events'
-     *                                   toJSON() method?
+     *                                   toJson() method?
      *
      * @return array  Events in the given time range.
      */
@@ -45,6 +45,15 @@ class Kronolith_Driver_Holidays extends Kronolith_Driver
             Horde::logMessage('Support for Date_Holidays has been enabled but the package seems to be missing.',
                               __FILE__, __LINE__, PEAR_LOG_ERR);
             return array();
+        }
+
+        if (is_null($startDate) && !is_null($endDate)) {
+            $startDate = clone $endDate;
+            $startDate->year--;
+        }
+        if (is_null($endDate) && !is_null($startDate)) {
+            $endDate = clone $startDate;
+            $endDate->year++;
         }
         if ($hasAlarm || is_null($startDate) || is_null($endDate)) {
             return array();
@@ -78,6 +87,33 @@ class Kronolith_Driver_Holidays extends Kronolith_Driver
         return $results;
     }
 
+    public function getEvent($eventId = null)
+    {
+        if (!$eventId) {
+            $date = new Date();
+            return new Kronolith_Event_Holidays($this, new Date_Holidays_Holiday(null, null, $date, null));
+        }
+
+        list($id, $date) = explode('-', $eventId, 2);
+        $year = substr($date, 0, 4);
+
+        $dh = Date_Holidays::factory($this->_calendar, $year, $this->_params['language']);
+        if (Date_Holidays::isError($dh)) {
+            Horde::logMessage(sprintf('Factory was unable to produce driver object for driver %s in year %s with locale %s',
+                                      $this->_calendar, $year, $this->_params['language']),
+                              __FILE__, __LINE__, PEAR_LOG_ERR);
+            return false;
+        }
+        $dh->addTranslation($this->_params['language']);
+
+        $event = $dh->getHoliday($id);
+        if (is_a($event, 'PEAR_Error')) {
+            return $event;
+        }
+
+        return new Kronolith_Event_Holidays($this, $event);
+    }
+
     private function _getEvents($dh, $startDate, $endDate)
     {
         $events = array();
@@ -96,8 +132,7 @@ class Kronolith_Driver_Holidays extends Kronolith_Driver
             }
 
             foreach ($holidays as $holiday) {
-                $event = new Kronolith_Event_Holidays($this);
-                $event->fromDriver($holiday);
+                $event = new Kronolith_Event_Holidays($this, $holiday);
                 $events[] = $event;
             }
         }

@@ -2,26 +2,20 @@
 <?php
 /**
  * This script converts all dates from the user's timezone to UTC.
- *
- * $Horde: kronolith/scripts/upgrades/convert_to_utc.php,v 1.2 2008/10/23 10:18:10 jan Exp $
  */
 
-@define('AUTH_HANDLER', true);
-@define('HORDE_BASE', dirname(__FILE__) . '/../../..');
-
 /* Set up the CLI environment. */
+require_once dirname(__FILE__) . '/../../lib/base.load.php';
 require_once HORDE_BASE . '/lib/core.php';
-require_once 'Horde/CLI.php';
-if (!Horde_CLI::runningFromCLI()) {
+if (!Horde_Cli::runningFromCLI()) {
     exit("Must be run from the command line\n");
 }
-$cli = &Horde_CLI::singleton();
+$cli = Horde_Cli::singleton();
 $cli->init();
 
 /* Load required libraries. */
-require_once dirname(__FILE__) . '/../../lib/base.php';
-require_once 'DB.php';
-require_once 'Horde/Prefs.php';
+$kronolith_authentication = 'none';
+require_once KRONOLITH_BASE . '/../../lib/base.php';
 
 /* Prepare DB stuff. */
 PEAR::staticPushErrorHandling(PEAR_ERROR_DIE);
@@ -49,8 +43,8 @@ while ($row = $result->fetchRow(DB_FETCHMODE_ASSOC)) {
         if (!is_null($creator)) {
             echo "$count\n";
         }
-        $prefs = Prefs::factory($conf['prefs']['driver'], 'horde',
-                                $row['event_creator_id']);
+        $prefs = Horde_Prefs::factory($conf['prefs']['driver'], 'horde',
+                                      $row['event_creator_id']);
         $timezone = $prefs->getValue('timezone');
         if (empty($timezone)) {
             $timezone = date_default_timezone_get();

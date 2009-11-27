@@ -12,7 +12,7 @@
 
 require_once dirname(__FILE__) . '/tabs.php';
 
-$vars = Variables::getDefaultVariables();
+$vars = Horde_Variables::getDefaultVariables();
 
 $title = _("Forgot your username?");
 $form = new Horde_Form($vars, $title);
@@ -41,8 +41,7 @@ if ($form->validate()) {
         Folks::sendMail($info['email'], _("Your username was requested"), $body);
 
         $notification->push(sprintf(_("Your username was sent, check your email (%s)."), $users['user_email']), 'horde.success');
-        header('Location: ' . Auth::getLoginScreen('', $info['url']));
-        exit;
+        Horde_Auth::authenticateFailure('folks');
     }
 }
 

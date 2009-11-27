@@ -6,8 +6,6 @@
  * The first argument must be a DSN to the database containing the calendar
  * and event tables, e.g.: "mysql://root:password@localhost/squirrelmail".
  *
- * $Horde: kronolith/scripts/import_squirrelmail_calendar.php,v 1.3 2009/01/06 18:01:04 jan Exp $
- *
  * Copyright 2008-2009 The Horde Project (http://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (GPL). If you
@@ -16,22 +14,17 @@
  * @author Jan Schneider <jan@horde.org>
  */
 
-@define('AUTH_HANDLER', true);
-@define('HORDE_BASE', dirname(__FILE__) . '/../..');
-@define('KRONOLITH_BASE', dirname(__FILE__) . '/..');
-
 // Do CLI checks and environment setup first.
-require_once HORDE_BASE . '/lib/core.php';
-require_once 'Horde/CLI.php';
+require_once dirname(__FILE__) . '/../../lib/core.php';
 
 // Makre sure no one runs this from the web.
-if (!Horde_CLI::runningFromCli()) {
+if (!Horde_Cli::runningFromCli()) {
     exit("Must be run from the command line\n");
 }
 
 // Load the CLI environment - make sure there's no time limit, init some
 // variables, etc.
-$cli = &Horde_CLI::singleton();
+$cli = Horde_Cli::singleton();
 $cli->init();
 
 // Read command line parameters.
@@ -44,20 +37,19 @@ $dsn = $argv[1];
 $default_tz = date_default_timezone_get();
 
 // Make sure we load Horde base to get the auth config
+$horde_authentication = 'none';
 require_once HORDE_BASE . '/lib/base.php';
 if ($conf['auth']['admins']) {
-    $auth = Auth::singleton($conf['auth']['driver']);
-    $auth->setAuth($conf['auth']['admins'][0], array());
+    Horde_Auth::setAuth($conf['auth']['admins'][0], array());
 }
 
 // Now that we are authenticated, we can load Kronolith's base. Otherwise, the
 // share code breaks, causing a new, completely empty share to be created with
 // no owner.
-require_once KRONOLITH_BASE . '/lib/base.php';
-require_once 'Horde/iCalendar.php';
+require_once dirname(__FILE__) . '/../lib/base.php';
 
 // Connect to database.
-$db = &DB::connect($dsn);
+$db = DB::connect($dsn);
 if (is_a($db, 'PEAR_Error')) {
     $cli->fatal($db->toString());
 }
@@ -69,10 +61,9 @@ $handle = $db->query('SELECT id, name, owner_name FROM calendars, calendar_owner
 if (is_a($handle, 'PEAR_Error')) {
     $cli->fatal($handle->toString());
 }
-$auth = &Auth::singleton($conf['auth']['driver']);
 while ($row = $handle->fetchRow(DB_FETCHMODE_ASSOC)) {
     $user = $row['owner_name'];
-    $auth->setAuth($user, array());
+    Horde_Auth::setAuth($user, array());
     $cli->message('Creating calendar ' . $row['name']);
     $share = $kronolith_shares->newShare($row['id']);
     $share->set('name', $row['name']);
@@ -85,7 +76,7 @@ while ($row = $handle->fetchRow(DB_FETCHMODE_ASSOC)) {
         $cli->fatal($result->toString());
     }
     while ($perm_row = $result->fetchRow()) {
-        $permissions[$perm_row[0]] = PERMS_READ | PERMS_SHOW;
+        $permissions[$perm_row[0]] = Horde_Perms::READ | Horde_Perms::SHOW;
     }
     $result = $db->execute($write_stmt, array($row['id']));
     if (is_a($result, 'PEAR_Error')) {
@@ -93,14 +84,14 @@ while ($row = $handle->fetchRow(DB_FETCHMODE_ASSOC)) {
     }
     while ($perm_row = $result->fetchRow()) {
         if (isset($permissions[$perm_row[0]])) {
-            $permissions[$perm_row[0]] |= PERMS_EDIT;
+            $permissions[$perm_row[0]] |= Horde_Perms::EDIT;
         } else {
-            $permissions[$perm_row[0]] = PERMS_EDIT;
+            $permissions[$perm_row[0]] = Horde_Perms::EDIT;
         }
     }
     if (count($permissions)) {
         $perm = $share->getPermission();
-        $perm->addUserPermission($user, PERMS_ALL, false);
+        $perm->addUserPermission($user, Horde_Perms::ALL, false);
         foreach ($permissions as $key => $value) {
             $perm->addUserPermission($key, $value, false);
         }
@@ -113,7 +104,6 @@ $handle = $db->query('SELECT event_id, calendar_id, ical_raw, owner_name, prefva
 if (is_a($handle, 'PEAR_Error')) {
     $cli->fatal($handle->toString());
 }
-$auth = &Auth::singleton($conf['auth']['driver']);
 $ical = new Horde_iCalendar();
 $tz = $calendar = $user = $count = null;
 while ($row = $handle->fetchRow(DB_FETCHMODE_ASSOC)) {
@@ -135,26 +125,26 @@ while ($row = $handle->fetchRow(DB_FETCHMODE_ASSOC)) {
     // Set user.
     if ($user != $row['owner_name']) {
         $user = $row['owner_name'];
-        $auth->setAuth($user, array());
+        Horde_Auth::setAuth($user, array());
     }
-    // Parse event.                                                            
-    $parsed = $ical->parsevCalendar($row['ical_raw']);                         
-    if (is_a($parsed, 'PEAR_Error')) {                                         
-        $cli->message('  ' . $parsed->getMessage(), 'cli.warning');            
-        continue;                                                              
-    }                                                                          
-    $components = $ical->getComponents();                                      
-    if (!count($components)) {                                                 
-        $cli->message('  No iCalendar data was found.', 'cli.warning');        
-        continue;                                                              
-    }                                                                          
-                                                                               
-    // Save event.                                                             
-    $event = &$kronolith_driver->getEvent();                                   
-    $event->fromiCalendar($components[0]);                                     
-    $result = $event->save();                                                  
-    if (is_a($result, 'PEAR_Error')) {                                         
-        $cli->message('  ' . $result->getMessage(), 'cli.error');              
+    // Parse event.
+    $parsed = $ical->parsevCalendar($row['ical_raw']);
+    if (is_a($parsed, 'PEAR_Error')) {
+        $cli->message('  ' . $parsed->getMessage(), 'cli.warning');
+        continue;
+    }
+    $components = $ical->getComponents();
+    if (!count($components)) {
+        $cli->message('  No iCalendar data was found.', 'cli.warning');
+        continue;
+    }
+
+    // Save event.
+    $event = &$kronolith_driver->getEvent();
+    $event->fromiCalendar($components[0]);
+    $result = $event->save();
+    if (is_a($result, 'PEAR_Error')) {
+        $cli->message('  ' . $result->getMessage(), 'cli.error');
         continue;
     }
     $count++;

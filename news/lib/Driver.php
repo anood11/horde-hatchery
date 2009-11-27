@@ -30,8 +30,8 @@ class News_Driver {
      * @param array $params   A hash containing any additional configuration
      *                        or connection parameters a subclass might need.
      *
-     * @return News_Driver  The newly created concrete News_Driver
-     *                          instance, or false on an error.
+     * @return News_Driver  The newly created concrete News_Driver.
+     * @throws Horde_Exception
      */
     static function factory($driver = 'sql', $params = array())
     {
@@ -39,7 +39,7 @@ class News_Driver {
         require_once NEWS_BASE . '/lib/Driver/' . $driver . '.php';
 
         if (!class_exists($class_name)) {
-            Horde::fatal('DRIVER MISSING', __FILE__, __LINE__);
+            throw new Horde_Exception('DRIVER MISSING');
         }
 
         return new $class_name($params);
@@ -55,7 +55,7 @@ class News_Driver {
     public function get($id)
     {
         // Admins bypass the cache (can read nonpublished and locked news)
-        if (!Auth::isAdmin('news:admin')) {
+        if (!Horde_Auth::isAdmin('news:admin')) {
             $key = 'news_'  . News::getLang() . '_' . $id;
             $data = $GLOBALS['cache']->get($key, $GLOBALS['conf']['cache']['default_lifetime']);
             if ($data) {
@@ -68,7 +68,7 @@ class News_Driver {
             return $data;
         }
 
-        if (!Auth::isAdmin('news:admin')) {
+        if (!Horde_Auth::isAdmin('news:admin')) {
             $GLOBALS['cache']->set($key, serialize($data));
         }
 

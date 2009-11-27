@@ -16,8 +16,7 @@ function _cleanup()
     return Horde_Data::IMPORT_FILE;
 }
 
-@define('KRONOLITH_BASE', dirname(__FILE__));
-require_once KRONOLITH_BASE . '/lib/base.php';
+require_once dirname(__FILE__) . '/lib/base.php';
 
 if (!$conf['menu']['import_export']) {
     require KRONOLITH_BASE . '/index.php';
@@ -34,11 +33,12 @@ $templates = array(
     Horde_Data::IMPORT_MAPPED => array($registry->get('templates', 'horde') . '/data/csvmap.inc'),
     Horde_Data::IMPORT_DATETIME => array($registry->get('templates', 'horde') . '/data/datemap.inc')
 );
-if (Kronolith::hasPermission('max_events') !== true &&
-    Kronolith::hasPermission('max_events') <= Kronolith::countEvents()) {
-    $message = @htmlspecialchars(sprintf(_("You are not allowed to create more than %d events."), Kronolith::hasPermission('max_events')), ENT_COMPAT, NLS::getCharset());
-    if (!empty($conf['hooks']['permsdenied'])) {
-        $message = Horde::callHook('_perms_hook_denied', array('kronolith:max_events'), 'horde', $message);
+if ($GLOBALS['perms']->hasAppPermission('max_events') !== true &&
+    $GLOBALS['perms']->hasAppPermission('max_events') <= Kronolith::countEvents()) {
+    try {
+        $message = Horde::callHook('perms_denied', array('kronolith:max_events'));
+    } catch (Horde_Exception_HookNotSet $e) {
+        $message = @htmlspecialchars(sprintf(_("You are not allowed to create more than %d events."), $GLOBALS['perms']->hasAppPermission('max_events')), ENT_COMPAT, Horde_Nls::getCharset());
     }
     $notification->push($message, 'horde.warning', array('content.raw'));
     $templates[Horde_Data::IMPORT_FILE] = array(KRONOLITH_TEMPLATES . '/data/export.inc');
@@ -47,8 +47,8 @@ if (Kronolith::hasPermission('max_events') !== true &&
 }
 
 /* Initial values. */
-$import_step   = Util::getFormData('import_step', 0) + 1;
-$actionID      = Util::getFormData('actionID');
+$import_step   = Horde_Util::getFormData('import_step', 0) + 1;
+$actionID      = Horde_Util::getFormData('actionID');
 $next_step     = Horde_Data::IMPORT_FILE;
 $app_fields    = array('title' => _("Title"),
                        'start_date' => _("Start Date"),
@@ -71,27 +71,27 @@ $time_fields   = array('start_date'     => 'date',
                        'recur_end_date' => 'date');
 $param         = array('time_fields' => $time_fields,
                        'file_types'  => $file_types);
-$import_format = Util::getFormData('import_format', '');
+$import_format = Horde_Util::getFormData('import_format', '');
 $error         = false;
 $kronolith_driver = Kronolith::getDriver();
 
 /* Loop through the action handlers. */
 switch ($actionID) {
 case 'export':
-    if (Util::getFormData('all_events')) {
+    if (Horde_Util::getFormData('all_events')) {
         $start = null;
         $end = null;
     } else {
-        $start->mday = Util::getFormData('start_day');
-        $start->month = Util::getFormData('start_month');
-        $start->year = Util::getFormData('start_year');
-        $end->mday = Util::getFormData('end_day');
-        $end->month = Util::getFormData('end_month');
-        $end->year = Util::getFormData('end_year');
+        $start->mday = Horde_Util::getFormData('start_day');
+        $start->month = Horde_Util::getFormData('start_month');
+        $start->year = Horde_Util::getFormData('start_year');
+        $end->mday = Horde_Util::getFormData('end_day');
+        $end->month = Horde_Util::getFormData('end_month');
+        $end->year = Horde_Util::getFormData('end_year');
     }
 
     $events = array();
-    $calendars = Util::getFormData('exportCal', $display_calendars);
+    $calendars = Horde_Util::getFormData('exportCal', $display_calendars);
     if (!is_array($calendars)) {
         $calendars = array($calendars);
     }
@@ -108,7 +108,7 @@ case 'export':
         break;
     }
 
-    $exportID = Util::getFormData('exportID');
+    $exportID = Horde_Util::getFormData('exportID');
     switch ($exportID) {
     case Horde_Data::EXPORT_CSV:
         $data = array();
@@ -149,7 +149,6 @@ case 'export':
         exit;
 
     case Horde_Data::EXPORT_ICALENDAR:
-        require_once 'Horde/Identity.php';
         $iCal = new Horde_iCalendar();
 
         $calNames = array();
@@ -169,7 +168,7 @@ case 'export':
             }
         }
 
-        $iCal->setAttribute('X-WR-CALNAME', String::convertCharset(implode(', ', $calNames), NLS::getCharset(), 'utf-8'));
+        $iCal->setAttribute('X-WR-CALNAME', Horde_String::convertCharset(implode(', ', $calNames), Horde_Nls::getCharset(), 'utf-8'));
         $data = $iCal->exportvCalendar();
         $browser->downloadHeaders(_("events.ics"), 'text/calendar', false, strlen($data));
         echo $data;
@@ -178,8 +177,8 @@ case 'export':
     break;
 
 case Horde_Data::IMPORT_FILE:
-    $_SESSION['import_data']['import_cal'] = Util::getFormData('importCal');
-    $_SESSION['import_data']['purge'] = Util::getFormData('purge');
+    $_SESSION['import_data']['import_cal'] = Horde_Util::getFormData('importCal');
+    $_SESSION['import_data']['purge'] = Horde_Util::getFormData('purge');
     break;
 }
 
@@ -194,7 +193,7 @@ if (!$error) {
             if (is_a($share, 'PEAR_Error')) {
                 $notification->push(_("You have specified an invalid calendar."), 'horde.error');
                 $next_step = $data->cleanup();
-            } elseif (!$share->hasPermission(Auth::getAuth(), PERMS_EDIT)) {
+            } elseif (!$share->hasPermission(Horde_Auth::getAuth(), Horde_Perms::EDIT)) {
                 $notification->push(_("You do not have permission to add events to the selected calendar."), 'horde.error');
                 $next_step = $data->cleanup();
             } else {
@@ -218,7 +217,7 @@ if (!$error) {
 if (is_array($next_step)) {
     $events = array();
     $error = false;
-    $max_events = Kronolith::hasPermission('max_events');
+    $max_events = $GLOBALS['perms']->hasAppPermission('max_events');
     if ($max_events !== true) {
         $num_events = Kronolith::countEvents();
     }
@@ -242,9 +241,10 @@ if (is_array($next_step)) {
 
     foreach ($next_step as $row) {
         if ($max_events !== true && $num_events >= $max_events) {
-            $message = @htmlspecialchars(sprintf(_("You are not allowed to create more than %d events."), Kronolith::hasPermission('max_events')), ENT_COMPAT, NLS::getCharset());
-            if (!empty($conf['hooks']['permsdenied'])) {
-                $message = Horde::callHook('_perms_hook_denied', array('kronolith:max_events'), 'horde', $message);
+            try {
+                $message = Horde::callHook('perms_denied', array('kronolith:max_events'));
+            } catch (Horde_Exception_HookNotSet $e) {
+                $message = @htmlspecialchars(sprintf(_("You are not allowed to create more than %d events."), $GLOBALS['perms']->hasAppPermission('max_events')), ENT_COMPAT, Horde_Nls::getCharset());
             }
             $notification->push($message, 'horde.error', array('content.raw'));
             break;

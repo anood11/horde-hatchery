@@ -1,7 +1,5 @@
 <?php
 /**
- * $Horde: folks/index.php,v 1.12 2008-01-02 11:14:00 jan Exp $
- *
  * Copyright 2007-2009 The Horde Project (http://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (GPL). If you
@@ -10,14 +8,4 @@
  * @author Duck <duck@obala.net>
  */
 
-define('FOLKS_BASE', dirname(__FILE__));
-$folks_configured = (is_readable(FOLKS_BASE . '/config/conf.php') &&
-                        is_readable(FOLKS_BASE . '/config/prefs.php'));
-
-if (!$folks_configured) {
-    require FOLKS_BASE . '/../lib/Test.php';
-    Horde_Test::configFilesMissing('Folks', FOLKS_BASE,
-                                   array('conf.php', 'prefs.php'));
-}
-
-require FOLKS_BASE . '/list.php';
+require dirname(__FILE__) . '/list.php';

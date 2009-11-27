@@ -6,8 +6,6 @@ $block_name = _("Last comments on my profile");
  * Horde_Block_folks_my_comments:: Implementation of the Horde_Block API to
  * display last comments on users videos.
  *
- * $Horde: incubator/folks/lib/Block/my_comments.php,v 1.1 2008/03/27 11:02:57 duck Exp $
- *
  * @package Horde_Block
  */
 class Horde_Block_folks_my_comments extends Horde_Block {
@@ -38,7 +36,7 @@ class Horde_Block_folks_my_comments extends Horde_Block {
      */
     function _content()
     {
-        if (!Auth::isAuthenticated()) {
+        if (!Horde_Auth::isAuthenticated()) {
             return '';
         }
 
@@ -51,19 +49,20 @@ class Horde_Block_folks_my_comments extends Horde_Block {
             return $threads;
         }
 
-        Horde::addScriptFile('tables.js', 'horde', true);
+        Horde::addScriptFile('tables.js', 'horde');
         $html = '<table class="sortable striped" id="my_comment_list" style="width: 100%">'
               . '<thead><tr><th>' . _("Title") . '</th>'
               . '<th>' . _("User") . '</th></tr></thead>';
 
-        $threads = $GLOBALS['registry']->call('forums/getThreadsByForumOwner',
-                                    array(Auth::getAuth(), 'message_timestamp', 1, false,
-                                            'folks', 0, $this->_params['limit']));
-        if ($threads instanceof PEAR_Error) {
-            return $threads->getMessage();
+        try {
+            $threads = $GLOBALS['registry']->call('forums/getThreadsByForumOwner',
+                                                  array(Horde_Auth::getAuth(), 'message_timestamp', 1, false,
+                                                  'folks', 0, $this->_params['limit']));
+        } catch (Horde_Exception $e) {
+            return $e->getMessage();
         }
 
-        $url = Folks::getUrlFor('user', Auth::getAuth());
+        $url = Folks::getUrlFor('user', Horde_Auth::getAuth());
         foreach ($threads as $message) {
             $html .= '<tr><td>'
                   . '<a href="' . $url . '" title="' . $message['message_date']. '">'

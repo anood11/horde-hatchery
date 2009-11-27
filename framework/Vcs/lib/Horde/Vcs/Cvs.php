@@ -150,7 +150,7 @@ class Horde_Vcs_Cvs extends Horde_Vcs_Rcs
     {
         $this->assertValidRevision($rev);
 
-        $tmpfile = Util::getTempFile('vc', true, $this->_paths['temp']);
+        $tmpfile = Horde_Util::getTempFile('vc', true, $this->_paths['temp']);
         $where = $fileob->queryModulePath();
 
         $pipe = popen(escapeshellcmd($this->getPath('cvs')) . ' -n server > ' . escapeshellarg($tmpfile), VC_WINDOWS ? 'wb' : 'w');
@@ -457,29 +457,27 @@ class Horde_Vcs_File_Cvs extends Horde_Vcs_File
                     $log = $rep->getLogObject($this, null);
                     $rev = $log->queryRevision();
                     $onbranch = false;
-                    $onhead = (substr_count($rev, '.') > 1);
+                    $onhead = (substr_count($rev, '.') == 1);
 
                     // Determine branch information.
-                    if (!empty($branches)) {
-                        if ($onhead) {
-                            foreach ($branches as $key => $val) {
-                                if (strpos($rev, $val) === 0) {
-                                    $onbranch = true;
-                                    $log->setBranch($key);
-                                    if (!isset($this->_branches[$key])) {
-                                        $this->_branches[$key] = $rev;
-                                        $this->_revlist[$key] = $rep->getRevisionRange($this, '1.1', $rev);
-                                    }
-                                    break;
+                    if ($onhead) {
+                        $onbranch = (empty($this->_branch) || $this->_branch == 'HEAD') ||
+                            ($rep->cmp($branches[$this->_branch], $rev) === 1);
+                    } elseif ($this->_branch != 'HEAD') {
+                        foreach ($branches as $key => $val) {
+                            if (strpos($rev, $val) === 0) {
+                                $onbranch = true;
+                                $log->setBranch($key);
+                                if (!isset($this->_branches[$key])) {
+                                    $this->_branches[$key] = $rev;
+                                    $this->_revlist[$key] = $rep->getRevisionRange($this, '1.1', $rev);
                                 }
+                                break;
                             }
-                        } else {
-                            $onbranch = $this->_branch &&
-                                ($rep->cmp($branches[$this->_branch], $rev) === 1);
                         }
                     }
 
-                    if (!$this->_branch || $onbranch) {
+                    if ($onbranch) {
                         $this->_revs[] = $rev;
                         $this->_logs[$rev] = $log;
                     }
@@ -696,15 +694,17 @@ class Horde_Vcs_Patchset_Cvs extends Horde_Vcs_Patchset
      * @param string $file    The filename to create a patchset for.
      * @param array $opts     Additional options.
      * <pre>
+     * 'file' - (string) The filename to process.
+     *          REQUIRED for this driver.
      * 'range' - (array) The patchsets to process.
      *           DEFAULT: None (all patchsets are processed).
      * </pre>
      *
      * @throws Horde_Vcs_Exception
      */
-    public function __construct($rep, $file, $opts = array())
+    public function __construct($rep, $opts = array())
     {
-        $file = $rep->sourceroot() . '/' . $file;
+        $file = $rep->sourceroot() . '/' . $opts['file'];
 
         /* Check that we are actually in the filesystem. */
         if (!$rep->isFile($file)) {
@@ -792,14 +792,14 @@ class Horde_Vcs_Patchset_Cvs extends Horde_Vcs_Patchset
                 if (!empty($line)) {
                     $parts = explode(':', $line);
                     list($from, $to) = explode('->', $parts[1], 2);
-                    $status = 0;
+                    $status = self::MODIFIED;
 
                     if ($from == 'INITIAL') {
                         $from = null;
-                        $status = self::INITIAL;
+                        $status = self::ADDED;
                     } elseif (substr($to, -6) == '(DEAD)') {
                         $to = null;
-                        $status = self::DEAD;
+                        $status = self::DELETED;
                     }
 
                     $this->_patchsets[$id]['members'][] = array(

@@ -11,11 +11,25 @@
 class Kronolith_Event_Horde extends Kronolith_Event
 {
     /**
+     * The type of the calender this event exists on.
+     *
+     * @var string
+     */
+    protected $_calendarType = 'external';
+
+    /**
      * The API (application) of this event.
      *
      * @var string
      */
-    private $_api;
+    protected $_api;
+
+    /**
+     * The link to this event in the ajax interface.
+     *
+     * @var string
+     */
+    public $ajax_link;
 
     /**
      * Constructor.
@@ -38,6 +52,9 @@ class Kronolith_Event_Horde extends Kronolith_Event
         $this->eventID = '_' . $this->_api . $event['id'];
         $this->external = $this->_api;
         $this->external_params = $event['params'];
+        $this->external_icon = !empty($event['icon']) ? $event['icon'] : null;
+        $this->external_link = !empty($event['link']) ? $event['link'] : null;
+        $this->ajax_link = !empty($event['ajax_link']) ? $event['ajax_link'] : null;
         $this->title = $event['title'];
         $this->description = isset($event['description']) ? $event['description'] : '';
         $this->start = $eventStart;
@@ -46,6 +63,7 @@ class Kronolith_Event_Horde extends Kronolith_Event
 
         if (isset($event['recurrence'])) {
             $recurrence = new Horde_Date_Recurrence($eventStart);
+
             $recurrence->setRecurType($event['recurrence']['type']);
             if (isset($event['recurrence']['end'])) {
                 $recurrence->setRecurEnd($event['recurrence']['end']);
@@ -69,6 +87,18 @@ class Kronolith_Event_Horde extends Kronolith_Event
 
         $this->initialized = true;
         $this->stored = true;
+    }
+
+    public function toJson($allDay = null, $full = false, $time_format = 'H:i')
+    {
+        $json = parent::toJson($allDay, $full, $time_format);
+        $json->ic = $this->external_icon;
+        if ($this->ajax_link) {
+            $json->aj = $this->ajax_link;
+        } else {
+            $json->ln = $this->getViewUrl(array(), true);
+        }
+        return $json;
     }
 
 }

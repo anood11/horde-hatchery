@@ -26,8 +26,7 @@ $fwd_id = $filters->findRuleId(Ingo_Storage::ACTION_FORWARD);
 $fwd_rule = $filters->getRule($fwd_id);
 
 /* Load libraries. */
-require_once 'Horde/Variables.php';
-$vars = &Variables::getDefaultVariables();
+$vars = &Horde_Variables::getDefaultVariables();
 if ($vars->get('submitbutton') == _("Return to Rules List")) {
     header('Location: ' . Horde::applicationUrl('filters.php', true));
     exit;
@@ -95,10 +94,11 @@ $form_title = _("Forward");
 if (!empty($fwd_rule['disable'])) {
     $form_title .= ' [<span class="form-error">' . _("Disabled") . '</span>]';
 }
-$form_title .= ' ' . Help::link('ingo', 'forward');
+$form_title .= ' ' . Horde_Help::link('ingo', 'forward');
 $form->setTitle($form_title);
 
 $title = _("Forwards Edit");
+Ingo::prepareMenu();
 require INGO_TEMPLATES . '/common-header.inc';
 require INGO_TEMPLATES . '/menu.inc';
 $form->renderActive(new Horde_Form_Renderer(array('encode_title' => false)), $vars, 'forward.php', 'post');

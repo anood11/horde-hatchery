@@ -23,10 +23,10 @@ if ($app) {
 }
 echo $template->fetch(BABEL_TEMPLATES . '/layout.html');
 
-$vars = &Variables::getDefaultVariables();
+$vars = &Horde_Variables::getDefaultVariables();
 
 /* Create upload form */
-$form = &new Horde_Form($vars, _("View Statistics"), 'stats');
+$form = new Horde_Form($vars, _("View Statistics"), 'stats');
 
 if (!$app) {
     $form->setButtons(_("View"));
@@ -34,7 +34,7 @@ if (!$app) {
     $form->addVariable('', '', 'spacer', true);
     
     $renderer_params = array();
-    $renderer = &new Horde_Form_Renderer($renderer_params);
+    $renderer = new Horde_Form_Renderer($renderer_params);
     $renderer->setAttrColumnWidth('20%');
     
     $form->renderActive($renderer, $vars, Horde::selfURL(), 'post');
@@ -98,8 +98,8 @@ if (!$app) {
 	    } else {
 		echo "\n<tr class=\"item" . ($i++ % 2) . "\">";
 	    }
-	    echo "\n\t<td>" . $nls['languages'][$key] . "</td>";
-	    echo "\n\t<td>" . Horde::link(Util::addParameter(Horde::applicationUrl('view.php'), array('display_language' => $key, 'module' => $_app))) . $key . '</a>' . "</td>";
+	    echo "\n\t<td>" . Horde_Nls::$config['languages'][$key] . "</td>";
+	    echo "\n\t<td>" . Horde::link(Horde_Util::addParameter(Horde::applicationUrl('view.php'), array('display_language' => $key, 'module' => $_app))) . $key . '</a>' . "</td>";
 	    echo "\n\t<td>" . Translate_Display::create_bargraph($value[2], $value[0]) . "</td>";
 	    echo "\n\t<td>" . $value[2] . "</td>";
 	    echo "\n\t<td>" . $value [3] . "</td>";

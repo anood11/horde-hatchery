@@ -12,7 +12,6 @@
  */
 
 require_once dirname(__FILE__) . '/lib/base.php';
-require_once 'Horde/Variables.php';
 
 $title = _("Activity");
 
@@ -22,7 +21,7 @@ if ($count instanceof PEAR_Error) {
     $count = 0;
 }
 
-$page = Util::getGet('page', 0);
+$page = Horde_Util::getGet('page', 0);
 $perpage = $prefs->getValue('per_page');
 $criteria = array('sort_by' => 'activity', 'sort_dir'  => 0);
 $users = $folks_driver->getUsers($criteria, $page * $perpage, $perpage);
@@ -31,8 +30,8 @@ if ($users instanceof PEAR_Error) {
     $users = array();
 }
 
-$vars = Variables::getDefaultVariables();
-$pager = new Horde_UI_Pager('page',
+$vars = Horde_Variables::getDefaultVariables();
+$pager = new Horde_Ui_Pager('page',
                             $vars, array('num' => $count,
                                          'url' => 'activity.php',
                                          'perpage' => $perpage));
@@ -40,7 +39,7 @@ $pager = new Horde_UI_Pager('page',
 $pager->preserve($criteria);
 $list_url = Folks::getUrlFor('list', 'activity');
 
-Horde::addScriptFile('stripe.js', 'horde', true);
+Horde::addScriptFile('stripe.js', 'horde');
 
 require FOLKS_TEMPLATES . '/common-header.inc';
 require FOLKS_TEMPLATES . '/menu.inc';

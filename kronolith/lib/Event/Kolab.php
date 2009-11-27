@@ -12,6 +12,34 @@
  */
 class Kronolith_Event_Kolab extends Kronolith_Event
 {
+    /**
+     * The type of the calender this event exists on.
+     *
+     * @var string
+     */
+    protected $_calendarType = 'internal';
+
+    /**
+     * Const'r
+     *
+     * @param Kronolith_Driver $driver  The backend driver that this event is
+     *                                  stored in.
+     * @param mixed $eventObject        Backend specific event object
+     *                                  that this will represent.
+     */
+    public function __construct($driver, $eventObject = null)
+    {
+        static $alarm;
+
+        /* Set default alarm value. */
+        if (!isset($alarm) && isset($GLOBALS['prefs'])) {
+            $alarm = $GLOBALS['prefs']->getValue('default_alarm');
+        }
+
+        $this->alarm = $alarm;
+
+        parent::__construct($driver, $eventObject);
+    }
 
     public function fromDriver($event)
     {
@@ -34,8 +62,8 @@ class Kronolith_Event_Kolab extends Kronolith_Event
         }
 
         if (isset($event['organizer']['smtp-address'])) {
-            if (Kronolith::isUserEmail(Auth::getAuth(), $event['organizer']['smtp-address'])) {
-                $this->creatorID = Auth::getAuth();
+            if (Kronolith::isUserEmail(Horde_Auth::getAuth(), $event['organizer']['smtp-address'])) {
+                $this->creatorID = Horde_Auth::getAuth();
             } else {
                 $this->creatorID = $event['organizer']['smtp-address'];
             }

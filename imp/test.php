@@ -15,7 +15,6 @@
 
 function _doConnectionTest()
 {
-    require_once 'Horde/Imap/Client.php';
     $imap_config = array(
         'username' => isset($_POST['user']) ? $_POST['user'] : '',
         'password' => isset($_POST['passwd']) ? $_POST['passwd'] : '',
@@ -27,7 +26,7 @@ function _doConnectionTest()
     $driver = ($_POST['server_type'] == 'imap') ? 'Socket' : 'Socket_Pop3';
 
     try {
-        $imap_client = Horde_Imap_Client::getInstance($driver, $imap_config);
+        $imap_client = Horde_Imap_Client::factory($driver, $imap_config);
     } catch (Horde_Imap_Client_Exception $e) {
         return _errorMsg($e);
     }
@@ -61,7 +60,15 @@ function _doConnectionTest()
             "<blockquote><em>IMAP server capabilities:</em><blockquote><pre>";
 
         try {
-            echo htmlspecialchars(print_r($imap_client->capability(), true));
+            foreach ($imap_client->capability() as $key => $val) {
+                if (is_array($val)) {
+                    foreach ($val as $val2) {
+                        echo htmlspecialchars($key) . '=' . htmlspecialchars($val2) . "\n";
+                    }
+                } else {
+                    echo htmlspecialchars($key) . "\n";
+                }
+            }
         } catch (Horde_Imap_Client_Exception $e) {
             _errorMsg($e);
         }
@@ -87,34 +94,36 @@ function _doConnectionTest()
 
 function _errorMsg($e)
 {
-    echo '<span style="color:red">ERROR</span> - The server returned the following error message:' . "\n" .
+    echo "<span style=\"color:red\">ERROR</span> - The server returned the following error message:\n" .
         '<pre>' . $e->getMessage() . '</pre><p />';
 }
 
 
 /* Include Horde's core.php file. */
-include_once '../lib/core.php';
+require_once dirname(__FILE__) . '/lib/Application.php';
 
-/* We should have loaded the String class, from the Horde_Util
- * package, in core.php. If String:: isn't defined, then we're not
+/* We should have loaded the Horde_String class, from the Horde_Util
+ * package, in core.php. If Horde_String:: isn't defined, then we're not
  * finding some critical libraries. */
-if (!class_exists('String')) {
+if (!class_exists('Horde_String')) {
     echo '<br /><h2 style="color:red">The Horde_Util package was not found. If PHP\'s error_reporting setting is high enough and display_errors is on, there should be error messages printed above that may help you in debugging the problem. If you are simply missing these files, then you need to get the <a href="http://cvs.horde.org/cvs.php/framework">framework</a> module from <a href="http://www.horde.org/source/">Horde CVS</a>, and install the packages in it with the install-packages.php script.</h2>';
     exit;
 }
 
 /* Initialize the Horde_Test:: class. */
-if (!is_readable('../lib/Test.php')) {
+if (!is_readable(HORDE_BASE . '/lib/Test.php')) {
     echo 'ERROR: You must install Horde before running this script.';
     exit;
 }
-require_once '../lib/Test.php';
+
+require_once HORDE_BASE . '/lib/Test.php';
 $horde_test = new Horde_Test;
 
 /* IMP version. */
 $module = 'IMP';
-require_once './lib/version.php';
-$module_version = IMP_VERSION;
+require_once dirname(__FILE__) . '/lib/Application.php';
+$app = new IMP_Application();
+$module_version = $app->version;
 
 require TEST_TEMPLATES . 'header.inc';
 require TEST_TEMPLATES . 'version.inc';
@@ -151,25 +160,6 @@ $app_output = $horde_test->requiredAppCheck($app_list);
 $php_info = $horde_test->getPhpVersionInformation();
 require TEST_TEMPLATES . 'php_version.inc';
 
-/* PHP modules. */
-$module_list = array(
-    'idn' => array(
-        'descrip' => 'Internationalized Domain Names Support',
-        'error' => 'IMP requires the idn module (installed via PECL) in order to handle Internationalized Domain Names.',
-        'fatal' => false
-    ),
-    'openssl' => array(
-        'descrip' => 'OpenSSL Support',
-        'error' => 'The openssl module is required to use S/MIME in IMP. Compile PHP with <code>--with-openssl</code> to activate.',
-        'fatal' => false
-    ),
-    'tidy' => array(
-        'descrip' => 'Tidy support',
-        'error' => 'If the tidy PHP extension is available, IMP can use it to sanitize the output of HTML messages before displaying to the user, and to clean outgoing HTML messages created in the HTML composition mode. See <code>imp/docs/INSTALL</code> for more information.',
-        'fatal' => false,
-    )
-);
-
 /* PHP settings. */
 $setting_list = array(
     'file_uploads'  =>  array(
@@ -195,17 +185,11 @@ $pear_list = array(
 );
 
 /* Get the status output now. */
-$module_output = $horde_test->phpModuleCheck($module_list);
 $setting_output = $horde_test->phpSettingCheck($setting_list);
 $file_output = $horde_test->requiredFileCheck($file_list);
 $pear_output = $horde_test->PEARModuleCheck($pear_list);
 
 ?>
-
-<h1>PHP Module Capabilities</h1>
-<ul>
-    <?php echo $module_output ?>
-</ul>
 
 <h1>Miscellaneous PHP Settings</h1>
 <ul>
@@ -231,7 +215,7 @@ if (isset($_POST['user']) && isset($_POST['passwd'])) {
 
 <form name="form1" method="post" action="test.php">
 <table>
-<tr><td align="right"><label for="server">Server:</label></td><td><input type="text" id="server" name="server" /></td></tr>
+<tr><td align="right"><label for="server">Server:</label></td><td><input type="text" id="server" name="server" /></td><td>(If blank, attempts to connects to a server running on the same machine as IMP)</td></tr>
 <tr><td align="right"><label for="port">Port:</label></td><td><input type="text" id="port" name="port" /></td><td>(If non-standard port; leave blank to auto-detect using standard ports)</td></tr>
 <tr><td align="right"><label for="user">User:</label></td><td><input type="text" id="user" name="user" /></td></tr>
 <tr><td align="right"><label for="passwd">Password:</label></td><td><input type="password" id="passwd" name="passwd" /></td></tr>

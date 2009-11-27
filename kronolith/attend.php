@@ -9,16 +9,15 @@
  * @package Kronolith
  */
 
-@define('AUTH_HANDLER', true);
-@define('KRONOLITH_BASE', dirname(__FILE__));
-require_once KRONOLITH_BASE . '/lib/base.php';
+$kronolith_authentication = 'none';
+require_once dirname(__FILE__) . '/lib/base.php';
 
-$cal = Util::getFormData('c');
-$id = Util::getFormData('e');
-$uid = Util::getFormData('i');
-$user = Util::getFormData('u');
+$cal = Horde_Util::getFormData('c');
+$id = Horde_Util::getFormData('e');
+$uid = Horde_Util::getFormData('i');
+$user = Horde_Util::getFormData('u');
 
-switch (Util::getFormData('a')) {
+switch (Horde_Util::getFormData('a')) {
 case 'accept':
     $action = Kronolith::RESPONSE_ACCEPTED;
     $msg = _("You have successfully accepted attendence to this event.");

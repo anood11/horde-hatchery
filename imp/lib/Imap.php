@@ -18,14 +18,7 @@ class IMP_Imap
      *
      * @var Horde_Imap_Client
      */
-    public $ob = null;
-
-    /**
-     * The Horde_Imap_Client_Utils object.
-     *
-     * @var Horde_Imap_Client_Utils
-     */
-    public $utils = null;
+    protected $_ob = null;
 
     /**
      * Is connection read-only?
@@ -35,13 +28,6 @@ class IMP_Imap
     protected $_readonly = array();
 
     /**
-     * Namespace cache.
-     *
-     * @var array
-     */
-    protected $_nscache = array();
-
-    /**
      * Default namespace.
      *
      * @var array
@@ -49,9 +35,16 @@ class IMP_Imap
     protected $_nsdefault;
 
     /**
+     * UIDVALIDITY check cache.
+     *
+     * @var array
+     */
+    protected $_uidvalid = array();
+
+    /**
      * Constructor.
      */
-    function __construct()
+    public function __construct()
     {
         /* Register the logging callback. */
         Horde_Imap_Client_Exception::$logCallback = array($this, 'logException');
@@ -59,22 +52,32 @@ class IMP_Imap
         /* Rebuild the Horde_Imap_Client object. */
         $this->_loadImapObject();
 
-        $this->utils = new Horde_Imap_Client_Utils();
+        register_shutdown_function(array($this, 'shutdown'));
     }
 
     /**
      * Save the Horde_Imap_Client object on session shutdown.
      */
-    function __destruct()
+    public function shutdown()
     {
-        /* Only need to serialize object once a second. When we do serialize,
-         * make sure we login in order to ensure we have done the necessary
-         * initialization. */
-        if ($this->ob &&
+        /* Only need to serialize object once a session. When we do
+         * serialize, make sure we login in order to ensure we have done the
+         * necessary initialization. */
+        if ($this->_ob &&
             isset($_SESSION['imp']) &&
             !isset($_SESSION['imp']['imap_ob'])) {
-            $this->ob->login();
-            $_SESSION['imp']['imap_ob'] = serialize($this->ob);
+            $this->_ob->login();
+
+            /* First login may occur on a non-viewable page. However,
+             * any login alerts received should be displayed to the user at
+             * some point. We need to do an explicit grab of the alarms
+             * right now. */
+            $notification = Horde_Notification::singleton();
+            foreach ($this->_ob->alerts() as $alert) {
+                $notification->push($alert, 'horde.warning');
+            }
+
+            $_SESSION['imp']['imap_ob'] = serialize($this->_ob);
         }
     }
 
@@ -88,9 +91,13 @@ class IMP_Imap
      */
     static public function loadServerConfig($server = null)
     {
-        $servers = Horde::loadConfiguration('servers.php', 'servers', 'imp');
-        if (is_a($servers, 'PEAR_Error')) {
-            Horde::logMessage($servers, __FILE__, __LINE__, PEAR_LOG_ERR);
+        try {
+            $servers = Horde::loadConfiguration('servers.php', 'servers', 'imp');
+            if ($servers === null) {
+                $servers = false;
+            }
+        } catch (Horde_Exception $e) {
+            Horde::logMessage($e, __FILE__, __LINE__, PEAR_LOG_ERR);
             return false;
         }
 
@@ -116,7 +123,7 @@ class IMP_Imap
      */
     protected function _loadImapObject()
     {
-        if (!is_null($this->ob)) {
+        if (!is_null($this->_ob)) {
             return true;
         }
 
@@ -124,13 +131,13 @@ class IMP_Imap
             return false;
         }
 
-        Horde_Imap_Client::$encryptKey = IMP::getAuthKey();
+        Horde_Imap_Client::$encryptKey = Horde_Secret::getKey('imp');
 
         $old_error = error_reporting(0);
-        $this->ob = unserialize($_SESSION['imp']['imap_ob']);
+        $this->_ob = unserialize($_SESSION['imp']['imap_ob']);
         error_reporting($old_error);
 
-        if (empty($this->ob)) {
+        if (empty($this->_ob)) {
             // @todo How to handle bad unserialize?
             // @todo Log message
             return false;
@@ -155,7 +162,7 @@ class IMP_Imap
     public function createImapObject($username, $password, $key,
                                      $global = true)
     {
-        if ($global && !is_null($this->ob)) {
+        if ($global && !is_null($this->_ob)) {
             return $GLOBALS['imp_imap'];
         }
 
@@ -163,7 +170,9 @@ class IMP_Imap
             return false;
         }
 
-        $protocol = isset($server['protocol']) ? strtolower($server['protocol']) : 'imap';
+        $protocol = isset($server['protocol'])
+            ? strtolower($server['protocol'])
+            : 'imap';
 
         $imap_config = array(
             'debug' => isset($server['debug']) ? $server['debug'] : null,
@@ -172,7 +181,7 @@ class IMP_Imap
             'port' => isset($server['port']) ? $server['port'] : null,
             'secure' => isset($server['secure']) ? $server['secure'] : false,
             'statuscache' => true,
-            'timeout' => !empty($server['timeout']) ? $server['timeout'] : 10,
+            'timeout' => empty($server['timeout']) ? null : $server['timeout'],
             'username' => $username,
         );
 
@@ -195,13 +204,13 @@ class IMP_Imap
         }
 
         try {
-            $ob = Horde_Imap_Client::getInstance(($protocol == 'imap') ? 'Socket' : 'Socket_Pop3', $imap_config);
+            $ob = Horde_Imap_Client::factory(($protocol == 'imap') ? 'Socket' : 'Socket_Pop3', $imap_config);
         } catch (Horde_Imap_Client_Exception $e) {
             return false;
         }
 
         if ($global) {
-            $this->ob = $ob;
+            $this->_ob = $ob;
             $this->_postcreate($protocol);
         }
 
@@ -231,21 +240,72 @@ class IMP_Imap
     }
 
     /**
-     * Is the current IMAP connection read-only?
+     * Is the given mailbox read-only?
      *
-     * @param string $mailbox  The mailbox.
+     * @param string $mailbox  The mailbox to check.
      *
-     * @return boolean  Is the connection read-only?
+     * @return boolean  Is the mailbox read-only?
+     * @throws Horde_Exception
      */
     public function isReadOnly($mailbox)
     {
         if (!isset($this->_readonly[$mailbox])) {
-            $this->_readonly[$mailbox] =
-                !empty($GLOBALS['conf']['hooks']['mbox_readonly']) &&
-                Horde::callHook('_imp_hook_mbox_readonly', array($mailbox), 'imp');
+            $res = false;
+
+            /* These tests work on both regular and search mailboxes. */
+            try {
+                $res = Horde::callHook('mbox_readonly', array($mailbox), 'imp');
+            } catch (Horde_Exception_HookNotSet $e) {}
+
+            /* This check can only be done for regular IMAP mailboxes. */
+            // TODO: POP3 also?
+            if (!$res &&
+                ($_SESSION['imp']['protocol'] == 'imap') &&
+                !$GLOBALS['imp_search']->isSearchMbox($mailbox)) {
+                try {
+                    $status = $this->_ob->status($mailbox, Horde_Imap_Client::STATUS_UIDNOTSTICKY);
+                    $res = $status['uidnotsticky'];
+                } catch (Horde_Imap_Client_Exception $e) {}
+            }
+
+            $this->_readonly[$mailbox] = $res;
         }
 
         return $this->_readonly[$mailbox];
+    }
+
+    /**
+     * Do a UIDVALIDITY check - needed if UIDs are passed between page
+     * accesses.
+     *
+     * @param string $mailbox  The mailbox to check. Must be an IMAP mailbox.
+     *
+     * @return string  The mailbox UIDVALIDITY.
+     * @throws Horde_Exception
+     */
+    public function checkUidvalidity($mailbox)
+    {
+        // TODO: POP3 also?
+        if ($_SESSION['imp']['protocol'] == 'pop') {
+            return;
+        }
+
+        if (!isset($this->_uidvalid[$mailbox])) {
+            $status = $this->_ob->status($mailbox, Horde_Imap_Client::STATUS_UIDVALIDITY);
+            $ptr = &$_SESSION['imp']['cache'];
+            $val = isset($ptr['uidvalid'][$mailbox])
+                ? $ptr['uidvalid'][$mailbox]
+                : null;
+            $ptr['uidvalid'][$mailbox] = $status['uidvalidity'];
+
+            $this->_uidvalid[$mailbox] = (!is_null($val) && ($status['uidvalidity'] != $val));
+        }
+
+        if ($this->_uidvalid[$mailbox]) {
+            throw new Horde_Exception(_("Mailbox structure on server has changed."));
+        }
+
+        return $_SESSION['imp']['cache']['uidvalid'][$mailbox];
     }
 
     /**
@@ -266,7 +326,7 @@ class IMP_Imap
     public function getNamespaceList()
     {
         try {
-            return $GLOBALS['imp_imap']->ob->getNamespaces(!empty($_SESSION['imp']['imap_ext']['namespace']) ? $_SESSION['imp']['imap_ext']['namespace'] : array());
+            return $this->_ob->getNamespaces(!empty($_SESSION['imp']['imap_ext']['namespace']) ? $_SESSION['imp']['imap_ext']['namespace'] : array());
         } catch (Horde_Imap_Client_Exception $e) {
             // @todo Error handling
             return array();
@@ -279,13 +339,11 @@ class IMP_Imap
      * @param string $mailbox  The folder path. If empty, will return info
      *                         on the default namespace (i.e. the first
      *                         personal namespace).
-     * @param boolean $empty   If true and no matching namespace is found,
-     *                         return the empty namespace, if it exists.
      *
      * @return mixed  The namespace info for the folder path or null if the
      *                path doesn't exist.
      */
-    public function getNamespace($mailbox = null, $empty = true)
+    public function getNamespace($mailbox = null)
     {
         if ($_SESSION['imp']['protocol'] == 'pop') {
             return null;
@@ -298,22 +356,14 @@ class IMP_Imap
             $mailbox = key($ns);
         }
 
-        $key = (int)$empty;
-        if (isset($this->_nscache[$key][$mailbox])) {
-            return $this->_nscache[$key][$mailbox];
-        }
-
         foreach ($ns as $key => $val) {
-            $mbx = $mailbox . $val['delimiter'];
-            if (!empty($key) && (strpos($mbx, $key) === 0)) {
-                $this->_nscache[$key][$mailbox] = $val;
+            $mbox = $mailbox . $val['delimiter'];
+            if (!empty($key) && (strpos($mbox, $key) === 0)) {
                 return $val;
             }
         }
 
-        $this->_nscache[$key][$mailbox] = ($empty && isset($ns[''])) ? $ns[''] : null;
-
-        return $this->_nscache[$key][$mailbox];
+        return isset($ns['']) ? $ns[''] : null;
     }
 
     /**
@@ -339,4 +389,32 @@ class IMP_Imap
 
         return $this->_nsdefault;
     }
+
+    /**
+     * Make sure a user-entered mailbox contains namespace information.
+     *
+     * @param string $mbox  The user-entered mailbox string.
+     *
+     * @return string  The mailbox string with any necessary namespace info
+     *                 added.
+     */
+    static public function appendNamespace($mbox)
+    {
+        $ns_info = $this->getNamespace($mbox);
+        if (is_null($ns_info)) {
+            $ns_info = $this->defaultNamespace();
+        }
+        return $ns_info['name'] . $mbox;
+    }
+
+    /**
+     * Return the Horde_Imap_Client object.
+     *
+     * @return Horde_Imap_Client  The imap object.
+     */
+    public function ob()
+    {
+        return $this->_ob;
+    }
+
 }

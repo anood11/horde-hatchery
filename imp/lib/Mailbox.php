@@ -42,13 +42,12 @@ class IMP_Mailbox
     protected $_sorted = null;
 
     /**
-     * The array of information about the sorted indices list.
-     * Entries:
-     *  'm' = Mailbox (if not exist, then use current mailbox)
+     * The mailboxes corresponding to the sorted indices list.
+     * If empty, uses $_mailbox.
      *
      * @var array
      */
-    protected $_sortedInfo = array();
+    protected $_sortedMbox = array();
 
     /**
      * Is this a search malbox?
@@ -69,18 +68,18 @@ class IMP_Mailbox
      * It will only create a new instance if no IMP_Mailbox instance with
      * the same parameters currently exists.
      *
-     * @param string $mailbox  See IMP_Mailbox constructor.
-     * @param integer $index   See IMP_Mailbox constructor.
+     * @param string $mailbox  See constructor.
+     * @param integer $uid     See constructor.
      *
      * @return mixed  The created concrete IMP_Mailbox instance, or false
      *                on error.
      */
-    static public function singleton($mailbox, $index = null)
+    static public function singleton($mailbox, $uid = null)
     {
         if (!isset(self::$_instances[$mailbox])) {
-            self::$_instances[$mailbox] = new IMP_Mailbox($mailbox, $index);
-        } elseif (!is_null($index)) {
-            self::$_instances[$mailbox]->setIndex($index);
+            self::$_instances[$mailbox] = new IMP_Mailbox($mailbox, $uid);
+        } elseif (!is_null($uid)) {
+            self::$_instances[$mailbox]->setIndex($uid);
         }
 
         return self::$_instances[$mailbox];
@@ -90,15 +89,47 @@ class IMP_Mailbox
      * Constructor.
      *
      * @param string $mailbox  The mailbox to work with.
-     * @param integer $index   The index of the current message.
+     * @param integer $uid     The UID of the current message.
      */
-    protected function __construct($mailbox, $index = null)
+    protected function __construct($mailbox, $uid = null)
     {
         $this->_mailbox = $mailbox;
         $this->_searchmbox = $GLOBALS['imp_search']->isSearchMbox($mailbox);
 
-        if (!is_null($index)) {
-            $this->setIndex($index);
+        if (is_null($uid)) {
+            unset($_SESSION['imp']['cache']['imp_mailbox'][$mailbox]);
+        } else {
+            /* Try to rebuild sorted information from the session cache. */
+            if (isset($_SESSION['imp']['cache']['imp_mailbox'][$mailbox])) {
+                $tmp = json_decode($_SESSION['imp']['cache']['imp_mailbox'][$mailbox]);
+                $this->_sorted = $this->_searchmbox ? $tmp->s : $tmp;
+                $this->_sortedMbox = $this->_searchmbox ? $tmp->m : array();
+            }
+            $this->setIndex($uid);
+        }
+
+        register_shutdown_function(array($this, 'shutdown'));
+    }
+
+    /**
+     * Cache mailbox information if viewing in standard (IMP) message mode.
+     * Needed to keep navigation consistent when moving through the message
+     * list, and to ensure messages aren't marked as missing in search
+     * mailboxes (e.g. if search is dependent on unseen flag).
+     */
+    public function shutdown()
+    {
+        if (!is_null($this->_arrayIndex)) {
+            /* Casting $_sorted to integers saves a significant amount of
+             * space when json_encoding (no need to quote every value). Only
+             * can do for IMAP though (since POP3 UIDs are not limited to
+             * integers. */
+            $sorted = ($_SESSION['imp']['protocol'] == 'pop')
+                ? $this->_sorted
+                : array_map('intval', $this->_sorted);
+            $_SESSION['imp']['cache']['imp_mailbox'][$this->_mailbox] = $this->_searchmbox
+                ? json_encode(array('m' => $this->_sortedMbox, 's' => $sorted))
+                : json_encode($sorted);
         }
     }
 
@@ -116,21 +147,49 @@ class IMP_Mailbox
      * Build the array of message information.
      *
      * @param array $msgnum   An array of message sequence numbers.
-     * @param mixed $preview  Include preview information?  If empty, add no
-     *                        preview information. If 1, uses value from
-     *                        prefs.  If 2, forces addition of preview info.
-     * @param array $headers  A list of non-standard (non-envelope) headers to
-     *                        return.
+     * @param array $options  Additional options:
+     * <pre>
+     * 'headers' - (array) A list of non-standard (non-envelope) headers to
+     *             return.
+     *             DEFAULT: Only envelope headers returned.
+     * 'preview' - (mixed) Include preview information?  If empty, add no
+     *                     preview information. If 1, uses value from prefs.
+     *                     If 2, forces addition of preview info.
+     *                     DEFAULT: No preview information.
+     * 'structure' - (boolean) Get structure information from server.
+     *               Contained in the 'strucutre' entry.
+     *               DEFAULT: false
+     * </pre>
      *
      * @return array  An array with the following keys:
      * <pre>
-     * 'overview' - (array) The overview information.
+     * 'overview' - (array) The overview information. Contains the following:
+     *              'envelope' - (array) Envelope information returned from
+     *                           the IMAP server. See
+     *                           Horde_Imap_Client::fetch() for format.
+     *              'flags' - (array) The list of IMAP flags returned from
+     *                        the server. See Horde_Imap_Client::fetch() for
+     *                        the format.
+     *              'headers' - (array) Any headers requested in
+     *                          $options['headers']. Horde_Mime_Headers objects
+     *                          are returned.  See Horde_Imap_Client::fetch()
+     *                          for the format.
+     *              'mailbox' - (string) The mailbox containing the message.
+     *              'preview' - (string) If requested in $options['preview'],
+     *                          the preview text.
+     *              'previewcut'- (boolean) Has the preview text been cut?
+     *              'seq' - (integer) The sequence number of the message.
+     *              'size' - (integer) The size of the message in bytes.
+     *              'structure'- (array) The structure of the message. Only
+     *                           set if $options['structure'] is true. See
+     *                           Horde_Imap_Client::fetch() for format.
+     *              'uid' - (string) The unique ID of the message.
+     *
      * 'uids' - (array) The array of UIDs. It is in the same format as used
      *          for IMP::parseIndicesList().
      * </pre>
      */
-    public function getMailboxArray($msgnum, $preview = false,
-                                    $headers = array())
+    public function getMailboxArray($msgnum, $options = array())
     {
         $this->_buildMailbox();
 
@@ -142,10 +201,8 @@ class IMP_Mailbox
                we're looking at. If we're hiding deleted messages, for
                example, there may be gaps here. */
             if (isset($this->_sorted[$i - 1])) {
-                $mboxname = ($this->_searchmbox) ? $this->_sortedInfo[$i - 1]['m'] : $this->_mailbox;
-                if (!isset($to_process[$mboxname])) {
-                    $to_process[$mboxname] = array();
-                }
+                $mboxname = ($this->_searchmbox) ? $this->_sortedMbox[$i - 1] : $this->_mailbox;
+
                 // $uids - KEY: UID, VALUE: sequence number
                 $to_process[$mboxname][$this->_sorted[$i - 1]] = $i;
             }
@@ -159,18 +216,27 @@ class IMP_Mailbox
             Horde_Imap_Client::FETCH_SEQ => true
         );
 
-        if (!empty($headers)) {
-            $fetch_criteria[Horde_Imap_Client::FETCH_HEADERS] = array(array('headers' => $headers, 'label' => 'imp', 'parse' => true, 'peek' => true));
+        if (!empty($options['headers'])) {
+            $fetch_criteria[Horde_Imap_Client::FETCH_HEADERS] = array(array('headers' => $options['headers'], 'label' => 'imp', 'parse' => true, 'peek' => true));
         }
 
-        $cache = $preview ? $GLOBALS['imp_imap']->ob->getCache() : null;
+        if (!empty($options['structure'])) {
+            $fetch_criteria[Horde_Imap_Client::FETCH_STRUCTURE] = array('parse' => true);
+        }
+
+        if (empty($options['preview'])) {
+            $cache = null;
+            $options['preview'] = 0;
+        } else {
+            $cache = $GLOBALS['imp_imap']->ob()->getCache();
+        }
 
         /* Retrieve information from each mailbox. */
         foreach ($to_process as $mbox => $ids) {
             try {
-                $fetch_res = $GLOBALS['imp_imap']->ob->fetch($mbox, $fetch_criteria, array('ids' => array_keys($ids)));
+                $fetch_res = $GLOBALS['imp_imap']->ob()->fetch($mbox, $fetch_criteria, array('ids' => array_keys($ids)));
 
-                if ($preview) {
+                if ($options['preview']) {
                     $preview_info = $tostore = array();
                     if ($cache) {
                         try {
@@ -179,17 +245,18 @@ class IMP_Mailbox
                     }
                 }
 
-                reset($fetch_res);
-                while (list($k, $v) = each($fetch_res)) {
+                foreach (array_keys($ids) as $k) {
+                    $v = $fetch_res[$k];
+
                     $v['mailbox'] = $mbox;
                     if (isset($v['headers']['imp'])) {
                         $v['headers'] = $v['headers']['imp'];
                     }
 
-                    if ($preview &&
-                        (($preview === 2) ||
-                         !$GLOBALS['prefs']->getValue('preview_show_unread') ||
-                         !in_array('\\seen', $v['flags']))) {
+                    if (($options['preview'] === 2) ||
+                        (($options['preview'] === 1) &&
+                         (!$GLOBALS['prefs']->getValue('preview_show_unread') ||
+                          !in_array('\\seen', $v['flags'])))) {
                         if (empty($preview_info[$k])) {
                             try {
                                 $imp_contents = IMP_Contents::singleton($k . IMP::IDX_SEP . $mbox);
@@ -207,19 +274,17 @@ class IMP_Mailbox
                         $v['previewcut'] = $preview_info[$k]['IMPpreviewc'];
                     }
 
-                    $overview[$ids[$k]] = $v;
+                    $overview[] = $v;
                 }
 
                 $uids[$mbox] = array_keys($fetch_res);
 
                 if (!is_null($cache) && !empty($tostore)) {
-                    $cache->set($mbox, $tostore);
+                    $status = $GLOBALS['imp_imap']->ob()->status($mbox, Horde_Imap_Client::STATUS_UIDVALIDITY);
+                    $cache->set($mbox, $tostore, $status['uidvalidity']);
                 }
             } catch (Horde_Imap_Client_Exception $e) {}
         }
-
-        /* Sort via the sorted array index. */
-        ksort($overview);
 
         return array('overview' => $overview, 'uids' => $uids);
     }
@@ -246,16 +311,20 @@ class IMP_Mailbox
         $query = null;
 
         if ($this->_searchmbox) {
-            if (IMP::hideDeletedMsgs()) {
+            if (IMP::hideDeletedMsgs($this->_mailbox)) {
                 $query = new Horde_Imap_Client_Search_Query();
                 $query->flag('\\deleted', false);
             }
 
-            $this->_sorted = $this->_sortedInfo = array();
-            foreach ($GLOBALS['imp_search']->runSearch($query, $this->_mailbox) as $val) {
-                list($idx, $mbox) = explode(IMP::IDX_SEP, $val);
-                $this->_sorted[] = $idx;
-                $this->_sortedInfo[] = array('m' => $mbox);
+            try {
+                foreach ($GLOBALS['imp_search']->runSearch($query, $this->_mailbox) as $val) {
+                    list($idx, $mbox) = explode(IMP::IDX_SEP, $val);
+                    $this->_sorted[] = $idx;
+                    $this->_sortedMbox[] = $mbox;
+                }
+            } catch (Horde_Imap_Client_Exception $e) {
+                $this->_sorted = $this->_sortedMbox = array();
+                $GLOBALS['notification']->push(_("Mailbox listing failed") . ': ' . $e->getMessage(), 'horde.error');
             }
         } else {
             $sortpref = IMP::getSort($this->_mailbox);
@@ -266,15 +335,16 @@ class IMP_Mailbox
                 $this->_sorted = $threadob->messageList((bool)$sortpref['dir']);
             } else {
                 if (($_SESSION['imp']['protocol'] != 'pop') &&
-                    IMP::hideDeletedMsgs()) {
+                    IMP::hideDeletedMsgs($this->_mailbox)) {
                     $query = new Horde_Imap_Client_Search_Query();
                     $query->flag('\\deleted', false);
                 }
                 try {
-                    $res = $GLOBALS['imp_imap']->ob->search($this->_mailbox, $query, array('sort' => array($sortpref['by']), 'reverse' => (bool)$sortpref['dir']));
+                    $res = $GLOBALS['imp_search']->imapSearch($this->_mailbox, $query, array('sort' => array($sortpref['by']), 'reverse' => (bool)$sortpref['dir']));
                     $this->_sorted = $res['sort'];
                 } catch (Horde_Imap_Client_Exception $e) {
                     $this->_sorted = array();
+                    $GLOBALS['notification']->push(_("Mailbox listing failed") . ': ' . $e->getMessage(), 'horde.error');
                 }
             }
         }
@@ -301,7 +371,8 @@ class IMP_Mailbox
      * @param integer $results  A Horde_Imap_Client::SORT_RESULTS_* constant
      *                          that indicates the desired return type.
      *
-     * @return mixed  Whatever is requested in $results.
+     * @return mixed  Whatever is requested in $results. NOTE: Returns
+     *                sequence numbers instead of UIDs.
      */
     public function unseenMessages($results)
     {
@@ -315,7 +386,8 @@ class IMP_Mailbox
      * @param integer $results  A Horde_Imap_Client::SORT_RESULTS_* constant
      *                          that indicates the desired return type.
      *
-     * @return mixed  Whatever is requested in $results.
+     * @return mixed  Whatever is requested in $results. NOTE: Returns
+     *                sequence numbers instead of UIDs.
      */
     protected function _msgFlagSearch($type, $results)
     {
@@ -327,11 +399,11 @@ class IMP_Mailbox
 
         $criteria = new Horde_Imap_Client_Search_Query();
 
-        if (IMP::hideDeletedMsgs()) {
+        if (IMP::hideDeletedMsgs($this->_mailbox)) {
             $criteria->flag('\\deleted', false);
         } elseif ($count) {
             try {
-                $status_res = $GLOBALS['imp_imap']->ob->status($this->_mailbox, $type == 'recent' ? Horde_Imap_Client::STATUS_RECENT : Horde_Imap_Client::STATUS_UNSEEN);
+                $status_res = $GLOBALS['imp_imap']->ob()->status($this->_mailbox, $type == 'recent' ? Horde_Imap_Client::STATUS_RECENT : Horde_Imap_Client::STATUS_UNSEEN);
                 return $status_res[$type];
             } catch (Horde_Imap_Client_Exception $e) {
                 return 0;
@@ -345,7 +417,7 @@ class IMP_Mailbox
         }
 
         try {
-            $res = $GLOBALS['imp_imap']->ob->search($this->_mailbox, $criteria, array('results' => array($results)));
+            $res = $GLOBALS['imp_imap']->ob()->search($this->_mailbox, $criteria, array('results' => array($results), 'sequence' => true));
             return $count ? $res['count'] : $res;
         } catch (Horde_Imap_Client_Exception $e) {
             return $count ? 0 : array();
@@ -378,11 +450,16 @@ class IMP_Mailbox
      * Checks to see if the current index is valid.
      * This function is only useful if an index was passed to the constructor.
      *
+     * @param boolean $rebuild  Rebuild mailbox list, if needed.
+     *
      * @return boolean  True if index is valid, false if not.
      */
-    public function isValidIndex()
+    public function isValidIndex($rebuild = true)
     {
-        $this->_rebuild();
+        if ($rebuild) {
+            $this->_rebuild();
+            $this->setIndex(0, 'offset');
+        }
         return !is_null($this->_arrayIndex);
     }
 
@@ -391,8 +468,11 @@ class IMP_Mailbox
      *
      * @param integer $offset  The offset from the current message.
      *
-     * @return array  'index'   -- The message index.
-     *                'mailbox' -- The mailbox.
+     * @return array  Array with the following entries:
+     * <pre>
+     * 'mailbox' - (string) The mailbox.
+     * 'uid' - (integer) The message UID.
+     * </pre>
      */
     public function getIMAPIndex($offset = 0)
     {
@@ -400,8 +480,8 @@ class IMP_Mailbox
 
         return isset($this->_sorted[$index])
             ? array(
-                  'index' => $this->_sorted[$index],
-                  'mailbox' => ($this->_searchmbox) ? $this->_sortedInfo[$index]['m'] : $this->_mailbox
+                  'mailbox' => ($this->_searchmbox ? $this->_sortedMbox[$index] : $this->_mailbox),
+                  'uid' => $this->_sorted[$index]
               )
             : array();
     }
@@ -410,10 +490,8 @@ class IMP_Mailbox
      * Using the preferences and the current mailbox, determines the messages
      * to view on the current page.
      *
-     * @param integer $page       The page number currently being displayed.
-     * @param integer $start      The starting message number.
-     * @param integer $page_size  Override the maxmsgs preference and specify
-     *                            the page size.
+     * @param integer $page   The page number currently being displayed.
+     * @param integer $start  The starting message number.
      *
      * @return array  An array with the following fields:
      * <pre>
@@ -428,15 +506,13 @@ class IMP_Mailbox
      * 'pagecount' - (integer) The number of pages in this mailbox.
      * </pre>
      */
-    public function buildMailboxPage($page = 0, $start = 0, $page_size = null)
+    public function buildMailboxPage($page = 0, $start = 0, $opts = array())
     {
         $this->_buildMailbox();
 
         $ret = array('msgcount' => count($this->_sorted));
 
-        if (is_null($page_size)) {
-            $page_size = $GLOBALS['prefs']->getValue('max_msgs');
-        }
+        $page_size = $GLOBALS['prefs']->getValue('max_msgs');
 
         if ($ret['msgcount'] > $page_size) {
             $ret['pagecount'] = ceil($ret['msgcount'] / $page_size);
@@ -453,47 +529,8 @@ class IMP_Mailbox
                     } elseif ($this->_searchmbox) {
                         $page = 1;
                     } else {
-                        $page_uid = null;
-                        $startpage = $GLOBALS['prefs']->getValue('mailbox_start');
-
-                        switch ($GLOBALS['prefs']->getValue('mailbox_start')) {
-                        case IMP::MAILBOX_START_FIRSTPAGE:
-                            $page = 1;
-                            break;
-
-                        case IMP::MAILBOX_START_LASTPAGE:
-                            $page = $ret['pagecount'];
-                            break;
-
-                        case IMP::MAILBOX_START_FIRSTUNSEEN:
-                            $sortpref = IMP::getSort($this->_mailbox);
-
-                            /* Optimization: if sorting by arrival then first
-                             * unseen information is returned via a
-                             * SELECT/EXAMINE call. */
-                            if ($sortpref['by'] == Horde_Imap_Client::SORT_ARRIVAL) {
-                                try {
-                                    $res = $GLOBALS['imp_imap']->ob->status($this->_mailbox, Horde_Imap_Client::STATUS_FIRSTUNSEEN);
-                                    $page_uid = is_null($res['firstunseen']) ? null : $this->_sorted[$res['firstunseen'] - 1];
-                                } catch (Horde_Imap_Client_Exception $e) {}
-                            } else {
-                                $unseen_msgs = $this->unseenMessages(Horde_Imap_Client::SORT_RESULTS_MIN);
-                                $page_uid = $unseen_msgs['min'];
-                            }
-                            break;
-
-                        case IMP::MAILBOX_START_LASTUNSEEN:
-                            $unseen_msgs = $this->unseenMessages(Horde_Imap_Client::SORT_RESULTS_MAX);
-                            $page_uid = $unseen_msgs['max'];
-                            break;
-                        }
+                        $page = ceil($this->mailboxStart($ret['msgcount']) / $page_size);
                     }
-                }
-
-                if (empty($page)) {
-                    $page = is_null($page_uid)
-                        ? 1
-                        : ceil((array_search($page_uid, $this->_sorted) + 1) / $page_size);
                 }
             }
 
@@ -525,7 +562,7 @@ class IMP_Mailbox
         $ret['anymsg'] = true;
         if (!$ret['msgcount'] && !$this->_searchmbox) {
             try {
-                $status = $GLOBALS['imp_imap']->ob->status($this->_mailbox, Horde_Imap_Client::STATUS_MESSAGES);
+                $status = $GLOBALS['imp_imap']->ob()->status($this->_mailbox, Horde_Imap_Client::STATUS_MESSAGES);
                 $ret['anymsg'] = (bool)$status['messages'];
             } catch (Horde_Imap_Client_Exception $e) {
                 $ret['anymsg'] = false;
@@ -539,12 +576,62 @@ class IMP_Mailbox
     }
 
     /**
+     * Determines the sequence number of the first message to display, based
+     * on the user's preferences.
+     *
+     * @param integer $total  The total number of messages in the mailbox.
+     *
+     * @return integer  The sequence number in the mailbox.
+     */
+    public function mailboxStart($total)
+    {
+        if ($this->_searchmbox) {
+            return 1;
+        }
+
+        switch ($GLOBALS['prefs']->getValue('mailbox_start')) {
+        case IMP::MAILBOX_START_FIRSTPAGE:
+            return 1;
+
+        case IMP::MAILBOX_START_LASTPAGE:
+            return $total;
+
+        case IMP::MAILBOX_START_FIRSTUNSEEN:
+            $sortpref = IMP::getSort($this->_mailbox);
+
+            /* Optimization: if sorting by arrival then first unseen
+             * information is returned via a SELECT/EXAMINE call. */
+            if ($sortpref['by'] == Horde_Imap_Client::SORT_ARRIVAL) {
+                try {
+                    $res = $GLOBALS['imp_imap']->ob()->status($this->_mailbox, Horde_Imap_Client::STATUS_FIRSTUNSEEN);
+                    if (!is_null($res['firstunseen'])) {
+                        return $res['firstunseen'];
+                    }
+                } catch (Horde_Imap_Client_Exception $e) {}
+
+                return 1;
+            }
+
+            $unseen_msgs = $this->unseenMessages(Horde_Imap_Client::SORT_RESULTS_MIN);
+            return empty($unseen_msgs['min'])
+                ? 1
+                : $unseen_msgs['min'];
+
+        case IMP::MAILBOX_START_LASTUNSEEN:
+            $unseen_msgs = $this->unseenMessages(Horde_Imap_Client::SORT_RESULTS_MAX);
+            return empty($unseen_msgs['max'])
+                ? 1
+                : $unseen_msgs['max'];
+        }
+    }
+
+    /**
      * Updates the message array index.
      *
      * @param integer $data  If $type is 'offset', the number of messages to
      *                       increase array index by.  If type is 'uid',
      *                       sets array index to the value of the given
-     *                       message index.
+     *                       message UID.
      * @param string $type   Either 'offset' or 'uid'.
      */
     public function setIndex($data, $type = 'uid')
@@ -580,9 +667,23 @@ class IMP_Mailbox
     {
         if (is_null($this->_threadob)) {
             try {
-                $this->_threadob = $GLOBALS['imp_imap']->ob->thread($this->_mailbox);
+                $this->_threadob = $GLOBALS['imp_imap']->ob()->thread($this->_mailbox);
+                $ref_errcode = null;
             } catch (Horde_Imap_Client_Exception $e) {
-                return new Horde_Imap_Client_Thread();
+                $error = $e;
+                $ref_errcode = $e->getCode();
+            }
+
+            if ($ref_errcode == Horde_Imap_Client_Exception::NOSUPPORTIMAPEXT) {
+                try {
+                    $this->_threadob = $GLOBALS['imp_imap']->ob()->thread($this->_mailbox, array('criteria' => Horde_Imap_Client::THREAD_ORDEREDSUBJECT));
+                } catch (Horde_Imap_Client_Exception $e) {
+                    $GLOBALS['notification']->push(_("Server does not support thread sorting."), 'horde.error');
+                    return new Horde_Imap_Client_Thread(array(), 'uid');
+                }
+            } elseif (!is_null($ref_errcode)) {
+                $GLOBALS['notification']->push($error, 'horde.error');
+                return new Horde_Imap_Client_Thread(array(), 'uid');
             }
         }
 
@@ -598,9 +699,7 @@ class IMP_Mailbox
     protected function _rebuild($force = false)
     {
         if ($force ||
-            (!is_null($this->_arrayIndex) &&
-             !$this->_searchmbox &&
-             !$this->getIMAPIndex(1))) {
+            (!is_null($this->_arrayIndex) && !$this->getIMAPIndex(1))) {
             $this->_sorted = null;
             $this->_buildMailbox();
         }
@@ -630,7 +729,7 @@ class IMP_Mailbox
             /* Need to compare both mbox name and message UID to obtain the
              * correct array index since there may be duplicate UIDs. */
             foreach (array_keys($this->_sorted, $uid) as $key) {
-                if ($this->_sortedInfo[$key]['m'] == $mbox) {
+                if ($this->_sortedMbox[$key] == $mbox) {
                     return $key;
                 }
             }
@@ -659,7 +758,7 @@ class IMP_Mailbox
         $s = $this->_sorted;
         array_unshift($s, 0);
         unset($s[0]);
-        $m = $this->_sortedInfo;
+        $m = $this->_sortedMbox;
         array_unshift($m, 0);
         unset($m[0]);
 
@@ -689,11 +788,11 @@ class IMP_Mailbox
 
         /* Remove the current entry and recalculate the range. */
         foreach (IMP::parseIndicesList($msgs) as $key => $val) {
-            foreach ($val as $index) {
-                $val = $this->getArrayIndex($index, $key);
+            foreach ($val as $uid) {
+                $val = $this->getArrayIndex($uid, $key);
                 unset($this->_sorted[$val]);
                 if ($this->_searchmbox) {
-                    unset($this->_sortedInfo[$val]);
+                    unset($this->_sortedMbox[$val]);
                 }
                 ++$msgcount;
             }
@@ -701,7 +800,7 @@ class IMP_Mailbox
 
         $this->_sorted = array_values($this->_sorted);
         if ($this->_searchmbox) {
-            $this->_sortedInfo = array_values($this->_sortedInfo);
+            $this->_sortedMbox = array_values($this->_sortedMbox);
         }
 
         $this->_threadob = null;
@@ -729,10 +828,9 @@ class IMP_Mailbox
     {
         if (!$this->_searchmbox) {
             $sortpref = IMP::getSort($this->_mailbox);
-
             try {
-                $status = $GLOBALS['imp_imap']->ob->status($this->_mailbox, Horde_Imap_Client::STATUS_MESSAGES | Horde_Imap_Client::STATUS_UIDNEXT | Horde_Imap_Client::STATUS_UIDVALIDITY);
-                return implode('|', array($status['uidvalidity'], $status['uidnext'], $status['messages'], $sortpref['by'], $sortpref['dir']));
+                $id = $GLOBALS['imp_imap']->ob()->getCacheId($this->_mailbox);
+                return $id . '|' . $sortpref['by'] . '|' . $sortpref['dir'];
             } catch (Horde_Imap_Client_Exception $e) {}
         }
 

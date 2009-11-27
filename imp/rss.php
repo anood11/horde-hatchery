@@ -9,14 +9,11 @@
  * @package IMP
  */
 
-$authentication = 'none';
-@define('AUTH_HANDLER', true);
-require_once dirname(__FILE__) . '/lib/base.php';
-
-$auth = &Auth::singleton($conf['auth']['driver']);
-if ((!Auth::getAuth() || !IMP::checkAuthentication(true)) &&
-    (!isset($_SERVER['PHP_AUTH_USER']) ||
-     !$auth->authenticate($_SERVER['PHP_AUTH_USER'], array('password' => isset($_SERVER['PHP_AUTH_PW']) ? $_SERVER['PHP_AUTH_PW'] : null)))) {
+require_once dirname(__FILE__) . '/lib/Application.php';
+try {
+    new IMP_Application(array('init' => array('authentication' => 'throw')));
+} catch (Horde_Exception $e) {
+    //!$auth->authenticate($_SERVER['PHP_AUTH_USER'], array('password' => isset($_SERVER['PHP_AUTH_PW']) ? $_SERVER['PHP_AUTH_PW'] : null)))) {
     header('WWW-Authenticate: Basic realm="IMP RSS Interface"');
     header('HTTP/1.0 401 Unauthorized');
     echo '401 Unauthorized';
@@ -30,15 +27,15 @@ $unseen_num = 0;
 
 /* Determine the mailbox that was requested and if only new mail should be
  * displayed. Default to new mail in INBOX. */
-$request = Util::getPathInfo();
+$request = Horde_Util::getPathInfo();
 if (!empty($request)) {
     $request_parts = explode('/-/', $request);
     if (!empty($request_parts[0])) {
         $ns_info = $imp_imap->getNamespace();
-        $mailbox = IMP::appendNamespace(preg_replace('/\//', $ns_info['delimiter'], trim($request_parts[0], '/')));
+        $mailbox = $imp_imap->appendNamespace(preg_replace('/\//', $ns_info['delimiter'], trim($request_parts[0], '/')));
 
         /* Make sure mailbox exists or else exit immediately. */
-        $imp_folder = &IMP_Folder::singleton();
+        $imp_folder = IMP_Folder::singleton();
         if (!$imp_folder->exists($mailbox)) {
             exit;
         }
@@ -47,7 +44,7 @@ if (!empty($request)) {
 }
 
 /* Obtain some information describing the mailbox state. */
-$imp_mailbox = &IMP_Mailbox::singleton($mailbox);
+$imp_mailbox = IMP_Mailbox::singleton($mailbox);
 $total_num = $imp_mailbox->getMessageCount();
 $unseen_num = ($imp_search->isVINBOXFolder($mailbox))
     ? $imp_mailbox->getMessageCount()
@@ -62,7 +59,7 @@ $ids = $imp_search->runSearchQuery($query, $mailbox, Horde_Imap_Client::SORT_DAT
 if (!empty($ids)) {
     $imp_ui = new IMP_UI_Mailbox($imp_mbox['mailbox']);
 
-    $overview = $imp_mailbox->getMailboxArray(array_slice($ids, 0, 20), $conf['mailbox']['show_preview'] && $prefs->getValue('preview_enabled'));
+    $overview = $imp_mailbox->getMailboxArray(array_slice($ids, 0, 20), array('preview' => $prefs->getValue('preview_enabled')));
 
     foreach ($overview['overview'] as $ob) {
         $from_addr = $imp_ui->getFrom($ob['envelope'], array('fullfrom' => true));
@@ -81,8 +78,8 @@ $description = ($total_num == 0)
     ? _("No Messages")
     : sprintf(_("%u of %u messages in %s unread."), $unseen_num, $total_num, IMP::getLabel($mailbox));
 
-$t = new IMP_Template();
-$t->set('charset', NLS::getCharset());
+$t = new Horde_Template();
+$t->set('charset', Horde_Nls::getCharset());
 $t->set('xsl', $registry->get('themesuri') . '/feed-rss.xsl');
 $t->set('pubDate', htmlspecialchars(date('r')));
 $t->set('desc', htmlspecialchars($description));

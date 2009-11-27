@@ -14,14 +14,13 @@
 require_once dirname(__FILE__) . '/lib/base.php';
 require_once FOLKS_BASE . '/lib/Forms/Activity.php';
 
-if (!Auth::isAuthenticated()) {
-    Horde::authenticationFailureRedirect();
+if (!Horde_Auth::isAuthenticated()) {
+    Horde_Auth::authenticateFailure('folks');
 }
 
 $title = _("Friends");
 
-require_once 'Horde/Variables.php';
-$vars = Variables::getDefaultVariables();
+$vars = Horde_Variables::getDefaultVariables();
 $form = new Folks_Activity_Form($vars, _("What are you doing right now?"), 'short');
 if ($form->validate()) {
     $result = $form->execute();
@@ -60,14 +59,14 @@ krsort($firendActivities);
 $firendActivities = array_slice($firendActivities, 0, 30);
 
 // Own activities
-$activities = $folks_driver->getActivity(Auth::getAuth());
+$activities = $folks_driver->getActivity(Horde_Auth::getAuth());
 if ($activities instanceof PEAR_Error) {
     $notification->push($activities);
     header('Location: ' . Folks::getUrlFor('list', 'list'));
     exit;
 }
 
-Horde::addScriptFile('stripe.js', 'horde', true);
+Horde::addScriptFile('stripe.js', 'horde');
 
 require FOLKS_TEMPLATES . '/common-header.inc';
 require FOLKS_TEMPLATES . '/menu.inc';

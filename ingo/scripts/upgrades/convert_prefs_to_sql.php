@@ -18,27 +18,22 @@
  * @author Jan Schneider <jan@horde.org>
  */
 
-@define('AUTH_HANDLER', true);
-
 /* Do CLI checks and environment setup first. */
-@define('HORDE_BASE', dirname(__FILE__) . '/../../..');
-require_once HORDE_BASE . '/lib/core.php';
+require_once dirname(__FILE__) . '/../../../lib/core.php';
 
 /* Make sure no one runs this from the web. */
-if (!Horde_CLI::runningFromCLI()) {
+if (!Horde_Cli::runningFromCLI()) {
     exit("Must be run from the command line\n");
 }
 
 /* Load the CLI environment - make sure there's no time limit, init some
  * variables, etc. */
-Horde_CLI::init();
-$cli = &Horde_CLI::singleton();
+Horde_Cli::init();
+$cli = Horde_Cli::singleton();
 
 /* Initialize the needed libraries. */
-require_once dirname(dirname(dirname(__FILE__))) . '/lib/base.php';
-
-/* Initialize authentication backend. */
-$auth = &Auth::singleton($conf['auth']['driver']);
+$ingo_authentication = 'none';
+require_once dirname(__FILE__) . '/../../lib/base.php';
 
 /* Initialize storage backends. */
 if ($conf['storage']['driver'] != 'sql') {
@@ -69,14 +64,14 @@ while (!feof(STDIN)) {
 
     echo 'Converting filters for user: ' . $user;
 
-    $auth->setAuth($user, array());
+    Horde_Auth::setAuth($user, array());
     $_SESSION['ingo']['current_share'] = ':' . $user;
 
     foreach ($rules as $rule) {
         $filter = $prefs_storage->retrieve($rule, false);
         if ($rule == Ingo_Storage::ACTION_FILTERS) {
             $new_filter = &$sql_storage->retrieve(Ingo_Storage::ACTION_FILTERS, true, true);
-            foreach ($filter->getFilterlist() as $rule) {
+            foreach ($filter->getFilterList() as $rule) {
                 $new_filter->addRule($rule);
                 echo '.';
             }

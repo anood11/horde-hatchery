@@ -6,13 +6,19 @@ $block_name = _("Calendar Summary");
  * Horde_Block_Kronolith_summary:: Implementation of the Horde_Block API to
  * display a summary of calendar items.
  *
- * $Horde: kronolith/lib/Block/summary.php,v 1.71 2008/10/13 23:00:17 jan Exp $
- *
  * @package Horde_Block
  */
 class Horde_Block_Kronolith_summary extends Horde_Block {
 
     var $_app = 'kronolith';
+
+    function Horde_Block_Kronolith_summary($params = array(), $row = null, $col = null)
+    {
+        parent::Horde_Block($params, $row, $col);
+        if (!isset($this->_params['days'])) {
+            $this->_params['days'] = 7;
+        }
+    }
 
     function _params()
     {
@@ -23,9 +29,25 @@ class Horde_Block_Kronolith_summary extends Horde_Block {
         $params = array('calendar' => array('name' => _("Calendar"),
                                             'type' => 'enum',
                                             'default' => '__all'),
+                        'days' => array('name' => _("The time span to show"),
+                                        'type' => 'enum',
+                                        'default' => 7,
+                                        'values' => array(1 => '1 ' . _("day"),
+                                                          2 => '2 ' . _("days"),
+                                                          3 => '3 ' . _("days"),
+                                                          4 => '4 ' . _("days"),
+                                                          5 => '5 ' . _("days"),
+                                                          6 => '6 ' . _("days"),
+                                                          7 => '1 ' . _("week"),
+                                                          14 => '2 ' . _("weeks"),
+                                                          21 => '3 ' . _("weeks"),
+                                                          28 => '4 ' . _("weeks"))),
                         'maxevents' => array('name' => _("Maximum number of events to display (0 = no limit)"),
                                              'type' => 'int',
-                                             'default' => 0));
+                                             'default' => 0),
+                        'alarms' => array('name' => _("Show only events that have an alarm set?"),
+                                          'type' => 'checkbox',
+                                          'default' => 0));
         $params['calendar']['values']['__all'] = _("All Visible");
         foreach (Kronolith::listCalendars() as $id => $cal) {
             $params['calendar']['values'][$id] = $cal->get('name');
@@ -48,7 +70,7 @@ class Horde_Block_Kronolith_summary extends Horde_Block {
         } else {
             $url_params = array();
         }
-        return Horde::link(Horde::url(Util::addParameter($registry->getInitialPage(), $url_params), true)) . htmlspecialchars($registry->get('name')) . '</a>';
+        return Horde::link(Horde::url(Horde_Util::addParameter($registry->getInitialPage(), $url_params), true)) . htmlspecialchars($registry->get('name')) . '</a>';
     }
 
     /**
@@ -61,23 +83,22 @@ class Horde_Block_Kronolith_summary extends Horde_Block {
         global $registry, $prefs;
 
         // @TODO Remove this hack when maintenance is refactored.
-        $from_block = true;
+        $no_maint = true;
         require_once dirname(__FILE__) . '/../base.php';
-        require_once KRONOLITH_BASE . '/lib/Day.php';
 
-        Horde::addScriptFile('tooltip.js', 'horde', true);
+        Horde::addScriptFile('tooltips.js', 'horde');
 
         $now = new Horde_Date($_SERVER['REQUEST_TIME']);
         $today = date('j');
 
         $startDate = new Horde_Date(array('year' => date('Y'), 'month' => date('n'), 'mday' => date('j')));
-        $endDate = new Horde_Date(array('year' => date('Y'), 'month' => date('n'), 'mday' => date('j') + $prefs->getValue('summary_days')));
+        $endDate = new Horde_Date(array('year' => date('Y'), 'month' => date('n'), 'mday' => date('j') + $this->_params['days']));
 
         if (isset($this->_params['calendar']) &&
             $this->_params['calendar'] != '__all') {
 
             $calendar = $GLOBALS['kronolith_shares']->getShare($this->_params['calendar']);
-            if (!is_a($calendar, 'PEAR_Error') && !$calendar->hasPermission(Auth::getAuth(), PERMS_SHOW)) {
+            if (!is_a($calendar, 'PEAR_Error') && !$calendar->hasPermission(Horde_Auth::getAuth(), Horde_Perms::SHOW)) {
                 return _("Permission Denied");
             }
 
@@ -95,7 +116,7 @@ class Horde_Block_Kronolith_summary extends Horde_Block {
         }
 
         $html = '';
-        $iMax = $today + $prefs->getValue('summary_days');
+        $iMax = $today + $this->_params['days'];
         $firstday = true;
         $totalevents = 0;
         for ($i = $today; $i < $iMax; ++$i) {
@@ -122,7 +143,8 @@ class Horde_Block_Kronolith_summary extends Horde_Block {
                 if ($event->end->compareDate($now) < 0) {
                     continue;
                 }
-                if ($prefs->getValue('summary_alarms') && !$event->alarm) {
+
+                if (!empty($this->_params['alarms']) && !$event->alarm) {
                     continue;
                 }
                 $event_active = $event->start->compareDateTime($now) < 0 &&
@@ -148,7 +170,7 @@ class Horde_Block_Kronolith_summary extends Horde_Block {
                         $url_params['display_cal'] = $this->_params['calendar'];
                     }
                     $daylink = Horde::applicationUrl('day.php', true);
-                    $daylink = Util::addParameter($daylink, $url_params);
+                    $daylink = Horde_Util::addParameter($daylink, $url_params);
                     $html .= Horde::link($daylink, sprintf(_("Goto %s"),
                                                            $dayname));
                     $html .= $dayname . '</a></strong></td></tr>';
@@ -161,7 +183,7 @@ class Horde_Block_Kronolith_summary extends Horde_Block {
                 }
 
                 if ($event->isAllDay()) {
-                    $time = _("All day event");
+                    $time = _("All day");
                 } else {
                     $time = $event->start->format($prefs->getValue('twentyFour') ? 'H:i' : 'h:ia')
                         . '-' . $event->end->format($prefs->getValue('twentyFour') ? 'H:i' : 'h:ia');
@@ -179,7 +201,7 @@ class Horde_Block_Kronolith_summary extends Horde_Block {
                 if ($event_active) {
                     $html .= '<strong>';
                 }
-                $html .= $event->getLink(null, true, null, true);
+                $html .= ' ' . $event->getLink(null, true, null, true);
                 if ($event_active) {
                     $html .= '</strong>';
                 }

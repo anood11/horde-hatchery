@@ -7,8 +7,6 @@ require_once 'Horde/Kolab.php';
  * Horde Kronolith free/busy driver for the Kolab IMAP Server.
  * Copyright 2004-2009 The Horde Project (http://www.horde.org/)
  *
- * $Horde: kronolith/lib/Storage/kolab.php,v 1.19 2009/01/06 18:01:02 jan Exp $
- *
  * See the enclosed file COPYING for license information (GPL). If you
  * not receive such a file, see also http://www.fsf.org/copyleft/gpl.html.
  *
@@ -28,8 +26,6 @@ class Kronolith_Storage_kolab extends Kronolith_Storage {
     function search($email, $private_only = false)
     {
         global $conf;
-
-        @include_once 'Horde/Kolab/Session.php';
 
         if (class_exists('Horde_Kolab_Session')) {
             $session = &Horde_Kolab_Session::singleton();
@@ -58,7 +54,7 @@ class Kronolith_Storage_kolab extends Kronolith_Storage {
 
         require_once 'HTTP/Request.php';
         $http = new HTTP_Request($fb_url, $options);
-        $http->setBasicAuth(Auth::getAuth(), Auth::getCredential('password'));
+        $http->setBasicAuth(Horde_Auth::getAuth(), Horde_Auth::getCredential('password'));
         @$http->sendRequest();
         if ($http->getResponseCode() != 200) {
             return PEAR::raiseError(sprintf(_("Unable to retrieve free/busy information for %s"),

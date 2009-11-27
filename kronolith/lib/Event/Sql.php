@@ -13,9 +13,38 @@
 class Kronolith_Event_Sql extends Kronolith_Event
 {
     /**
+     * The type of the calender this event exists on.
+     *
+     * @var string
+     */
+    protected $_calendarType = 'internal';
+
+    /**
      * @var array
      */
     private $_properties = array();
+
+    /**
+     * Const'r
+     *
+     * @param Kronolith_Driver $driver  The backend driver that this event is
+     *                                  stored in.
+     * @param mixed $eventObject        Backend specific event object
+     *                                  that this will represent.
+     */
+    public function __construct($driver, $eventObject = null)
+    {
+        static $alarm;
+
+        /* Set default alarm value. */
+        if (!isset($alarm) && isset($GLOBALS['prefs'])) {
+            $alarm = $GLOBALS['prefs']->getValue('default_alarm');
+        }
+
+        $this->alarm = $alarm;
+
+        parent::__construct($driver, $eventObject);
+    }
 
     public function fromDriver($SQLEvent)
     {
@@ -82,10 +111,13 @@ class Kronolith_Event_Sql extends Kronolith_Event
             $this->private = (bool)($SQLEvent['event_private']);
         }
         if (isset($SQLEvent['event_status'])) {
-            $this->status = $SQLEvent['event_status'];
+            $this->status = (int)$SQLEvent['event_status'];
         }
         if (isset($SQLEvent['event_attendees'])) {
             $this->attendees = array_change_key_case($driver->convertFromDriver(unserialize($SQLEvent['event_attendees'])));
+        }
+        if (isset($SQLEvent['event_resources'])) {
+            $this->_resources = array_change_key_case($driver->convertFromDriver(unserialize($SQLEvent['event_resources'])));
         }
         if (isset($SQLEvent['event_description'])) {
             $this->description = $driver->convertFromDriver($SQLEvent['event_description']);
@@ -112,6 +144,7 @@ class Kronolith_Event_Sql extends Kronolith_Event
         $this->_properties['event_private'] = (int)$this->isPrivate();
         $this->_properties['event_status'] = $this->getStatus();
         $this->_properties['event_attendees'] = serialize($driver->convertToDriver($this->getAttendees()));
+        $this->_properties['event_resources'] = serialize($driver->convertToDriver($this->getResources()));
         $this->_properties['event_modified'] = $_SERVER['REQUEST_TIME'];
 
         if ($this->isAllDay()) {

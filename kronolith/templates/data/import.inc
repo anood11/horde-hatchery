@@ -1,5 +1,5 @@
 <form method="post" name="import_form" enctype="multipart/form-data" action="data.php">
-<?php Util::pformInput() ?>
+<?php Horde_Util::pformInput() ?>
 <input type="hidden" name="actionID" value="<?php echo htmlspecialchars($next_step) ?>" />
 <input type="hidden" name="import_step" value="<?php echo (int)$import_step ?>" />
 
@@ -14,7 +14,7 @@
       <option value="icalendar"><?php echo _("vCalendar/iCalendar") ?></option>
     </select><br />
 
-    <?php if (!$prefs->isLocked('default_share') && count($calendars = Kronolith::listCalendars(false, PERMS_EDIT)) > 1): ?>
+    <?php if (!$prefs->isLocked('default_share') && count($calendars = Kronolith::listCalendars(false, Horde_Perms::EDIT)) > 1): ?>
     <?php echo Horde::label('importCal', _("Select the calendar to import to:")) ?><br />
     <select id="importCal" name="importCal">
       <?php foreach ($calendars as $id => $cal) {
@@ -22,7 +22,7 @@
       } ?>
     </select><br /><br />
     <?php else: ?>
-    <input type="hidden" name="importCal" value="<?php echo htmlspecialchars(Kronolith::getDefaultCalendar(PERMS_EDIT)) ?>" />
+    <input type="hidden" name="importCal" value="<?php echo htmlspecialchars(Kronolith::getDefaultCalendar(Horde_Perms::EDIT)) ?>" />
     <?php endif; ?>
     <?php echo Horde::label('import_file', _("Select the file to import:")) ?><br />
     <input type="file" id="import_file" name="import_file" size="40" />

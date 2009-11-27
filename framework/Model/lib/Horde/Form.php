@@ -1,18 +1,9 @@
 <?php
 /**
- * @package Horde_Form
- */
-
-/** String */
-include_once 'Horde/String.php';
-
-/**
  * Horde_Form Master Class.
  *
  * The Horde_Form:: package provides form rendering, validation, and
  * other functionality for the Horde Application Framework.
- *
- * $Horde: incubator/Horde_Form/Horde/Form.php,v 1.19 2008/08/26 15:32:55 selsky Exp $
  *
  * Copyright 2001-2007 Robert E. Coyle <robertecoyle@hotmail.com>
  * Copyright 2001-2009 The Horde Project (http://www.horde.org/)
@@ -22,7 +13,6 @@ include_once 'Horde/String.php';
  *
  * @author  Robert E. Coyle <robertecoyle@hotmail.com>
  * @author  Chuck Hagenbuch <chuck@horde.org>
- * @since   Horde 3.0
  * @package Horde_Form
  */
 class Horde_Form {
@@ -44,7 +34,7 @@ class Horde_Form {
     public function __construct($vars, $title = '', $name = null)
     {
         if (is_null($name)) {
-            $name = String::lower(get_class($this));
+            $name = Horde_String::lower(get_class($this));
         }
 
         $this->_vars = $vars;
@@ -122,7 +112,7 @@ class Horde_Form {
     {
         $type_class = 'Horde_Form_Type_' . $type;
         if (!class_exists($type_class)) {
-            Horde::fatal(PEAR::raiseError(sprintf('Nonexistant class "%s" for field type "%s"', $type_class, $type)), __FILE__, __LINE__);
+            throw new Horde_Exception(sprintf('Nonexistant class "%s" for field type "%s"', $type_class, $type));
         }
         $type_ob = new $type_class();
         call_user_func_array(array(&$type_ob, 'init'), $params);
@@ -587,27 +577,27 @@ class Horde_Form {
  * @author  Robert E. Coyle <robertecoyle@hotmail.com>
  * @package Horde_Form
  */
-class Horde_Form_Type {
-
-    protected function __get($property)
+class Horde_Form_Type
+{
+    public function __get($property)
     {
         $prop = '_' . $property;
         return isset($this->$prop) ? $this->$prop : null;
     }
 
-    protected function __set($property, $value)
+    public function __set($property, $value)
     {
         $prop = '_' . $property;
         $this->$prop = $value;
     }
 
-    protected function __isset($property)
+    public function __isset($property)
     {
         $prop = '_' . $property;
         return isset($this->$prop);
     }
 
-    protected function __unset($property)
+    public function __unset($property)
     {
         $prop = '_' . $property;
         unset($this->$prop);
@@ -631,11 +621,10 @@ class Horde_Form_Type {
     {
         $info = $var->getValue($vars);
     }
-
 }
 
-class Horde_Form_Type_number extends Horde_Form_Type {
-
+class Horde_Form_Type_number extends Horde_Form_Type
+{
     var $_fraction;
 
     function init($fraction = null)
@@ -669,7 +658,7 @@ class Horde_Form_Type_number extends Horde_Form_Type {
         }
 
         /* Get current locale information. */
-        $linfo = NLS::getLocaleInfo();
+        $linfo = Horde_Nls::getLocaleInfo();
 
         /* Build the pattern. */
         $pattern = '(-)?';
@@ -703,7 +692,7 @@ class Horde_Form_Type_number extends Horde_Form_Type {
     function getInfo($vars, $var, &$info)
     {
         $value = $vars->get($var->getVarName());
-        $linfo = NLS::getLocaleInfo();
+        $linfo = Horde_Nls::getLocaleInfo();
         $value = str_replace($linfo['mon_thousands_sep'], '', $value);
         $info = str_replace($linfo['mon_decimal_point'], '.', $value);
     }
@@ -715,7 +704,6 @@ class Horde_Form_Type_number extends Horde_Form_Type {
     {
         return array('name' => _("Number"));
     }
-
 }
 
 class Horde_Form_Type_int extends Horde_Form_Type {
@@ -835,7 +823,7 @@ class Horde_Form_Type_text extends Horde_Form_Type {
     {
         $valid = true;
 
-        if (!empty($this->_maxlength) && String::length($value) > $this->_maxlength) {
+        if (!empty($this->_maxlength) && Horde_String::length($value) > $this->_maxlength) {
             $valid = false;
             $message = sprintf(_("Value is over the maximum length of %s."), $this->_maxlength);
         } elseif ($var->isRequired() && empty($this->_regex)) {
@@ -1038,14 +1026,14 @@ class Horde_Form_Type_countedtext extends Horde_Form_Type_longtext {
     {
         $valid = true;
 
-        $length = String::length(trim($value));
+        $length = Horde_String::length(trim($value));
 
         if ($var->isRequired() && $length <= 0) {
             $valid = false;
             $message = _("This field is required.");
         } elseif ($length > $this->_chars) {
             $valid = false;
-            $message = sprintf(_("There are too many characters in this field. You have entered %s characters; you must enter less than %s."), String::length(trim($value)), $this->_chars);
+            $message = sprintf(_("There are too many characters in this field. You have entered %s characters; you must enter less than %s."), Horde_String::length(trim($value)), $this->_chars);
         }
 
         return $valid;
@@ -1135,296 +1123,6 @@ class Horde_Form_Type_file extends Horde_Form_Type {
 
 }
 
-class Horde_Form_Type_image extends Horde_Form_Type {
-
-    /**
-     * Has a file been uploaded on this form submit?
-     *
-     * @var boolean
-     */
-    var $_uploaded = null;
-
-    /**
-     * Show the upload button?
-     *
-     * @var boolean
-     */
-    var $_show_upload = true;
-
-    /**
-     * Show the option to upload also original non-modified image?
-     *
-     * @var boolean
-     */
-    var $_show_keeporig = false;
-
-    /**
-     * Limit the file size?
-     *
-     * @var integer
-     */
-    var $_max_filesize = null;
-
-    /**
-     * Hash containing the previously uploaded image info.
-     *
-     * @var array
-     */
-    var $_img = array();
-
-    function init($show_upload = true, $show_keeporig = false, $max_filesize = null)
-    {
-        $this->_show_upload   = $show_upload;
-        $this->_show_keeporig = $show_keeporig;
-        $this->_max_filesize  = $max_filesize;
-    }
-
-    function onSubmit($var, $vars)
-    {
-        /* Get the upload. */
-        $this->_getUpload($vars, $var);
-
-        /* If this was done through the upload button override the submitted
-         * value of the form. */
-        if ($vars->get('_do_' . $var->getVarName())) {
-            $var->form->setSubmitted(false);
-        }
-    }
-
-    function isValid($var, $vars, $value, &$message)
-    {
-        $field = $vars->get($var->getVarName());
-
-        /* Get the upload. */
-        $this->_getUpload($vars, $var);
-
-        /* The upload generated a PEAR Error. */
-        if (is_a($this->_uploaded, 'PEAR_Error')) {
-            /* Not required and no image upload attempted. */
-            if (!$var->isRequired() && empty($field['img']) &&
-                $this->_uploaded->getCode() == UPLOAD_ERR_NO_FILE) {
-                return true;
-            }
-
-            if (($this->_uploaded->getCode() == UPLOAD_ERR_NO_FILE) &&
-                empty($field['img'])) {
-                /* Nothing uploaded and no older upload. */
-                $message = _("This field is required.");
-                return false;
-            } elseif (!empty($field['img'])) {
-                /* Nothing uploaded but older upload present. */
-                return true;
-            } else {
-                /* Some other error message. */
-                $message = $this->_uploaded->getMessage();
-                return false;
-            }
-        } elseif ($this->_max_filesize &&
-                  $this->_img['size'] > $this->_max_filesize) {
-            $message = sprintf(_("The image file was larger than the maximum allowed size (%d bytes)."), $this->_max_filesize);
-            return false;
-        }
-
-        return true;
-    }
-
-    function getInfo($vars, $var, &$info)
-    {
-        /* Get the upload. */
-        $this->_getUpload($vars, $var);
-
-        /* Get image params stored in the hidden field. */
-        $value = $var->getValue($vars);
-        $info = $this->_img;
-        if (empty($info['file'])) {
-            unset($info['file']);
-            return;
-        }
-        if ($this->_show_keeporig) {
-            $info['keep_orig'] = !empty($value['keep_orig']);
-        }
-
-        /* Set the uploaded value (either true or PEAR_Error). */
-        $info['uploaded'] = &$this->_uploaded;
-
-        /* If a modified file exists move it over the original. */
-        if ($this->_show_keeporig && $info['keep_orig']) {
-            /* Requested the saving of original file also. */
-            $info['orig_file'] = Horde::getTempDir() . '/' . $info['file'];
-            $info['file'] = Horde::getTempDir() . '/mod_' . $info['file'];
-            /* Check if a modified file actually exists. */
-            if (!file_exists($info['file'])) {
-                $info['file'] = $info['orig_file'];
-                unset($info['orig_file']);
-            }
-        } else {
-            /* Saving of original not required. */
-            $mod_file = Horde::getTempDir() . '/mod_' . $info['file'];
-            $info['file'] = Horde::getTempDir() . '/' . $info['file'];
-
-            if (file_exists($mod_file)) {
-                /* Unlink first (has to be done on Windows machines?) */
-                unlink($info['file']);
-                rename($mod_file, $info['file']);
-            }
-        }
-    }
-
-    /**
-     * Gets the upload and sets up the upload data array. Either
-     * fetches an upload done with this submit or retries stored
-     * upload info.
-     */
-    function _getUpload($vars, $var)
-    {
-        /* Don't bother with this function if already called and set
-         * up vars. */
-        if (!empty($this->_img)) {
-            return true;
-        }
-
-        /* Check if file has been uploaded. */
-        $varname = $var->getVarName();
-        $this->_uploaded = Horde_Browser::wasFileUploaded($varname . '[new]');
-
-        if ($this->_uploaded === true) {
-            /* A file has been uploaded on this submit. Save to temp dir for
-             * preview work. */
-            $this->_img['type'] = $this->getUploadedFileType($varname . '[new]');
-
-            /* Get the other parts of the upload. */
-            Horde_Array::getArrayParts($varname . '[new]', $base, $keys);
-
-            /* Get the temporary file name. */
-            $keys_path = array_merge(array($base, 'tmp_name'), $keys);
-            $this->_img['file'] = Horde_Array::getElement($_FILES, $keys_path);
-
-            /* Get the actual file name. */
-            $keys_path= array_merge(array($base, 'name'), $keys);
-            $this->_img['name'] = Horde_Array::getElement($_FILES, $keys_path);
-
-            /* Get the file size. */
-            $keys_path= array_merge(array($base, 'size'), $keys);
-            $this->_img['size'] = Horde_Array::getElement($_FILES, $keys_path);
-
-            /* Get any existing values for the image upload field. */
-            $upload = $vars->get($var->getVarName());
-            $upload['img'] = @unserialize($upload['img']);
-
-            /* Get the temp file if already one uploaded, otherwise create a
-             * new temporary file. */
-            if (!empty($upload['img']['file'])) {
-                $tmp_file = Horde::getTempDir() . '/' . $upload['img']['file'];
-            } else {
-                $tmp_file = Horde::getTempFile('Horde', false);
-            }
-
-            /* Move the browser created temp file to the new temp file. */
-            move_uploaded_file($this->_img['file'], $tmp_file);
-            $this->_img['file'] = basename($tmp_file);
-
-            /* Store the uploaded image file data to the hidden field. */
-            $upload['img'] = serialize($this->_img);
-            $vars->set($var->getVarName(), $upload);
-        } elseif ($this->_uploaded) {
-            /* File has not been uploaded. */
-            $upload = $vars->get($var->getVarName());
-            if ($this->_uploaded->getCode() == 4 && !empty($upload['img'])) {
-                $this->_img = @unserialize($upload['img']);
-            }
-        }
-    }
-
-    function getUploadedFileType($field)
-    {
-        /* Get any index on the field name. */
-        $index = Horde_Array::getArrayParts($field, $base, $keys);
-
-        if ($index) {
-            /* Index present, fetch the mime type var to check. */
-            $keys_path = array_merge(array($base, 'type'), $keys);
-            $type = Horde_Array::getElement($_FILES, $keys_path);
-            $keys_path= array_merge(array($base, 'tmp_name'), $keys);
-            $tmp_name = Horde_Array::getElement($_FILES, $keys_path);
-        } else {
-            /* No index, simple set up of vars to check. */
-            $type = $_FILES[$field]['type'];
-            $tmp_name = $_FILES[$field]['tmp_name'];
-        }
-
-        if (empty($type) || ($type == 'application/octet-stream')) {
-            /* Type wasn't set on upload, try analising the upload. */
-            global $conf;
-            require_once 'Horde/MIME/Magic.php';
-            if (!($type = MIME_Magic::analyzeFile($tmp_name, isset($conf['mime']['magic_db']) ? $conf['mime']['magic_db'] : null))) {
-                if ($index) {
-                    /* Get the name value. */
-                    $keys_path = array_merge(array($base, 'name'), $keys);
-                    $name = Horde_Array::getElement($_FILES, $keys_path);
-
-                    /* Work out the type from the file name. */
-                    $type = MIME_Magic::filenameToMIME($name);
-
-                    /* Set the type. */
-                    $keys_path = array_merge(array($base, 'type'), $keys);
-                    Horde_Array::getElement($_FILES, $keys_path, $type);
-                } else {
-                    /* Work out the type from the file name. */
-                    $type = MIME_Magic::filenameToMIME($_FILES[$field]['name']);
-
-                    /* Set the type. */
-                    $_FILES[$field]['type'] = MIME_Magic::filenameToMIME($_FILES[$field]['name']);
-                }
-            }
-        }
-
-        return $type;
-    }
-
-    /**
-     * Loads any existing image data into the image field. Requires that the
-     * array $image passed to it contains the structure:
-     *   $image['load']['file'] - the filename of the image;
-     *   $image['load']['data'] - the raw image data.
-     *
-     * @param array $image  The image array.
-     */
-    function loadImageData(&$image)
-    {
-        /* No existing image data to load. */
-        if (!isset($image['load'])) {
-            return;
-        }
-
-        /* Save the data to the temp dir. */
-        $tmp_file = Horde::getTempDir() . '/' . $image['load']['file'];
-        if ($fd = fopen($tmp_file, 'w')) {
-            fwrite($fd, $image['load']['data']);
-            fclose($fd);
-        }
-
-        $image['img'] = serialize(array('file' => $image['load']['file']));
-        unset($image['load']);
-    }
-
-    /**
-     * Return info about field type.
-     */
-    function about()
-    {
-        return array(
-            'name' => _("Image upload"),
-            'params' => array(
-                'show_upload'   => array('label' => _("Show upload?"),
-                                         'type'  => 'boolean'),
-                'show_keeporig' => array('label' => _("Show option to keep original?"),
-                                         'type'  => 'boolean'),
-                'max_filesize'  => array('label' => _("Maximum file size in bytes"),
-                                         'type'  => 'int')));
-    }
-
-}
-
 class Horde_Form_Type_boolean extends Horde_Form_Type {
 
     function isValid($var, $vars, $value, &$message)
@@ -1434,7 +1132,7 @@ class Horde_Form_Type_boolean extends Horde_Form_Type {
 
     function getInfo($vars, $var, &$info)
     {
-        $info = String::lower($vars->get($var->getVarName())) == 'on';
+        $info = Horde_String::lower($vars->get($var->getVarName())) == 'on';
     }
 
     /**
@@ -2789,9 +2487,6 @@ class Horde_Form_Type_monthdayyear extends Horde_Form_Type {
 
 }
 
-/**
- * @since Horde 3.2
- */
 class Horde_Form_Type_datetime extends Horde_Form_Type {
 
     var $_mdy;
@@ -3350,7 +3045,7 @@ class Horde_Form_Type_dblookup extends Horde_Form_Type_enum {
 
             $col = $db->getCol($sql);
             if (!is_a($col, 'PEAR_Error')) {
-                $values = Horde_Array::combine($col, $col);
+                $values = array_combine($col, $col);
             }
         }
         parent::init($values, $prompt);
@@ -3393,7 +3088,7 @@ class Horde_Form_Type_figlet extends Horde_Form_Type {
             return false;
         }
 
-        if (String::lower($value) != String::lower($this->_text)) {
+        if (Horde_String::lower($value) != Horde_String::lower($this->_text)) {
             $message = _("The text you entered did not match the text on the screen.");
             return false;
         }

@@ -2,13 +2,34 @@
 v2.0-git
 --------
 
-
+[mms] Use IMP API for IMAP actions.
+[mms] Convert to Horde 5 standards.
 
 
 ----------
-v1.2.2-cvs
+v1.2.3-cvs
 ----------
 
+[jan] Log Sieve communication with DEBUG log level.
+[jan] Fix Oracle SQL scripts.
+[jan] Add Croatian translation (Matej Vela <matej.vela@carnet.hr>).
+[jan] Add PostgreSQL-specific upgrade script (Request #8630).
+[jan] Fix procmail vacation rule (micha@kovoks.nl, Bug #7052).
+[jan] Prevent deadlock with vacation rule in maildrop driver (Bug #8577).
+
+
+------
+v1.2.2
+------
+
+[mms] Upgrade prototype.js to v1.6.1.
+[jan] Correctly match negative header values with numeric comparison in Sieve
+      driver (bb@apc.ag, Bug #7308).
+[jan] Implement removeUserData API (adrieder@sbox.tugraz.at, Request #8452).
+[jan] Take default settings for forwards, vacation and spam rules from
+      config/prefs.php in the SQL storage driver.
+[jan] No longer try to read spam folder from IMP's preferences.
+[jan] Fix maildrop rules without conditions (almarin@um.es, Bug #8103).
 [cjh] Fix checks for the forward_file and forward_script procmail parameters
       in the VFS driver (Bug #7811).
 [cjh] Add %d (domain) as a replaceable variable in the vfs_path parameter

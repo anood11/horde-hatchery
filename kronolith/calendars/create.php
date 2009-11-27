@@ -1,7 +1,5 @@
 <?php
 /**
- * $Horde: kronolith/calendars/create.php,v 1.3 2009/01/06 18:01:00 jan Exp $
- *
  * Copyright 2002-2009 The Horde Project (http://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (GPL). If you
@@ -16,12 +14,12 @@ require_once KRONOLITH_BASE . '/lib/Forms/CreateCalendar.php';
 
 // Exit if this isn't an authenticated user or if the user can't
 // create new calendars (default share is locked).
-if (!Auth::getAuth() || $prefs->isLocked('default_share')) {
+if (!Horde_Auth::getAuth() || $prefs->isLocked('default_share')) {
     header('Location: ' . Horde::applicationUrl($prefs->getValue('defaultview') . '.php', true));
     exit;
 }
 
-$vars = Variables::getDefaultVariables();
+$vars = Horde_Variables::getDefaultVariables();
 $form = new Kronolith_CreateCalendarForm($vars);
 
 // Execute if the form is valid.

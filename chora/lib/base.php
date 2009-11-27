@@ -4,55 +4,35 @@
  *
  * This file brings in all of the dependencies that every Chora script
  * will need, and sets up objects that all scripts use.
+ *
+ * The following global variables are used:
+ *   $no_compress  -  Controls whether the page should be compressed
  */
 
-$chora_dir = dirname(__FILE__);
+// Determine BASE directories.
+require_once dirname(__FILE__) . '/base.load.php';
 
-// Check for a prior definition of HORDE_BASE.
-if (!defined('HORDE_BASE')) {
-    /* Temporary fix - if horde does not live directly under the imp
-     * directory, the HORDE_BASE constant should be defined in
-     * imp/lib/base.local.php. */
-    if (file_exists($chora_dir . '/base.local.php')) {
-        include $chora_dir . '/base.local.php';
-    } else {
-        define('HORDE_BASE', $chora_dir . '/../..');
-    }
-}
-
-// Find the base file path of Chora.
-if (!defined('CHORA_BASE')) {
-    define('CHORA_BASE', $chora_dir . '/..');
-}
-
-// Load the Horde Framework core, and set up inclusion paths.
-// No inclusion paths currently needed for Chora
+// Load the Horde Framework core.
 require_once HORDE_BASE . '/lib/core.php';
 
 // Registry
-$registry = &Registry::singleton();
-if (is_a(($pushed = $registry->pushApp('chora', !defined('AUTH_HANDLER'))), 'PEAR_Error')) {
-    if ($pushed->getCode() == 'permission_denied') {
-        Horde::authenticationFailureRedirect();
-    }
-    Horde::fatal($pushed, __FILE__, __LINE__, false);
+$registry = Horde_Registry::singleton();
+try {
+    $registry->pushApp('chora', array('logintasks' => true));
+} catch (Horde_Exception $e) {
+    Horde_Auth::authenticateFailure('chora', $e);
 }
 $conf = &$GLOBALS['conf'];
 define('CHORA_TEMPLATES', $registry->get('templates'));
 
 // Notification system.
-$notification = &Notification::singleton();
+$notification = Horde_Notification::singleton();
 $notification->attach('status');
-
-// Horde base libraries.
-require_once 'Horde/Text.php';
-require_once 'Horde/Help.php';
-
-// Chora base library.
-require_once CHORA_BASE . '/lib/Chora.php';
 
 // Initialize objects, path, etc.
 Chora::initialize();
 
-// Start compression, if requested.
-Horde::compressOutput();
+// Start compression.
+if (!Horde_Util::nonInputVar('no_compress')) {
+    Horde::compressOutput();
+}

@@ -45,9 +45,10 @@ class Kronolith_Driver_Horde extends Kronolith_Driver
      *                                   $startDate - $endDate range.
      * @param boolean $hasAlarm          Only return events with alarms?
      * @param boolean $json              Store the results of the events'
-     *                                   toJSON() method?
+     *                                   toJson() method?
      *
      * @return array  Events in the given time range.
+     * @throws Horde_Exception
      */
     public function listEvents($startDate = null, $endDate = null,
                                $showRecurrence = false, $hasAlarm = false,
@@ -58,10 +59,18 @@ class Kronolith_Driver_Horde extends Kronolith_Driver
             return array();
         }
 
-        $eventsList = $this->_params['registry']->call($this->api . '/listTimeObjects', array(array($category), $startDate, $endDate));
-        if (is_a($eventsList, 'PEAR_Error')) {
-            return $eventsList;
+        if (is_null($startDate)) {
+            $startDate = new Horde_Date(array('mday' => 1,
+                                              'month' => 1,
+                                              'year' => 0000));
         }
+        if (is_null($endDate)) {
+            $endDate = new Horde_Date(array('mday' => 31,
+                                            'month' => 12,
+                                            'year' => 9999));
+        }
+
+        $eventsList = $this->_params['registry']->call($this->api . '/listTimeObjects', array(array($category), $startDate, $endDate));
 
         $startDate = clone $startDate;
         $startDate->hour = $startDate->min = $startDate->sec = 0;
@@ -95,8 +104,18 @@ class Kronolith_Driver_Horde extends Kronolith_Driver
         return $results;
     }
 
+    /**
+     * @todo: implement getTimeObject in timeobjects API.
+     */
     public function getEvent($eventId = null)
     {
+        $events = $this->listEvents();
+        foreach ($events as $day) {
+            if (isset($day[$eventId])) {
+                return $day[$eventId];
+            }
+        }
+        return PEAR::raiseError(_("Event not found"));
     }
 
 }

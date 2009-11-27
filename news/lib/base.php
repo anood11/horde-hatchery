@@ -19,26 +19,21 @@ if (!defined('HORDE_BASE')) {
     define('HORDE_BASE', dirname(__FILE__) . '/../..');
 }
 
-// Load the Horde Framework core, and set up inclusion paths.
+// Load the Horde Framework core.
 require_once HORDE_BASE . '/lib/core.php';
 
-$news_dir = dirname(__FILE__);
-Horde_Autoloader::addClassPath($news_dir);
-Horde_Autoloader::addClassPattern('/^News/', $news_dir);
-
 // Registry.
-$registry = &Registry::singleton();
-if (($pushed = $registry->pushApp('news', !defined('AUTH_HANDLER'))) instanceof PEAR_Error) {
-    if ($pushed->getCode() == 'permission_denied') {
-        Horde::authenticationFailureRedirect();
-    }
-    Horde::fatal($pushed, __FILE__, __LINE__, false);
+$registry = Horde_Registry::singleton();
+try {
+    $registry->pushApp('news', array('check_perms' => (Horde_Util::nonInputVar('news_authentication') != 'none'), 'logintasks' => true));
+} catch (Horde_Exception $e) {
+    Horde_Auth::authenticateFailure('news', $e);
 }
 $conf = &$GLOBALS['conf'];
 define('NEWS_TEMPLATES', $registry->get('templates'));
 
 // Notification system.
-$notification = &Notification::singleton();
+$notification = Horde_Notification::singleton();
 $notification->attach('status');
 
 // Define the base file path of News.
@@ -47,14 +42,14 @@ if (!defined('NEWS_BASE')) {
 }
 
 // Cache
-$GLOBALS['cache'] = &Horde_Cache::singleton($GLOBALS['conf']['cache']['driver'],
-                                            Horde::getDriverConfig('cache', $GLOBALS['conf']['cache']['driver']));
+$GLOBALS['cache'] = Horde_Cache::singleton($GLOBALS['conf']['cache']['driver'],
+                                           Horde::getDriverConfig('cache', $GLOBALS['conf']['cache']['driver']));
 
 // Set up News drivers.
 $GLOBALS['news'] = News_Driver::factory();
 $GLOBALS['news_cat'] = new News_Categories();
 
 // Start compression.
-if (!Util::nonInputVar('no_compress')) {
+if (!Horde_Util::nonInputVar('no_compress')) {
     Horde::compressOutput();
 }

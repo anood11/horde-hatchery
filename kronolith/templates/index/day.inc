@@ -1,75 +1,47 @@
-<div id="kronolithViewDay" class="kronolithView kronolithViewDay" style="display:none">
+<div id="kronolithViewDay" style="display:none">
+<div id="kronolithLoadingday" class="kronolithLoading"></div>
+
+<table class="kronolithView kronolithViewDay">
+  <caption>
+    <span>&nbsp;</span>
+    <span class="kronolithNavigation">
+      <a class="kronolithGotoToday"><?php echo Horde::highlightAccessKey(_("_Today"), $todayAccessKey) ?></a>
+      <a class="kronolithPrev" title="<?php echo _("Previous") ?>">&lt;</a>
+      <a class="kronolithNext" title="<?php echo _("Next") ?>">&gt;</a>
+    </span>
+  </caption>
+</table>
 
 <div class="kronolithViewHead">
-  <div class="kronolithRow">
-    <div class="kronolithFirstCol">&nbsp;</div>
-    <div class="kronolithCol"><span></span></div>
-  </div>
+<table class="kronolithView kronolithViewDay">
+  <thead>
+    <tr>
+      <td class="kronolithFirstCol">&nbsp;</td>
+      <td><span><?php echo _("Events for this day") ?></span></td>
+    </tr>
+  </thead>
+  <tbody>
+    <tr class="kronolithAllDay">
+      <td class="kronolithFirstCol"><span><?php echo _("All day") ?></span></td>
+      <td><div class="kronolithAllDayContainer">
+      </div></td>
+    </tr>
+  </tbody>
+</table>
 </div>
+
 <div class="kronolithViewBody">
-  <div class="kronolithRow kronolithAllDay">
-     <div class="kronolithFirstCol"><?php echo _("All day") ?></div>
-    <div class="kronolithCol">
-      <div class="kronolithEvent c3">Restauração da Independência</div>
-      <div class="kronolithEvent c2">Dia Mundial da Usabilidade</div>
-    </div>
-  </div>
-<?php for ($i = 0; $i < 24; $i++): ?>
-  <div class="kronolithRow<?php if ($i < 9 || $i > 19) echo ' kronolithNight' ?>">
-    <div class="kronolithFirstCol"><?php printf('%02d', $i) ?></div>
-    <div class="kronolithCol kronolithFirstField"></div>
-    <div class="kronolithCol"></div>
-    <div class="kronolithCol"></div>
-    <div class="kronolithCol"></div>
-    <div class="kronolithCol"></div>
-    <div class="kronolithCol"></div>
-    <div class="kronolithCol kronolithLastField"></div>
-  </div>
-<?php endfor; ?>
-
-  <div class="kronolithEvents">
-    <div class="kronolithEvent c1 kronolithEventFull col1 hour0 length2">
-      <div class="kronolithDragger kronolithDraggerTop"></div>
-      <div class="kronolithEventInfo">10h diiaiaiai jkh gjhg fjkgh fkjgh kfjhg jkfhg kjfh g</div>
-      <div class="kronolithDragger kronolithDraggerBottom"></div>
-    </div>
-
-    <div class="kronolithEvent c2 kronolithEventFull col2 hour1 length6">
-      <div class="kronolithDragger kronolithDraggerTop"></div>
-      <div class="kronolithEventInfo">10h diiaiaiai jkh gjhg fjkgh fkjgh kfjhg jkfhg kjfh g</div>
-      <div class="kronolithDragger kronolithDraggerBottom"></div>
-    </div>
-
-    <div class="kronolithEvent c1 kronolithEventFull col3 hour0 length2">
-      <div class="kronolithDragger kronolithDraggerTop"></div>
-      <div class="kronolithEventInfo">10h diiaiaiai jkh gjhg fjkgh fkjgh kfjhg jkfhg kjfh g</div>
-      <div class="kronolithDragger kronolithDraggerBottom"></div>
-    </div>
-
-    <div class="kronolithEvent c1 kronolithEventFull col4 hour0 length2">
-      <div class="kronolithDragger kronolithDraggerTop"></div>
-      <div class="kronolithEventInfo">10h diiaiaiai jkh gjhg fjkgh fkjgh kfjhg jkfhg kjfh g</div>
-      <div class="kronolithDragger kronolithDraggerBottom"></div>
-    </div>
-
-    <div class="kronolithEvent c1 kronolithEventFull col5 hour0 length2">
-      <div class="kronolithDragger kronolithDraggerTop"></div>
-      <div class="kronolithEventInfo">10h diiaiaiai jkh gjhg fjkgh fkjgh kfjhg jkfhg kjfh g</div>
-      <div class="kronolithDragger kronolithDraggerBottom"></div>
-    </div>
-
-    <div class="kronolithEvent c1 kronolithEventFull col6 hour0 length2">
-      <div class="kronolithDragger kronolithDraggerTop"></div>
-      <div class="kronolithEventInfo">10h diiaiaiai jkh gjhg fjkgh fkjgh kfjhg jkfhg kjfh g</div>
-      <div class="kronolithDragger kronolithDraggerBottom"></div>
-    </div>
-
-    <div class="kronolithEvent c1 kronolithEventFull col7 hour0 length2">
-      <div class="kronolithDragger kronolithDraggerTop"></div>
-      <div class="kronolithEventInfo">10h diiaiaiai jkh gjhg fjkgh fkjgh kfjhg jkfhg kjfh g</div>
-      <div class="kronolithDragger kronolithDraggerBottom"></div>
-    </div>
-  </div>
+<table class="kronolithView kronolithViewDay">
+  <tbody id="kronolithViewDayBody">
+    <?php for ($i = 0; $i < 24; $i++): ?>
+    <tr<?php if ($i < 9 || $i > 19) echo ' class="kronolithNight"' ?>>
+      <td class="kronolithFirstCol"><span><?php echo $i ?>:00</span></td>
+      <td></td>
+    </tr>
+    <?php endfor; ?>
+  </tbody>
+</table>
+<div id="kronolithEventsDay"></div>
 </div>
 
 </div>

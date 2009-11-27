@@ -1,12 +1,11 @@
 <?php
 
-Horde::addScriptFile('prototype.js', 'horde', true);
-Horde::addScriptFile('effects.js', 'horde', true);
-Horde::addScriptFile('views.js', 'kronolith', true);
-Horde::addScriptFile('stripe.js', 'horde', true);
+Horde::addScriptFile('effects.js', 'horde');
+Horde::addScriptFile('views.js', 'kronolith');
+Horde::addScriptFile('stripe.js', 'horde');
 
 if (isset($language)) {
-    header('Content-type: text/html; charset=' . NLS::getCharset());
+    header('Content-type: text/html; charset=' . Horde_Nls::getCharset());
     header('Vary: Accept-Language');
 }
 ?>
@@ -27,7 +26,7 @@ if (!empty($refresh_time) && ($refresh_time > 0) && !empty($refresh_url)) {
 Horde::includeScriptFiles();
 require KRONOLITH_TEMPLATES . '/javascript_defs.php';
 
-$bc = Util::nonInputVar('bodyClass');
+$bc = Horde_Util::nonInputVar('bodyClass');
 if (isset($view) && is_object($view) && $prefs->getValue('show_panel')) {
     if ($bc) {
         $bc .= ' ';
@@ -41,15 +40,14 @@ $currentDate = Kronolith::currentDate();
 <script type="text/javascript">//<![CDATA[
 var kronolithView = '<?php if (isset($view) && is_object($view)) echo $view->getName() ?>';
 var kronolithDate = new Date(<?php printf('%d, %d, %d', $currentDate->year, $currentDate->month - 1, $currentDate->mday) ?>);
-var kronolithPrintLink = '';
 //]]></script>
 <title><?php echo htmlspecialchars($page_title) ?></title>
 <link href="<?php echo $GLOBALS['registry']->getImageDir()?>/favicon.ico" rel="SHORTCUT ICON" />
-<?php echo Horde::stylesheetLink('kronolith', empty($print_view) ? '' : 'print') ?>
+<?php Horde::includeStylesheetFiles() ?>
 <?php foreach ($GLOBALS['display_calendars'] as $calendar): ?>
 <link href="<?php echo Kronolith::feedUrl($calendar) ?>" rel="alternate" type="application/atom+xml" />
 <?php endforeach; ?>
-<?php Kronolith::outputInlineScript(); ?>
+<?php Horde::outputInlineScript(); ?>
 </head>
 
-<body<?php if ($bc) echo ' class="' . $bc . '"'; if ($bi = Util::nonInputVar('bodyId')) echo ' id="' . $bi . '"'; ?>>
+<body<?php if ($bc) echo ' class="' . $bc . '"'; if ($bi = Horde_Util::nonInputVar('bodyId')) echo ' id="' . $bi . '"'; ?>>

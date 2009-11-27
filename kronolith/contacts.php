@@ -6,11 +6,10 @@
  * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
  */
 
-@define('KRONOLITH_BASE', dirname(__FILE__));
-require_once KRONOLITH_BASE . '/lib/base.php';
+require_once dirname(__FILE__) . '/lib/base.php';
 
-if (!Auth::getAuth()) {
-    Util::closeWindowJS();
+if (!Horde_Auth::getAuth()) {
+    Horde_Util::closeWindowJS();
     exit;
 }
 
@@ -19,7 +18,7 @@ $source_list = $registry->call('contacts/sources');
 
 /* If we self-submitted, use that source. Otherwise, choose a good
  * source. */
-$source = Util::getFormData('source');
+$source = Horde_Util::getFormData('source');
 if (empty($source) || !isset($source_list[$source])) {
     /* We don't just pass the second argument to getFormData() because
      * we want to trap for invalid sources, not just no source. */
@@ -27,7 +26,7 @@ if (empty($source) || !isset($source_list[$source])) {
 }
 
 /* Get the search as submitted (defaults to '' which should list everyone). */
-$search = Util::getFormData('search');
+$search = Horde_Util::getFormData('search');
 $apiargs = array();
 $apiargs['addresses'] = array($search);
 $apiargs['addressbooks'] = array($source);
@@ -62,13 +61,13 @@ if (!is_a($results, 'PEAR_Error')) {
 /* If self-submitted, preserve the currently selected users encoded by
    javascript to pass as value|text. */
 $selected_addresses = array();
-$sa = explode('|', Util::getFormData('sa'));
+$sa = explode('|', Horde_Util::getFormData('sa'));
 for ($i = 0; $i < count($sa) - 1; $i += 2) {
     $selected_addresses[$sa[$i]] = $sa[$i + 1];
 }
 
 /* Set the default list display (name or email). */
-$display = Util::getFormData('display', 'name');
+$display = Horde_Util::getFormData('display', 'name');
 
 /* Display the form. */
 $title = _("Address Book");

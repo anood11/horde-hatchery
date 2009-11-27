@@ -16,6 +16,20 @@
 class IMP_Horde_Mime_Viewer_Html extends Horde_Mime_Viewer_Html
 {
     /**
+     * Can this driver render various views?
+     *
+     * @var boolean
+     */
+    protected $_capability = array(
+        'embedded' => false,
+        'forceinline' => false,
+        'full' => true,
+        'info' => true,
+        'inline' => true,
+        'raw' => false
+    );
+
+    /**
      * Cached block image.
      *
      * @var string
@@ -32,13 +46,13 @@ class IMP_Horde_Mime_Viewer_Html extends Horde_Mime_Viewer_Html
         # match 1
         (
             # <img> tags
-            <img[^>]+src=
+            <img\b[^>]+?src=
             # <input> tags
-            |<input[^>]*src=
+            |<input\b[^>]+?src=
             # "background" attributes
-            |<body[^>]*background=|<td[^>]*background=|<table[^>]*background=
+            |<body\b[^>]+?background=|<td[^>]*background=|<table[^>]*background=
             # "style" attributes; match 2; quotes: match 3
-            |(style=\s*("|\')?[^>]*background(?:-image)?:(?(3)[^"\']|[^>])*?url\s*\()
+            |(style=\s*("|\')?[^>]*?background(?:-image)?:(?(3)[^"\']|[^>])*?url\s*\()
         )
         # whitespace
         \s*
@@ -57,7 +71,7 @@ class IMP_Horde_Mime_Viewer_Html extends Horde_Mime_Viewer_Html
         (?(2)
             # closing parenthesis
             \s*\)
-            # remainder of the "style" attribute; match 5
+            # remainder of the "style" attribute; match 6
             ((?(3)[^"\'>]*|[^\s>]*))
         )
         /isx';
@@ -69,14 +83,8 @@ class IMP_Horde_Mime_Viewer_Html extends Horde_Mime_Viewer_Html
      */
     protected function _render()
     {
-        $render = $this->_IMPrender(false);
-
         return array(
-            $this->_mimepart->getMimeId() => array(
-                'data' => $render['html'],
-                'status' => $render['status'],
-                'type' => $this->_mimepart->getType(true)
-            )
+            $this->_mimepart->getMimeId() => $this->_IMPrender(false)
         );
     }
 
@@ -87,13 +95,69 @@ class IMP_Horde_Mime_Viewer_Html extends Horde_Mime_Viewer_Html
      */
     protected function _renderInline()
     {
-        $render = $this->_IMPrender(true);
+        /* Non-javascript browsers can't handle IFRAME resizing, so it isn't
+         * possible to view inline. */
+        if (!$GLOBALS['browser']->hasFeature('javascript')) {
+            return array(
+                $this->_mimepart->getMimeId() => array(
+                    'data' => '',
+                    'status' => array(
+                        array(
+                            'icon' => Horde::img('mime/html.png'),
+                            'text' => array(
+                                _("This message part contains HTML data, but this data can not be displayed inline."),
+                                $this->_params['contents']->linkViewJS($this->_mimepart, 'view_attach', _("View HTML data in new window.")),
+                            )
+                        )
+                    ),
+                    'type' => 'text/html; charset=' . Horde_Nls::getCharset()
+                )
+            );
+        }
+
+        $data = $this->_IMPrender(true);
+
+        /* Catch case where using mimp on a javascript browser. */
+        if ($_SESSION['imp']['view'] != 'mimp') {
+            $uid = 'htmldata_' . uniqid(mt_rand());
+
+            $data['js'] = array('IMP.iframeInject("' . $uid . '", ' . Horde_Serialize::serialize($data['data'], Horde_Serialize::JSON, $this->_mimepart->getCharset()) . ')');
+            $data['data'] = '<DIV>' . _("Loading...") . '</DIV><IFRAME class="htmlMsgData" id="' . $uid . '" src="javascript:false" frameborder="0" style="display:none"></IFRAME>' .
+                Horde_Util::bufferOutput(array('Horde', 'addScriptFile'), 'imp.js', 'imp');
+            $data['type'] = 'text/html; charset=UTF-8';
+        }
+
+        return array(
+            $this->_mimepart->getMimeId() => $data
+        );
+    }
+
+    /**
+     * Return the rendered information about the Horde_Mime_Part object.
+     *
+     * @return array  See Horde_Mime_Viewer_Driver::render().
+     */
+    protected function _renderInfo()
+    {
+        if ($this->canRender('inline') ||
+            ($this->_mimepart->getDisposition() == 'attachment')) {
+            return array();
+        }
 
         return array(
             $this->_mimepart->getMimeId() => array(
-                'data' => $render['html'],
-                'status' => $render['status'],
-                'type' => 'text/html; charset=' . NLS::getCharset()
+                'data' => '',
+                'status' => array(
+                    array(
+                        'icon' => Horde::img('mime/html.png', _("HTML data")),
+                        'text' => array(
+                            _("This message part contains HTML data, but inline HTML display is disabled."),
+                            $this->_params['contents']->linkViewJS($this->_mimepart, 'view_attach', _("View HTML data in new window.")),
+                            $this->_params['contents']->linkViewJS($this->_mimepart, 'view_attach', _("Convert HTML data to plain text and view in new window."), array('params' => array('convert_text' => 1)))
+                        )
+                    )
+                ),
+                'type' => 'text/html; charset=' . Horde_Nls::getCharset()
             )
         );
     }
@@ -108,44 +172,23 @@ class IMP_Horde_Mime_Viewer_Html extends Horde_Mime_Viewer_Html
     protected function _IMPrender($inline)
     {
         $data = $this->_mimepart->getContents();
-        $charset = NLS::getCharset();
-        $msg_charset = $this->_mimepart->getCharset();
-
-        if ($inline) {
-            $data = String::convertCharset($data, $msg_charset);
-            $msg_charset = $charset;
-        }
-
-        /* Run tidy on the HTML. */
-        if ($this->getConfigParam('tidy') &&
-            ($tidy_config = IMP::getTidyConfig(String::length($data)))) {
-            if ($msg_charset == 'us-ascii') {
-                $tidy = tidy_parse_string($data, $tidy_config, 'ascii');
-                $tidy->cleanRepair();
-                $data = tidy_get_output($tidy);
-            } else {
-                $tidy = tidy_parse_string(String::convertCharset($data, $msg_charset, 'UTF-8'), $tidy_config, 'utf8');
-                $tidy->cleanRepair();
-                $data = String::convertCharset(tidy_get_output($tidy), 'UTF-8', $msg_charset);
-            }
-        }
 
         /* Sanitize the HTML. */
-        $cleanhtml = $this->_cleanHTML($data, $inline);
-        $data = $cleanhtml['html'];
+        $data = $this->_cleanHTML($data, array('phishing' => $inline));
+        $status = array($this->_phishingStatus());
 
-        /* We are done processing if in mimp mode. */
-        if ($_SESSION['imp']['view'] == 'mimp') {
-            require_once 'Horde/Text/Filter.php';
-            $data = Text_Filter::filter($data, 'html2text');
+        /* We are done processing if in mimp mode, or we are converting to
+         * text. */
+        if (($_SESSION['imp']['view'] == 'mimp') ||
+            (!$inline && Horde_Util::getFormData('convert_text'))) {
+            $data = Horde_Text_Filter::filter($data, 'html2text');
 
             // Filter bad language.
-            return array('html' => IMP::filterText($data), 'status' => array());
-        }
-
-        /* Reset absolutely positioned elements. */
-        if ($inline) {
-            $data = preg_replace('/(style\s*=\s*)(["\'])?([^>"\']*)position\s*:\s*absolute([^>"\']*)\2/i', '$1"$3$4"', $data);
+            return array(
+                'data' => IMP::filterText($data),
+                'status' => array(),
+                'type' => 'text/plain; charset=' . Horde_Nls::getCharset()
+            );
         }
 
         /* Search for inlined links that we can display (multipart/related
@@ -157,7 +200,7 @@ class IMP_Horde_Mime_Viewer_Html extends Horde_Mime_Viewer_Html
                 $cid = trim($cid, '<>');
                 if ($cid) {
                     $cid_part = $this->_params['contents']->getMIMEPart($mime_id);
-                    $cid_replace['cid:' . $cid] = $this->_params['contents']->urlView($cid_part, 'view_attach', array('params' => array('img_data' => 1)));
+                    $cid_replace['cid:' . $cid] = $this->_params['contents']->urlView($cid_part, 'view_attach', array('params' => array('related_data' => 1)));
                 }
             }
 
@@ -169,24 +212,31 @@ class IMP_Horde_Mime_Viewer_Html extends Horde_Mime_Viewer_Html
         /* Convert links to open in new windows. First we hide all
          * mailto: links, links that have an "#xyz" anchor and ignore
          * all links that already have a target. */
+        $target = 'target_' . uniqid(mt_rand());
         $data = preg_replace(
-            array('/<a\s([^>]*\s+href=["\']?(#|mailto:))/i',
-                  '/<a\s([^>]*)\s+target=["\']?[^>"\'\s]*["\']?/i',
+            array('/<a\b([^>]*\s+href=["\']?(#|mailto:))/i',
+                  '/<a\b([^>]*)\s+target=["\']?[^>"\'\s]*["\']?/i',
                   '/<a\s/i',
-                  '/<area\s([^>]*\s+href=["\']?(#|mailto:))/i',
-                  '/<area\s([^>]*)\s+target=["\']?[^>"\'\s]*["\']?/i',
+                  '/<area\b([^>]*\s+href=["\']?(#|mailto:))/i',
+                  '/<area\b([^>]*)\s+target=["\']?[^>"\'\s]*["\']?/i',
                   '/<area\s/i',
                   "/\x01/",
                   "/\x02/"),
             array("<\x01\\1",
-                  "<\x01 \\1 target=\"_blank\"",
-                  '<a target="_blank" ',
+                  "<\x01 \\1 target=\"" . $target . "\"",
+                  '<a target="' . $target . '" ',
                   "<\x02\\1",
-                  "<\x02 \\1 target=\"_blank\"",
-                  '<area target="_blank" ',
+                  "<\x02 \\1 target=\"" . $target . "\"",
+                  '<area target="' . $target . '" ',
                   'a ',
                   'area '),
             $data);
+
+        /* If displaying inline (in IFRAME), tables with 100% height seems to
+         * confuse many browsers re: the iframe internal height. */
+        if ($inline) {
+            $data = preg_replace('/<table\b([^>]*)\s+height=["\']?100\%["\']?/i', '<table \\1', $data);
+        }
 
         /* Turn mailto: links into our own compose links. */
         if ($inline && $GLOBALS['registry']->hasMethod('mail/compose')) {
@@ -196,49 +246,31 @@ class IMP_Horde_Mime_Viewer_Html extends Horde_Mime_Viewer_Html
         /* Filter bad language. */
         $data = IMP::filterText($data);
 
-        if ($inline) {
-            /* Put div around message. */
-            $data = '<div class="htmlMessage">' . $data . '</div>';
-        }
-
-        /* Only display images if specifically allowed by user. */
+        /* Image filtering. */
         if ($inline &&
-            !IMP::$printMode &&
             $GLOBALS['prefs']->getValue('html_image_replacement') &&
-            preg_match($this->_img_regex, $data)) {
-            /* Make sure the URL parameters are correct for the current
-             * message. */
-            $url = Util::removeParameter(IMP::selfUrl(), array('actionID', 'index'));
-            $url = Util::addParameter($url, 'index', $this->_params['contents']->getIndex());
+            preg_match($this->_img_regex, $this->_mimepart->getContents()) &&
+            (!$GLOBALS['prefs']->getValue('html_image_addrbook') ||
+             !$this->_inAddressBook())) {
+            $data = preg_replace_callback($this->_img_regex, array($this, '_blockImages'), $data);
 
-            $view_img = Util::getFormData('view_html_images');
-            $addr_check = ($GLOBALS['prefs']->getValue('html_image_addrbook') && $this->_inAddressBook());
-
-            if (!$view_img && !$addr_check) {
-                $data .= Util::bufferOutput(array('Horde', 'addScriptFile'), 'prototype.js', 'horde', true) .
-                    Util::bufferOutput(array('Horde', 'addScriptFile'), 'imp.js', 'imp', true);
-
-                // Unblock javascript code in js/src/imp.js
-                $cleanhtml['status'][] = array(
-                    'icon' => Horde::img('mime/image.png'),
-                    'text' => array(
-                        String::convertCharset(_("Images have been blocked to protect your privacy."), $charset, $msg_charset),
-                        Horde::link(Util::addParameter($url, 'view_html_images', 1), '', 'unblockImageLink') . String::convertCharset(_("Show Images?"), $charset, $msg_charset) . '</a>'
-                    )
-                );
-
-                $data = preg_replace_callback($this->_img_regex, array($this, '_blockImages'), $data);
-            }
+            $status[] = array(
+                'icon' => Horde::img('mime/image.png'),
+                'text' => array(
+                    _("Images have been blocked to protect your privacy."),
+                    Horde::link('#', '', 'unblockImageLink') . _("Show Images?") . '</a>'
+                )
+            );
         }
 
-        require_once 'Horde/Text/Filter.php';
         if ($GLOBALS['prefs']->getValue('emoticons')) {
-            $data = Text_Filter::filter($data, array('emoticons'), array(array('emoticons' => true)));
+            $data = Horde_Text_Filter::filter($data, array('emoticons'), array(array('emoticons' => true)));
         }
 
         return array(
-            'html' => $data,
-            'status' => $cleanhtml['status']
+            'data' => $data,
+            'status' => $status,
+            'type' => $this->_mimepart->getType(true)
         );
     }
 
@@ -247,7 +279,7 @@ class IMP_Horde_Mime_Viewer_Html extends Horde_Mime_Viewer_Html
      */
     protected function _mailtoCallback($m)
     {
-        return 'href="' . $GLOBALS['registry']->call('mail/compose', array(String::convertCharset(html_entity_decode($m[2]), 'ISO-8859-1', NLS::getCharset()))) . '"';
+        return 'href="' . $GLOBALS['registry']->call('mail/compose', array(Horde_String::convertCharset(html_entity_decode($m[2]), 'ISO-8859-1', Horde_Nls::getCharset()))) . '"';
     }
 
     /**
@@ -260,12 +292,12 @@ class IMP_Horde_Mime_Viewer_Html extends Horde_Mime_Viewer_Html
     protected function _blockImages($matches)
     {
         if (is_null($this->_blockimg)) {
-            $this->_blockimg = Horde::url($GLOBALS['registry']->getImageDir('imp') . '/spacer_red.png', false, -1);
+            $this->_blockimg = Horde::url($GLOBALS['registry']->getImageDir('imp', false) . '/spacer_red.png', true, -1);
         }
 
         return empty($matches[2])
-            ? $matches[1] . '"' . $this->_blockimg . '" blocked="' . rawurlencode(str_replace('&amp;', '&', trim($matches[5], '\'" '))) . '"'
-            : $matches[1] . "'" . $this->_blockimg . '\')' . $matches[6] . '" blocked="' . rawurlencode(str_replace('&amp;', '&', trim($matches[5], '\'" ')));
+            ? $matches[1] . '"' . $this->_blockimg . '" htmlimgblocked="' . rawurlencode(str_replace('&amp;', '&', trim($matches[5], '\'" '))) . '"'
+            : $matches[1] . "'" . $this->_blockimg . '\')' . $matches[6] . '" htmlimgblocked="' . rawurlencode(str_replace('&amp;', '&', trim($matches[5], '\'" '))) . '"';
     }
 
     /**
@@ -284,7 +316,12 @@ class IMP_Horde_Mime_Viewer_Html extends Horde_Mime_Viewer_Html
         $headers = $this->_params['contents']->getHeaderOb();
 
         /* Try to get back a result from the search. */
-        $res = $GLOBALS['registry']->call('contacts/getField', array(Horde_Mime_Address::bareAddress($headers->getValue('from')), '__key', $params['sources'], false, true));
-        return is_a($res, 'PEAR_Error') ? false : count($res);
+        try {
+            $res = $GLOBALS['registry']->call('contacts/getField', array(Horde_Mime_Address::bareAddress($headers->getValue('from')), '__key', $params['sources'], false, true));
+            return count($res);
+        } catch (Horde_Exception $e) {
+            return false;
+        }
     }
+
 }

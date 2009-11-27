@@ -2,8 +2,6 @@
 /**
  * The Horde_Form_VarRenderer_Xhtml:: class renders variables as Xhtml.
  *
- * $Horde: incubator/Horde_Form/Horde/Form/VarRenderer/Xhtml.php,v 1.14 2008/01/02 11:12:48 jan Exp $
- *
  * Copyright 2003-2009 The Horde Project (http://www.horde.org/)
  * Copyright 2005 Matt Warden <mwarden@gmail.com>
  *
@@ -12,8 +10,8 @@
  * @author  Jason M. Felice <jason.m.felice@gmail.com>
  * @package Horde_Form
  */
-class Horde_Form_VarRenderer_Xhtml extends Horde_Form_VarRenderer {
-
+class Horde_Form_VarRenderer_Xhtml extends Horde_Form_VarRenderer
+{
     protected $_onLoadJS = array();
 
     /**
@@ -46,7 +44,7 @@ class Horde_Form_VarRenderer_Xhtml extends Horde_Form_VarRenderer {
         if ($var->type->fraction) {
             $value = sprintf('%01.' . $var->type->fraction . 'f', $value);
         }
-        $linfo = NLS::getLocaleInfo();
+        $linfo = Horde_Nls::getLocaleInfo();
         /* Only if there is a mon_decimal_point do the
          * substitution. */
         if (!empty($linfo['mon_decimal_point'])) {
@@ -93,7 +91,7 @@ class Horde_Form_VarRenderer_Xhtml extends Horde_Form_VarRenderer {
             . 'id="%2$s" value="%3$s"%4$s%5$s%6$s />',
             ($var->isDisabled() ? ' form-input-disabled" ' : ''),
             $var->getVarName(),
-            htmlspecialchars($var->getValue($vars), ENT_QUOTES, NLS::getCharset()),
+            htmlspecialchars($var->getValue($vars), ENT_QUOTES, Horde_Nls::getCharset()),
             ($var->isDisabled() ? ' disabled="disabled" ' : ''),
             ($var->type->maxlength ? ' maxlength="' . $var->type->maxlength . '"' : ''),
             $this->_getActionScripts($form, $var)
@@ -115,7 +113,7 @@ class Horde_Form_VarRenderer_Xhtml extends Horde_Form_VarRenderer {
         return sprintf(
             '<input type="text" class="form-input-phone" name="%1$s" id="%1$s" value="%2$s" %3$s%4$s />',
             $var->getVarName(),
-            htmlspecialchars($var->getValue($vars), ENT_QUOTES, NLS::getCharset()),
+            htmlspecialchars($var->getValue($vars), ENT_QUOTES, Horde_Nls::getCharset()),
             ($var->isDisabled() ? ' disabled="disabled" ' : ''),
             $this->_getActionScripts($form, $var)
         );
@@ -130,7 +128,7 @@ class Horde_Form_VarRenderer_Xhtml extends Horde_Form_VarRenderer {
     {
         return sprintf('    <input type="text" class="form-input-ipaddress" name="%1$s" id="%1$s" value="%2$s" %3$s%4$s />',
                        $var->getVarName(),
-                       htmlspecialchars($var->getValue($vars), ENT_QUOTES, NLS::getCharset()),
+                       htmlspecialchars($var->getValue($vars), ENT_QUOTES, Horde_Nls::getCharset()),
                        $var->isDisabled() ? ' disabled="disabled" ' : '',
                        $this->_getActionScripts($form, $var)
                );
@@ -142,147 +140,6 @@ class Horde_Form_VarRenderer_Xhtml extends Horde_Form_VarRenderer {
         return sprintf('    <input type="file" class="form-input-file" name="%1$s" id="%1$s"%2$s />',
                        $var->getVarName(),
                        $this->_getActionScripts($form, $var));
-    }
-
-    /**
-     * @todo Show image dimensions in the width/height boxes.
-     */
-    function _renderVarInput_image($form, $var, $vars)
-    {
-        $varname = $var->getVarName();
-        $image = $var->getValue($vars);
-
-        /* Check if existing image data is being loaded. */
-        $var->type->loadImageData($image);
-
-        Horde::addScriptFile('image.js', 'horde', true);
-        $graphics_dir = $GLOBALS['registry']->getImageDir('horde');
-        $img_dir = $graphics_dir . '/image';
-
-        $html = '';
-
-        /* Check if there is existing img information stored. */
-        if (isset($image['img'])) {
-            /* Hidden tag to store the preview image filename. */
-            $html = sprintf('    <input type="hidden" name="%1$s" id="%1$s" value="%2$s" />',
-                   $varname . '[img]',
-                   htmlspecialchars($image['img'], ENT_QUOTES, NLS::getCharset()));
-
-            /* Unserialize the img information to get the full array. */
-            $image['img'] = @unserialize($image['img']);
-        }
-
-        /* Output the input tag. */
-        if (empty($image['img'])) {
-            $js = "
-var p = document.getElementById('" . $varname . "[preview]');
-o = '\\\\'; a = '/';
-tmp = '' + document.getElementById('" . $varname . "[new]').value;
-if (tmp) {
-    while (tmp.indexOf(o) > -1) {
-        pos = tmp.indexOf(o);
-        tmp = '' + (tmp.substring(0, pos) + a + tmp.substring((pos + o.length), tmp.length));
-    }
-    p.src = 'file:///' + tmp;
-    p.alt = '" . addslashes(_("If you see this message but no image, the image you want to upload can't be displayed by your browser.")) . "';
-}";
-            $browser = Horde_Browser::singleton();
-            if ($browser->isBrowser('msie')) {
-                $html .= sprintf('    <input type="file" class="form-input-file" name="%1$s" id="%1$s" onchange="%2$s" />',
-                             $varname . '[new]',
-                             $js);
-            } else {
-                $html .= sprintf('    <input type="file" class="form-input-file" name="%1$s" id="%1$s"
-                        onclick="window.setTimeout(\'document.getElementById(\\\'%1$s\\\').blur();\', 5);"
-                        onblur="%2$s" />',
-                             $varname . '[new]',
-                             $js);
-            }
-        } else {
-            $html .= sprintf('    <input type="file" class="form-input-file" name="%1$s" id="%1$s" />',
-                             $varname . '[new]');
-        }
-
-        /* Output the button to upload/reset the image. */
-        if ($var->type->show_upload) {
-            $html .= '&nbsp;';
-            $html .= sprintf('    <input class="form-button-upload" name="%1$s" id="%1$s" type="submit" value="%2$s" /> ',
-                         '_do_' . $varname,
-                         _("Upload"));
-        }
-
-        if (empty($image['img'])) {
-            /* No image information stored yet, show a blank
-             * preview. */
-            $html .= Horde::img('tree/blank.png', _("Preview"),
-                    'class="form-image-preview-blank" id="' . $varname . '[preview]"',
-                    $graphics_dir);
-        } else {
-            /* Image information stored, show preview, add buttons for
-             * image manipulation. */
-            $html .= '<br />';
-            $img = Horde::url($GLOBALS['registry']->get('webroot', 'horde') . '/services/images/view.php');
-            if (isset($image['img']['vfs_id'])) {
-                /* Calling an image from VFS. */
-                $img = Util::addParameter($img, array('f' => $image['img']['vfs_id'],
-                                                      's' => 'vfs',
-                                                      'p' => $image['img']['vfs_path']));
-            } else {
-                /* Calling an image from a tmp directory (uploads). */
-                $img = Util::addParameter($img, 'f', $image['img']['file']);
-            }
-
-            // TODO: possible to change to unobtrusive JS?
-            /* Rotate 270. */
-            $html .= Horde::link('#', '', '', '', 'showImage(\'' . Util::addParameter($img, array('a' => 'rotate', 'v' => '270')) . '\', \'_p_' . $varname . '\', true);') . Horde::img('rotate-270.png', _("Rotate Left"), '', $img_dir) . '</a>';
-
-            /* Rotate 180. */
-            $html .= Horde::link('#', '', '', '', 'showImage(\'' . Util::addParameter($img, array('a' => 'rotate', 'v' => '180')) . '\', \'_p_' . $varname . '\', true);') . Horde::img('rotate-180.png', _("Rotate 180"), '', $img_dir) . '</a>';
-
-            /* Rotate 90. */
-            $html .= Horde::link('#', '', '', '', 'showImage(\'' . Util::addParameter($img, array('a' => 'rotate', 'v' => '90')) . '\', \'_p_' . $varname . '\', true);') . Horde::img('rotate-90.png', _("Rotate Right"), '', $img_dir) . '</a>';
-
-            /* Flip image. */
-            $html .= Horde::link('#', '', '', '', 'showImage(\'' . Util::addParameter($img, 'a', 'flip') . '\', \'_p_' . $varname . '\', true);') . Horde::img('flip.png', _("Flip"), '', $img_dir) . '</a>';
-
-            /* Mirror image. */
-            $html .= Horde::link('#', '', '', '', 'showImage(\'' . Util::addParameter($img, 'a', 'mirror') . '\', \'_p_' . $varname . '\', true);') . Horde::img('mirror.png', _("Mirror"), '', $img_dir) . '</a>';
-
-            /* Apply grayscale. */
-            $html .= Horde::link('#', '', '', '', 'showImage(\'' . Util::addParameter($img, 'a', 'grayscale') . '\', \'_p_' . $varname . '\', true);') . Horde::img('grayscale.png', _("Grayscale"), '', $img_dir) . '</a>';
-
-            /* Resize width. */
-            $html .= sprintf('%s    <input type="text" class="form-input-resize" onchange="src=getResizeSrc(\'%s\', \'%s\');showImage(src, \'_p_%s\', true);" %s />',
-                   _("w:"),
-                   Util::addParameter($img, 'a', 'resize'),
-                   $varname,
-                   $varname,
-                   '_w_'. $varname);
-
-            /* Resize height. */
-            $html .= sprintf('%s    <input type="text" class="form-input-resize" onchange="src=getResizeSrc(\'%s\', \'%s\');showImage(src, \'_p_%s\', true);" %s />',
-                   _("h:"),
-                   Util::addParameter($img, 'a', 'resize'),
-                   $varname,
-                   $varname,
-                   '_h_'. $varname);
-
-            /* Apply fixed ratio resize. */
-            $html .= Horde::link('#', '', '', '', 'src=getResizeSrc(\'' . Util::addParameter($img, 'a', 'resize') . '\', \'' . $varname . '\', \'1\');showImage(src, \'_p_' . $varname . '\', true);') . Horde::img('ratio.png', _("Fix ratio"), '', $img_dir) . '</a>';
-
-            /* Keep also original if it has been requested. */
-            if ($var->type->show_keeporig) {
-                $html .= sprintf('    <input type="checkbox" class="form-input-checkbox" name="%s"%s />%s' . "\n",
-                       $varname . '[keep_orig]',
-                       !empty($image['keep_orig']) ? ' checked="checked"' : '',
-                       _("Keep original?"));
-            }
-
-            /* The preview image element. */
-            $html .= '<br /><img src="' . $img . '" id="_p_' . $varname .'" />'."\n";
-        }
-
-        return $html;
     }
 
     function _renderVarInput_longtext($form, $var, $vars)
@@ -299,12 +156,12 @@ if (tmp) {
                         htmlspecialchars($var->getValue($vars)));
 
         if ($var->type->hasHelper('rte') && $browser->hasFeature('rte')) {
-            $editor = Horde_Editor::factory('Xinha', array('id' => $var->getVarName()));
+            $editor = Horde_Editor::singleton('ckeditor', array('id' => $var->getVarName()));
         }
 
         if ($var->type->hasHelper() && $browser->hasFeature('javascript')) {
             $html .= '<div class="form-html-helper">';
-            Horde::addScriptFile('open_html_helper.js', 'horde');
+            Horde::addScriptFile('open_html_helper.js', 'horde', array('direct' => false));
             $imgId = $var->getVarName() . 'ehelper';
             if ($var->type->hasHelper('emoticons')) {
                 $html .= Horde::link('#', _("Emoticons"), '', '', 'openHtmlHelper(\'emoticons\', \'' . $var->getVarName() . '\'); return false;')
@@ -485,7 +342,7 @@ if (tmp) {
         }
 
         if ($var->type->picker && $GLOBALS['browser']->hasFeature('javascript')) {
-            Horde::addScriptFile('open_calendar.js', 'horde');
+            Horde::addScriptFile('open_calendar.js', 'horde', array('direct' => false));
             $imgId = $var->getVarName() .'goto';
             $html .= '<div id="goto"></div>';
             $html .= Horde::link('#', _("Select a date"), '', '', 'openCalendar(\'' . $imgId . '\', \'' . $var->getVarName() . '\'); return false;')
@@ -510,7 +367,7 @@ if (tmp) {
             . '" value="' . $var->getValue($vars) . '" />';
 
         if ($GLOBALS['browser']->hasFeature('javascript')) {
-            Horde::addScriptFile('open_colorpicker.js', 'horde', true);
+            Horde::addScriptFile('open_colorpicker.js', 'horde');
             $html .= Horde::img('blank.gif', '', array('class' => 'form-colorpicker-preview',
                                                        'id' => 'colordemo_' . $var->getVarName(),
                                                        'style' => 'background:' . $var->getValue($vars)), $GLOBALS['registry']->getImageDir('horde'))
@@ -529,7 +386,7 @@ if (tmp) {
         $varname = $var->getVarName();
         $instance = $var->type->instance;
 
-        Horde::addScriptFile('sorter.js', 'horde', true);
+        Horde::addScriptFile('sorter.js', 'horde');
 
         return '    <input type="hidden" name="'. $varname
             . '[array]" value="" id="'. $varname .'-array-" />'."\n"
@@ -554,7 +411,7 @@ if (tmp) {
     {
         global $registry;
 
-        Horde::addScriptFile('form_assign.js', 'horde', true);
+        Horde::addScriptFile('form_assign.js', 'horde');
 
         $name = $var->getVarName();
         $fname = $form->getName() . '.' . $name;
@@ -597,7 +454,7 @@ if (tmp) {
         $prompt = $var->type->prompt;
         $htmlchars = $var->getOption('htmlchars');
         if ($prompt) {
-            $prompt = '<option value="">' . ($htmlchars ? htmlspecialchars($prompt, ENT_QUOTES, NLS::getCharset()) : $prompt) . '</option>';
+            $prompt = '<option value="">' . ($htmlchars ? htmlspecialchars($prompt, ENT_QUOTES, Horde_Nls::getCharset()) : $prompt) . '</option>';
         }
         return sprintf('    <select name="%1$s" id="%1$s"%2$s>%3$s%4$s    </select>',
                $var->getVarName(),
@@ -626,7 +483,7 @@ if (tmp) {
         /* Hidden tag to store the current first level. */
         $html = sprintf('    <input type="hidden" name="%1$s[old]" id="%1$s[old]" value="%2$s" />',
                         $varname,
-                        htmlspecialchars($selected['1'], ENT_QUOTES, NLS::getCharset()));
+                        htmlspecialchars($selected['1'], ENT_QUOTES, Horde_Nls::getCharset()));
 
         /* First level. */
         $values_1 = Horde_Array::valuesToKeys(array_keys($values));
@@ -635,7 +492,7 @@ if (tmp) {
                          'if (this.value) { document.' . $form->getName() . '.formname.value=\'\';' . 'document.' . $form->getName() . '.submit() }',
                          ($var->hasAction() ? ' ' . $this->_genActionScript($form, $var->_action, $varname) : ''));
         if (!empty($prompts)) {
-            $html .= '<option value="">' . htmlspecialchars($prompts[0], ENT_QUOTES, NLS::getCharset()) . '</option>';
+            $html .= '<option value="">' . htmlspecialchars($prompts[0], ENT_QUOTES, Horde_Nls::getCharset()) . '</option>';
         }
         $html .= $this->_selectOptions($values_1, $selected['1']);
         $html .= '    </select>';
@@ -645,7 +502,7 @@ if (tmp) {
                          $varname,
                          ($var->hasAction() ? ' ' . $this->_genActionScript($form, $var->_action, $varname) : ''));
         if (!empty($prompts)) {
-            $html .= '<option value="">' . htmlspecialchars($prompts[1], ENT_QUOTES, NLS::getCharset()) . '</option>';
+            $html .= '<option value="">' . htmlspecialchars($prompts[1], ENT_QUOTES, Horde_Nls::getCharset()) . '</option>';
         }
         $values_2 = array();
         if (!empty($selected['1'])) {
@@ -891,11 +748,9 @@ EOT;
         }
 
         if ($GLOBALS['browser']->hasFeature('javascript')) {
-            Horde::addScriptFile('popup.js', 'horde', true);
             $imgId = $varname .'goto';
-            $html .= '<div id="goto" class="headerbox"
-                    style="position:absolute;visibility:hidden;padding:0"></div>';
-            $html .= Horde::link('#', _("Select an object"), '', '', 'obrowserWindow = popup(\'' . $GLOBALS['registry']->get('webroot', 'horde') . '/services/obrowser/' . '\'); obrowserWindowName = obrowserWindow.name; return false;') . Horde::img('tree/leaf.png', _("Object"), 'id="' . $imgId . '" align="middle"', $GLOBALS['registry']->getImageDir('horde')) . "</a>\n";
+            $html .= '<div id="goto" class="headerbox" style="position:absolute;visibility:hidden;padding:0"></div>';
+            $html .= Horde::link('#', _("Select an object"), '', '', 'obrowserWindow = ' . Horde::popupJs($GLOBALS['registry']->get('webroot', 'horde') . '/services/obrowser/') . 'obrowserWindowName = obrowserWindow.name; return false;') . Horde::img('tree/leaf.png', _("Object"), 'id="' . $imgId . '" align="middle"', $GLOBALS['registry']->getImageDir('horde')) . "</a>\n";
         }
 
         return $html;
@@ -919,7 +774,7 @@ EOT;
     function _renderVarDisplayDefault($form, $var, $vars)
     {
         return nl2br(htmlspecialchars($var->getValue($vars), ENT_QUOTES,
-            NLS::getCharset()));
+            Horde_Nls::getCharset()));
     }
 
     function _renderVarDisplay_html($form, $var, $vars)
@@ -954,15 +809,16 @@ EOT;
             // Get rid of the trailing @ (when no host is included in
             // the email address).
             $address = str_replace('@>', '>', $address);
-            $mail_link = $GLOBALS['registry']->call('mail/compose', array(array('to' => addslashes($address))));
-            if (is_a($mail_link, 'PEAR_Error')) {
+            try {
+                $mail_link = $GLOBALS['registry']->call('mail/compose', array(array('to' => addslashes($address))));
+            } catch (Horde_Exception $e) {
                 $mail_link = 'mailto:' . urlencode($address);
             }
 
             return Horde::link($mail_link, $email_val)
                 . htmlspecialchars($display_email) . '</a>';
         } else {
-            return nl2br(htmlspecialchars($display_email, ENT_QUOTES, NLS::getCharset()));
+            return nl2br(htmlspecialchars($display_email, ENT_QUOTES, Horde_Nls::getCharset()));
         }
     }
 
@@ -993,7 +849,7 @@ EOT;
         if (count($values) == 0) {
             return _("No values");
         } elseif (isset($values[$value]) && $value != '') {
-            return htmlspecialchars($values[$value], ENT_QUOTES, NLS::getCharset());
+            return htmlspecialchars($values[$value], ENT_QUOTES, Horde_Nls::getCharset());
         }
     }
 
@@ -1003,7 +859,7 @@ EOT;
         if (count($values) == 0) {
             return _("No values");
         } elseif (isset($values[$var->getValue($vars)])) {
-            return htmlspecialchars($values[$var->getValue($vars)], ENT_QUOTES, NLS::getCharset());
+            return htmlspecialchars($values[$var->getValue($vars)], ENT_QUOTES, Horde_Nls::getCharset());
         }
     }
 
@@ -1020,7 +876,7 @@ EOT;
                     $display[] = $name;
                 }
             }
-            return htmlspecialchars(implode(', ', $display), ENT_QUOTES, NLS::getCharset());
+            return htmlspecialchars(implode(', ', $display), ENT_QUOTES, Horde_Nls::getCharset());
         }
     }
 
@@ -1037,17 +893,8 @@ EOT;
                     $display[] = $name;
                 }
             }
-            return htmlspecialchars(implode(', ', $display), ENT_QUOTES, NLS::getCharset());
+            return htmlspecialchars(implode(', ', $display), ENT_QUOTES, Horde_Nls::getCharset());
         }
-    }
-
-    function _renderVarDisplay_image($form, $var, $vars)
-    {
-        $img_params = $var->getValue($vars);
-        $img_url = Horde::url($GLOBALS['registry']->get('webroot', 'horde') . '/services/images/view.php');
-        $img_url = Util::addParameter($img_url, $img_params);
-
-        return Horde::img($img_url, isset($img_params['f']) ? $img_params['f'] : '', '', '');
     }
 
     function _renderVarDisplay_phone($form, &$var, &$vars)
@@ -1170,7 +1017,7 @@ EOT;
         } elseif (preg_match('/(.*?)\r?\n([A-Z]{1,3})-(\d{5})\s+(.*)/i', $address, $addressParts)) {
             /* European address style. */
             include 'Horde/NLS/carsigns.php';
-            $country = array_search(String::upper($addressParts[2]), $carsigns);
+            $country = array_search(Horde_String::upper($addressParts[2]), $carsigns);
 
             /* Map24 generated map. */
             if (in_array($country, array('al', 'ad', 'am', 'az', 'be', 'ba',
@@ -1203,7 +1050,7 @@ EOT;
             }
 
             /* Mapquest generated map. */
-            $mapurl2 = 'http://www.mapquest.com/maps/map.adp?country=' . String::upper($country);
+            $mapurl2 = 'http://www.mapquest.com/maps/map.adp?country=' . Horde_String::upper($country);
             $desc2 = _("MapQuest map");
             $icon2 = 'map_eu.png';
             if (!empty($addressParts[1])) {
@@ -1217,7 +1064,7 @@ EOT;
             }
         }
 
-        $html = nl2br(htmlspecialchars($var->getValue($vars), ENT_QUOTES, NLS::getCharset()));
+        $html = nl2br(htmlspecialchars($var->getValue($vars), ENT_QUOTES, Horde_Nls::getCharset()));
         if (!empty($mapurl)) {
             $html .= '&nbsp;&nbsp;' . Horde::link(Horde::externalUrl($mapurl), $desc, null, '_blank') . Horde::img($icon, $desc, '', $registry->getImageDir('horde')) . '</a>';
         }
@@ -1255,7 +1102,7 @@ EOT;
     function _renderVarDisplay_invalid($form, $var, $vars)
     {
         return '<p class="form-error form-inline">'
-                . htmlspecialchars($var->type->message, ENT_QUOTES, NLS::getCharset())
+                . htmlspecialchars($var->type->message, ENT_QUOTES, Horde_Nls::getCharset())
                 . '</p>';
     }
 
@@ -1345,7 +1192,7 @@ EOT;
                     if ($GLOBALS['registry']->hasMethod('files/getViewLink')) {
                         $filename = basename($filename);
                         $url = $GLOBALS['registry']->call('files/getViewLink', array($dir, $filename));
-                        $filename = Horde::link($url, _("Preview"), null, 'form_file_view') . htmlspecialchars(Util::realPath($dir . '/' . $filename), ENT_QUOTES, $this->_charset) . '</a>';
+                        $filename = Horde::link($url, _("Preview"), null, 'form_file_view') . htmlspecialchars(Horde_Util::realPath($dir . '/' . $filename), ENT_QUOTES, $this->_charset) . '</a>';
                     } else {
                         if (!empty($dir) && ($dir != '.')) {
                             $filename = $dir . '/' . $filename;
@@ -1374,7 +1221,7 @@ EOT;
                 $selected = '';
             }
             $result .= '        <option value="';
-            $result .= ($htmlchars) ? htmlspecialchars($value, ENT_QUOTES, NLS::getCharset()) : $value;
+            $result .= ($htmlchars) ? htmlspecialchars($value, ENT_QUOTES, Horde_Nls::getCharset()) : $value;
             $result .= '"' . $selected . '>';
             $result .= ($htmlchars) ? htmlspecialchars($display) : $display;
             $result .= "</option>\n";
@@ -1394,7 +1241,7 @@ EOT;
                 $selected = '';
             }
             $result .= " <option value=\""
-                . htmlspecialchars($value, ENT_QUOTES, NLS::getCharset())
+                . htmlspecialchars($value, ENT_QUOTES, Horde_Nls::getCharset())
                 . "\"$selected>" . htmlspecialchars($display) . "</option>\n";
         }
 

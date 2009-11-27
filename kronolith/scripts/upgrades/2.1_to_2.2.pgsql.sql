@@ -1,5 +1,3 @@
--- $Horde: kronolith/scripts/upgrades/2.1_to_2.2.pgsql.sql,v 1.8 2008/12/03 16:10:50 chuck Exp $
-
 BEGIN;
 ALTER TABLE kronolith_events ADD event_private INT;
 UPDATE kronolith_events SET event_private = 0;
@@ -12,10 +10,10 @@ CREATE TABLE kronolith_shares (
     share_id INT NOT NULL,
     share_name VARCHAR(255) NOT NULL,
     share_owner VARCHAR(32) NOT NULL,
-    share_flags SMALLINT NOT NULL DEFAULT 0,
-    perm_creator SMALLINT NOT NULL DEFAULT 0,
-    perm_default SMALLINT NOT NULL DEFAULT 0,
-    perm_guest SMALLINT NOT NULL DEFAULT 0,
+    share_flags SMALLINT DEFAULT 0 NOT NULL,
+    perm_creator SMALLINT DEFAULT 0 NOT NULL,
+    perm_default SMALLINT DEFAULT 0 NOT NULL,
+    perm_guest SMALLINT DEFAULT 0 NOT NULL,
     attribute_name VARCHAR(255) NOT NULL,
     attribute_desc VARCHAR(255),
     PRIMARY KEY (share_id)

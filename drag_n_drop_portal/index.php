@@ -10,14 +10,9 @@
  * @author Duck <duck@obala.net>
  * @package Folks
  */
-define('HORDE_BASE', dirname(__FILE__) . '/..');
-require_once HORDE_BASE . '/lib/base.php';
+require_once dirname(__FILE__) . '/../lib/base.php';
 require_once 'Horde/Loader.php';
 require_once './lib/Block/Layout/View/js.php';
-
-if (!Auth::isAuthenticated()) {
-    Horde::authenticationFailureRedirect();
-}
 
 // Load layout from preferences.
 $layout_pref = unserialize($prefs->getValue('portal_layout'));
@@ -34,9 +29,8 @@ $layout_html = $view->toHtml();
 
 $title = _("Edit yout profile page");
 
-Horde::addScriptFile('prototype.js', 'horde', true);
-Horde::addScriptFile('effects.js', 'horde', true);
-Horde::addScriptFile('redbox.js', 'horde', true);
+Horde::addScriptFile('effects.js', 'horde');
+Horde::addScriptFile('redbox.js', 'horde');
 require HORDE_TEMPLATES . '/common-header.inc';
 require HORDE_TEMPLATES . '/menu/menu.inc';
 ?>

@@ -19,7 +19,7 @@ class Translate {
     }
     
     function stats($app, $filter_lang = false) {
-	global $nls, $module, $apps, $dirs, $lang;
+	global $module, $apps, $dirs, $lang;
 	
 	$report = array();
 	$dir = Translate::getPath($app);
@@ -33,14 +33,14 @@ class Translate {
 		    continue;
 		}
 		
-		if (!isset($nls['languages'][$locale]) || $locale == 'en_US') {
+		if (!isset(Horde_Nls::$config['languages'][$locale]) || $locale == 'en_US') {
 		    continue; 
 		}
 		$i++;
 		
 		$pofile = $dir . "/$file";
 		
-		$tmppo = &new File_Gettext_PO();
+		$tmppo = new File_Gettext_PO();
 		$tmppo->load($pofile);
 		$fuzzy = 0;
 		$untranslated = 0;
@@ -135,7 +135,7 @@ class Translate {
     {
 	static $ff;
 	if (!isset($ff)) {
-	    $ff = &new File_Find();
+	    $ff = new File_Find();
 	}
 	
 	if (substr($file, 0, 1) != '/') {
@@ -511,7 +511,7 @@ class Translate {
 	    }
 	    if (!empty($module) && $module != $apps[$i]) { continue; }
 	    $package = ucfirst($apps[$i]);
-	    $package_u = String::upper($apps[$i]);
+	    $package_u = Horde_String::upper($apps[$i]);
 	    @include $dirs[$i] . '/lib/version.php';
 	    $version = eval('return(defined("' . $package_u . '_VERSION") ? ' . $package_u . '_VERSION : "???");');
 	    Translate_Display::header(sprintf(_("Initializing module %s..."), $apps[$i]));
