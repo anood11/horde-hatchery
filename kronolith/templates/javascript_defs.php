@@ -3,13 +3,12 @@
  * JavaScript variables for the traditional interface.
  */
 
-require_once 'Horde/Serialize.php';
-$charset = NLS::getCharset();
+$charset = Horde_Nls::getCharset();
 
 /* Variables used in core javascript files. */
 $var = array(
     'view_url' => Horde::applicationUrl('view.php'),
-    'pref_api_url' => Horde::applicationUrl('pref_api.php', true),
+    'pref_api_url' => Horde::getServiceLink('prefsapi', 'kronolith'),
     'calendar_info_url' => Horde::applicationUrl('calendars/info.php', true),
     'page_title' => $GLOBALS['registry']->get('name') . ' :: ',
 );
@@ -22,6 +21,6 @@ $gettext = array_map('addslashes', array(
 
 ?>
 <script type="text/javascript">//<![CDATA[
-var KronolithVar = <?php echo Horde_Serialize::serialize($var, SERIALIZE_JSON, $charset) ?>;
-var KronolithText = <?php echo Horde_Serialize::serialize($gettext, SERIALIZE_JSON, $charset) ?>;
+var KronolithVar = <?php echo Horde_Serialize::serialize($var, Horde_Serialize::JSON, $charset) ?>;
+var KronolithText = <?php echo Horde_Serialize::serialize($gettext, Horde_Serialize::JSON, $charset) ?>;
 //]]></script>

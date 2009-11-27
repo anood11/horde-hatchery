@@ -1,115 +1,83 @@
-<div id="kronolithViewWeek" class="kronolithView kronolithViewWeek" style="display:none">
+<div id="kronolithViewWeek" style="display:none">
+
+<table class="kronolithView kronolithViewDay">
+  <caption>
+    <span>&nbsp;</span>
+    <span class="kronolithNavigation">
+      <a class="kronolithGotoToday"><?php echo Horde::highlightAccessKey(_("_Today"), $todayAccessKey) ?></a>
+      <a class="kronolithPrev" title="<?php echo _("Previous") ?>">&lt;</a>
+      <a class="kronolithNext" title="<?php echo _("Next") ?>">&gt;</a>
+    </span>
+  </caption>
+</table>
 
 <div class="kronolithViewHead">
-  <div class="kronolithRow">
-    <div class="kronolithFirstCol">&nbsp;</div>
-    <div class="kronolithCol"><span><?php echo NLS::getLangInfo(DAY_2) ?></span></div>
-    <div class="kronolithCol"><span><?php echo NLS::getLangInfo(DAY_3) ?></span></div>
-    <div class="kronolithCol"><span><?php echo NLS::getLangInfo(DAY_4) ?></span></div>
-    <div class="kronolithCol"><span><?php echo NLS::getLangInfo(DAY_5) ?></span></div>
-    <div class="kronolithCol"><span><?php echo NLS::getLangInfo(DAY_6) ?></span></div>
-    <div class="kronolithCol"><span><?php echo NLS::getLangInfo(DAY_7) ?></span></div>
-    <div class="kronolithCol"><span><?php echo NLS::getLangInfo(DAY_1) ?></span></div>
-  </div>
+<table id="kronolithViewWeekHead" class="kronolithView kronolithViewDay">
+  <thead><tr>
+    <td class="kronolithFirstCol"><div id="kronolithLoadingweek" class="kronolithLoading"></div></td>
+    <td class="kronolithWeekDay"><span>&nbsp;</span></td>
+    <td class="kronolithWeekDay"><span>&nbsp;</span></td>
+    <td class="kronolithWeekDay"><span>&nbsp;</span></td>
+    <td class="kronolithWeekDay"><span>&nbsp;</span></td>
+    <td class="kronolithWeekDay"><span>&nbsp;</span></td>
+    <td class="kronolithWeekDay"><span>&nbsp;</span></td>
+    <td class="kronolithWeekDay"><span>&nbsp;</span></td>
+  </tr></thead>
+  <tbody>
+    <tr class="kronolithAllDay">
+      <td class="kronolithFirstCol"><span><?php echo _("All day") ?></span></td>
+      <td<?php if ($w == 6 || $w == 0) echo ' class="kronolithWeekend"' ?>><div class="kronolithAllDayContainer">
+      </div></td>
+      <td<?php if ($w == 5 || $w == 6) echo ' class="kronolithWeekend"' ?>><div class="kronolithAllDayContainer">
+      </div></td>
+      <td<?php if ($w == 4 || $w == 5) echo ' class="kronolithWeekend"' ?>><div class="kronolithAllDayContainer">
+      </div></td>
+      <td<?php if ($w == 3 || $w == 4) echo ' class="kronolithWeekend"' ?>><div class="kronolithAllDayContainer">
+      </div></td>
+      <td<?php if ($w == 2 || $w == 3) echo ' class="kronolithWeekend"' ?>><div class="kronolithAllDayContainer">
+      </div></td>
+      <td<?php if ($w == 1 || $w == 2) echo ' class="kronolithWeekend"' ?>><div class="kronolithAllDayContainer">
+      </div></td>
+      <td<?php if ($w == 0 || $w == 1) echo ' class="kronolithWeekend"' ?>><div class="kronolithAllDayContainer">
+      </div></td>
+    </tr>
+  </tbody>
+</table>
 </div>
+
 <div class="kronolithViewBody">
-  <div class="kronolithRow">
-    <div class="kronolithFirstCol"><?php echo _("All day") ?></div>
-    <div class="kronolithCol">
-      <div class="kronolithCorner"><a href="javascript:edit();" class="kronolithAdd"><?php echo $img_blank ?></a></div>
-      <div class="kronolithEvent c3">Restauração da Independência</div>
-      <div class="kronolithEvent c2">Dia Mundial da Usabilidade</div>
-    </div>
-    <div class="kronolithCol">
-      <div class="kronolithCorner"><a href="javascript:edit();" class="kronolithAdd"><?php echo $img_blank ?></a></div>
-    </div>
-    <div class="kronolithCol">
-      <div class="kronolithCorner"><a href="javascript:edit();" class="kronolithAdd"><?php echo $img_blank ?></a></div>
-    </div>
-    <div class="kronolithCol">
-      <div class="kronolithCorner"><a href="javascript:edit();" class="kronolithAdd"><?php echo $img_blank ?></a></div>
-    </div>
-    <div class="kronolithCol">
-      <div class="kronolithCorner"><a href="javascript:edit();" class="kronolithAdd"><?php echo $img_blank ?></a></div>
-    </div>
-    <div class="kronolithCol">
-      <div class="kronolithCorner"><a href="javascript:edit();" class="kronolithAdd"><?php echo $img_blank ?></a></div>
-    </div>
-    <div class="kronolithCol">
-      <div class="kronolithCorner"><a href="javascript:edit();" class="kronolithAdd"><?php echo $img_blank ?></a></div>
-    </div>
-  </div>
-
-<?php for ($i = 0; $i < 24; $i++): ?>
-  <div class="kronolithRow">
-    <div class="kronolithFirstCol"><?php printf('%02d', $i) ?></div>
-    <div class="kronolithCol">
-      <div class="kronolithCorner"><a href="javascript:edit();" class="kronolithAdd"><?php echo $img_blank ?></a></div>
-    </div>
-    <div class="kronolithCol">
-      <div class="kronolithCorner"><a href="javascript:edit();" class="kronolithAdd"><?php echo $img_blank ?></a></div>
-    </div>
-    <div class="kronolithCol">
-      <div class="kronolithCorner"><a href="javascript:edit();" class="kronolithAdd"><?php echo $img_blank ?></a></div>
-    </div>
-    <div class="kronolithCol">
-      <div class="kronolithCorner"><a href="javascript:edit();" class="kronolithAdd"><?php echo $img_blank ?></a></div>
-    </div>
-    <div class="kronolithCol">
-      <div class="kronolithCorner"><a href="javascript:edit();" class="kronolithAdd"><?php echo $img_blank ?></a></div>
-    </div>
-    <div class="kronolithCol">
-      <div class="kronolithCorner"><a href="javascript:edit();" class="kronolithAdd"><?php echo $img_blank ?></a></div>
-    </div>
-    <div class="kronolithCol">
-      <div class="kronolithCorner"><a href="javascript:edit();" class="kronolithAdd"><?php echo $img_blank ?></a></div>
-    </div>
-  </div>
-<?php endfor; ?>
-
-  <div class="kronolithEvents">
-    <div class="kronolithEvent c1 kronolithEventFull col1 hour0 length2">
-      <div class="kronolithDragger kronolithDraggerTop"></div>
-      <div class="kronolithEventInfo">10h diiaiaiai jkh gjhg fjkgh fkjgh kfjhg jkfhg kjfh g</div>
-      <div class="kronolithDragger kronolithDraggerBottom"></div>
-    </div>
-
-    <div class="kronolithEvent c2 kronolithEventFull col2 hour1 length6">
-      <div class="kronolithDragger kronolithDraggerTop"></div>
-      <div class="kronolithEventInfo">10h diiaiaiai jkh gjhg fjkgh fkjgh kfjhg jkfhg kjfh g</div>
-      <div class="kronolithDragger kronolithDraggerBottom"></div>
-    </div>
-
-    <div class="kronolithEvent c1 kronolithEventFull col3 hour0 length2">
-      <div class="kronolithDragger kronolithDraggerTop"></div>
-      <div class="kronolithEventInfo">10h diiaiaiai jkh gjhg fjkgh fkjgh kfjhg jkfhg kjfh g</div>
-      <div class="kronolithDragger kronolithDraggerBottom"></div>
-    </div>
-
-    <div class="kronolithEvent c1 kronolithEventFull col4 hour0 length2">
-      <div class="kronolithDragger kronolithDraggerTop"></div>
-      <div class="kronolithEventInfo">10h diiaiaiai jkh gjhg fjkgh fkjgh kfjhg jkfhg kjfh g</div>
-      <div class="kronolithDragger kronolithDraggerBottom"></div>
-    </div>
-
-    <div class="kronolithEvent c1 kronolithEventFull col5 hour0 length2">
-      <div class="kronolithDragger kronolithDraggerTop"></div>
-      <div class="kronolithEventInfo">10h diiaiaiai jkh gjhg fjkgh fkjgh kfjhg jkfhg kjfh g</div>
-      <div class="kronolithDragger kronolithDraggerBottom"></div>
-    </div>
-
-    <div class="kronolithEvent c1 kronolithEventFull col6 hour0 length2">
-      <div class="kronolithDragger kronolithDraggerTop"></div>
-      <div class="kronolithEventInfo">10h diiaiaiai jkh gjhg fjkgh fkjgh kfjhg jkfhg kjfh g</div>
-      <div class="kronolithDragger kronolithDraggerBottom"></div>
-    </div>
-
-    <div class="kronolithEvent c1 kronolithEventFull col7 hour0 length2">
-      <div class="kronolithDragger kronolithDraggerTop"></div>
-      <div class="kronolithEventInfo">10h diiaiaiai jkh gjhg fjkgh fkjgh kfjhg jkfhg kjfh g</div>
-      <div class="kronolithDragger kronolithDraggerBottom"></div>
-    </div>
-  </div>
+<table class="kronolithView kronolithViewDay">
+  <tbody id="kronolithViewWeekBody">
+    <?php for ($i = 0; $i < 24; $i++): ?>
+    <tr<?php if ($i < 9 || $i > 19) echo ' class="kronolithNight"' ?>>
+      <td class="kronolithFirstCol"><span><?php echo $i ?>:00</span></td>
+      <td<?php if ($w == 6 || $w == 0) echo ' class="kronolithWeekend"' ?>>
+      </td>
+      <td<?php if ($w == 5 || $w == 6) echo ' class="kronolithWeekend"' ?>>
+      </td>
+      <td<?php if ($w == 4 || $w == 5) echo ' class="kronolithWeekend"' ?>>
+      </td>
+      <td<?php if ($w == 3 || $w == 4) echo ' class="kronolithWeekend"' ?>>
+      </td>
+      <td<?php if ($w == 2 || $w == 3) echo ' class="kronolithWeekend"' ?>>
+      </td>
+      <td<?php if ($w == 1 || $w == 2) echo ' class="kronolithWeekend"' ?>>
+      </td>
+      <td<?php if ($w == 0 || $w == 1) echo ' class="kronolithWeekend"' ?>>
+      </td>
+    </tr>
+    <?php endfor; ?>
+  </tbody>
+</table>
+<div id="kronolithEventsWeek">
+  <div class="kronolithEventsWeek"></div>
+  <div class="kronolithEventsWeek"></div>
+  <div class="kronolithEventsWeek"></div>
+  <div class="kronolithEventsWeek"></div>
+  <div class="kronolithEventsWeek"></div>
+  <div class="kronolithEventsWeek"></div>
+  <div class="kronolithEventsWeek"></div>
+</div>
 </div>
 
 </div>

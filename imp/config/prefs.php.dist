@@ -1,10 +1,11 @@
 <?php
 /**
  * See horde/config/prefs.php for documentation on the structure of this file.
+ *
+ * $Id$
  */
 
 // Make sure that constants are defined.
-require_once dirname(__FILE__) . '/../lib/IMP.php';
 $is_pop3 = isset($_SESSION['imp']['protocol']) && ($_SESSION['imp']['protocol'] == 'pop');
 
 $prefGroups['identities'] = array(
@@ -38,8 +39,9 @@ if (!empty($_SESSION['imp']['acl'])) {
 $prefGroups['logintasks'] = array(
     'column' => _("General Options"),
     'label' => _("Login Tasks"),
-    'desc' => sprintf(_("Customize tasks to run upon logon to %s."), $GLOBALS['registry']->get('name')),
-    'members' => array()
+    'desc' => sprintf(_("Configure tasks to run upon logon to %s."), $GLOBALS['registry']->get('name')),
+    'members' => array('delete_attachments_monthly',
+                       'delete_attachments_monthly_keep')
 );
 if (!$is_pop3) {
     $prefGroups['logintasks']['members'] = array_merge(
@@ -51,18 +53,22 @@ if (!$is_pop3) {
               'purge_trash_keep', 'purge_spam', 'purge_spam_interval',
               'purge_spam_keep'));
 }
-$prefGroups['logintasks']['members'] = array_merge(
-    $prefGroups['logintasks']['members'],
-    array('delete_attachments_monthly', 'delete_attachments_monthly_keep'));
+
+$prefGroups['accounts'] = array(
+    'column' => _("General Options"),
+    'label' => _("Additional Accounts"),
+    'desc' => _("Configure additional mail accounts to display."),
+    'members' => array('accountsmanagement')
+);
 
 $prefGroups['compose'] = array(
     'column' => _("Message Options"),
     'label' => _("Message Composition"),
-    'desc' => _("Customize how you send mail."),
+    'desc' => _("Configure how you send mail."),
     'members' => array('stationery_link', 'mailto_handler', 'compose_cc',
                        'compose_bcc', 'compose_spellcheck', 'compose_confirm',
                        'set_priority', 'compose_popup', 'compose_html',
-                       'fckeditor_buttons', 'mail_domain',
+                       'ckeditor_buttons', 'mail_domain',
                        'compose_cursor', 'sending_charset', 'encryptselect',
                        'save_attachments')
 );
@@ -74,17 +80,17 @@ if (!empty($GLOBALS['conf']['compose']['allow_receipts'])) {
 $prefGroups['reply_forward'] = array(
     'column' => _("Message Options"),
     'label' => _("Message Replies/Forwards"),
-    'desc' => _("Customize how you reply to or forward mail."),
-    'members' => array('reply_quote', 'reply_format', 'forward_default',
-                       'forward_bodytext', 'reply_headers', 'attrib_text')
+    'desc' => _("Configure how you reply to or forward mail."),
+    'members' => array('reply_quote', 'reply_format', 'forward_bodytext',
+                       'reply_headers', 'attrib_text')
 );
 
 $prefGroups['drafts'] = array(
     'column' => _("Message Options"),
     'label' => _("Message Drafts"),
-    'desc' => _("Customize how to deal with message drafts."),
+    'desc' => _("Configure how to deal with message drafts."),
     'members' => array('draftsselect', 'close_draft', 'unseen_drafts',
-                       'auto_delete_drafts')
+                       'auto_save_drafts', 'auto_delete_drafts')
 );
 
 $prefGroups['viewing'] = array(
@@ -95,7 +101,8 @@ $prefGroups['viewing'] = array(
                        'html_image_replacement', 'html_image_addrbook',
                        'highlight_text', 'highlight_simple_markup',
                        'show_quoteblocks', 'dim_signature', 'emoticons',
-                       'parts_display', 'mail_hdr', 'default_msg_charset')
+                       'parts_display', 'atc_display', 'mail_hdr',
+                       'default_msg_charset')
 );
 if (!empty($GLOBALS['conf']['maillog']['use_maillog'])) {
     $prefGroups['viewing']['members'] = array_merge($prefGroups['viewing']['members'], array('disposition_send_mdn'));
@@ -106,7 +113,7 @@ $prefGroups['delmove'] = array(
     'label' => _("Deleting and Moving Messages"),
     'desc' => _("Set preferences for what happens when you move and delete messages."),
     'members' => array('mailbox_return', 'delete_spam_after_report',
-                       'empty_spam_menu')
+                       'move_ham_after_report', 'empty_spam_menu')
 );
 if (!$is_pop3) {
     $prefGroups['delmove']['members'] = array_merge(
@@ -121,21 +128,12 @@ $prefGroups['newmail'] = array(
     'members' => array('refresh_time', 'nav_poll_all', 'nav_popup', 'soundselect')
 );
 
-if (!empty($GLOBALS['conf']['mailbox']['show_preview'])) {
-    $prefGroups['mailpreview'] = array(
-        'column' => _("Message Options"),
-        'label' => _("Mail Previews"),
-        'desc' => _("Configure mail preview options."),
-        'members' => array('preview_enabled', 'preview_maxlen', 'preview_strip_nl', 'preview_show_unread', 'preview_show_tooltip')
-    );
-}
-
 if (!$is_pop3) {
-    $prefGroups['fetchmail'] = array(
+    $prefGroups['flags'] = array(
         'column' => _("Message Options"),
-        'label' => _("Fetch Mail"),
-        'desc' => _("Customize accounts for fetching mail from other accounts."),
-        'members' => array('fetchmail_link', 'fetchmail_menu')
+        'label' => _("Message Flags"),
+        'desc' => _("Configure flag highlighting."),
+        'members' => array('flagmanagement')
     );
 }
 
@@ -144,7 +142,7 @@ $prefGroups['display'] = array(
     'label' => _("Mailbox and Folder Display Options"),
     'desc' => _("Change display options such as how many messages you see on each page and how messages are sorted."),
     'members' => array('mailbox_start', 'sortby', 'sortdir', 'max_msgs',
-                       'from_link', 'time_format')
+                       'from_link', 'time_format', 'atc_flag')
 );
 if (!$is_pop3) {
     $prefGroups['display']['members'] = array_merge(
@@ -159,14 +157,24 @@ $prefGroups['filters'] = array(
     'url' => 'filterprefs.php'
 );
 
-$prefGroups['addressbooks'] = array(
+$contacts_app = $GLOBALS['registry']->hasInterface('contacts');
+if ($contacts_app && $GLOBALS['registry']->hasPermission($contacts_app)) {
+    $prefGroups['addressbooks'] = array(
+        'column' => _("Other Options"),
+        'label' => _("Address Books"),
+        'desc' => _("Select address book sources for adding and searching for addresses."),
+        'members' => array('save_recipients', 'display_contact', 'sourceselect')
+        );
+}
+
+$prefGroups['events'] = array(
     'column' => _("Other Options"),
-    'label' => _("Address Books"),
-    'desc' => _("Select address book sources for adding and searching for addresses."),
-    'members' => array('save_recipients', 'display_contact', 'sourceselect')
+    'label' => _("Event Requests"),
+    'desc' => _("Configure how event or meeting requests should be handled."),
+    'members' => array('conflict_interval')
 );
 
-if (isset($GLOBALS['conf']['utils']['gnupg'])) {
+if (isset($GLOBALS['conf']['gnupg']['path'])) {
     $prefGroups['pgp'] = array(
         'column' => _("Other Options"),
         'label' => _("PGP Options"),
@@ -175,7 +183,7 @@ if (isset($GLOBALS['conf']['utils']['gnupg'])) {
     );
 }
 
-if (Util::extensionExists('openssl') && isset($GLOBALS['conf']['utils']['openssl_binary'])) {
+if (Horde_Util::extensionExists('openssl') && isset($GLOBALS['conf']['openssl']['path'])) {
     $prefGroups['smime'] = array(
         'column' => _("Other Options"),
         'label' => _("S/MIME Options"),
@@ -186,15 +194,23 @@ if (Util::extensionExists('openssl') && isset($GLOBALS['conf']['utils']['openssl
 
 $prefGroups['mimp'] = array(
     'column' => _("Other Options"),
-    'label' => _("MIMP Options"),
-    'desc' => _("Configure MIMP Options."),
-    'members' => array('mimp_preview_msg')
+    'label' => _("Minimalist View Options"),
+    'desc' => _("Configure options for the minimalist view."),
+    'members' => array('mimp_preview_msg', 'mimp_max_from_chars',
+                       'mimp_max_subj_chars', 'mimp_download_confirm')
+);
+
+$prefGroups['standard'] = array(
+    'column' => _("Other Options"),
+    'label' => _("Standard View Options"),
+    'desc' => _("Configure options for the standard view."),
+    'members' => array('preview_enabled', 'preview_maxlen', 'preview_strip_nl', 'preview_show_unread', 'preview_show_tooltip')
 );
 
 $prefGroups['dimp'] = array(
     'column' => _("Other Options"),
-    'label' => _("DIMP Options"),
-    'desc' => _("Configure DIMP Options."),
+    'label' => _("Dynamic View Options"),
+    'desc' => _("Configure options for the dynamic view."),
     'members' => array('dimp_login_view')
 );
 
@@ -295,7 +311,7 @@ $_prefs['use_vinbox'] = array(
 
 // use IMAP subscribe?
 $_prefs['subscribe'] = array(
-    'value' => 0,
+    'value' => 1,
     'locked' => false,
     'shared' => false,
     'type' => 'checkbox',
@@ -354,9 +370,9 @@ $_prefs['vfolder'] = array(
 // Folder sharing preferences
 
 // folder sharing options
-// set 'locked' => true to disable folder sharing
 $_prefs['acl'] = array(
     'value' => '',
+    // set 'locked' => true to disable folder sharing
     'locked' => false,
     'shared' => false,
     'type' => 'implicit');
@@ -364,7 +380,7 @@ $_prefs['acl'] = array(
 // End folder sharing preferences
 
 
-// Login/Maintenance Tasks preferences
+// Login Tasks preferences
 
 // select widget for the initial_page preference
 $_prefs['initialpageselect'] = array('type' => 'special');
@@ -414,12 +430,12 @@ $_prefs['purge_sentmail'] = array(
     'help' => 'prefs-purge_sentmail');
 
 // how often to purge the Sent-Mail folder?
-// 'value': yearly = 1, monthly = 2, weekly = 3, daily = 4, every login = 5
 $_prefs['purge_sentmail_interval'] = array(
-    'value' => '2',
+    'value' => Horde_LoginTasks::MONTHLY,
     'locked' => false,
     'shared' => false,
-    'type' => 'select',
+    'type' => 'enum',
+    'enum' => Horde_LoginTasks::getLabels(),
     'desc' => _("Purge sent-mail how often:"),
     'help' => 'prefs-purge_sentmail_interval');
 
@@ -460,12 +476,12 @@ $_prefs['purge_spam'] = array(
     'help' => 'prefs-purge_spam');
 
 // how often to purge the Spam folder?
-// 'value': yearly = 1, monthly = 2, weekly = 3, daily = 4, every login = 5
 $_prefs['purge_spam_interval'] = array(
-    'value' => '2',
+    'value' => Horde_LoginTasks::MONTHLY,
     'locked' => false,
     'shared' => false,
-    'type' => 'select',
+    'type' => 'enum',
+    'enum' => Horde_LoginTasks::getLabels(),
     'desc' => _("Purge Spam how often:"),
     'help' => 'prefs-purge_spam_interval');
 
@@ -488,12 +504,12 @@ $_prefs['purge_trash'] = array(
     'help' => 'prefs-purge_trash');
 
 // how often to purge the Trash folder?
-// 'value': yearly = 1, monthly = 2, weekly = 3, daily = 4, every login = 5
 $_prefs['purge_trash_interval'] = array(
-    'value' => '2',
+    'value' => Horde_LoginTasks::MONTHLY,
     'locked' => false,
     'shared' => false,
-    'type' => 'select',
+    'type' => 'enum',
+    'enum' => Horde_LoginTasks::getLabels(),
     'desc' => _("Purge Trash how often:"),
     'help' => 'prefs-purge_trash_interval');
 
@@ -506,14 +522,23 @@ $_prefs['purge_trash_keep'] = array(
     'desc' => _("Purge messages in Trash folder older than this amount of days."),
     'help' => 'prefs-purge_trash_keep');
 
-// show tos agreement?
-$_prefs['tos_agreement'] = array(
-    'value' => 0,
+// End Login Tasks preferences
+
+
+// Accounts preferences
+
+// UI for flag management.
+$_prefs['accountsmanagement'] = array(
+    'type' => 'special'
+);
+
+$_prefs['accounts'] = array(
+    'value' => json_encode(array()),
     'locked' => false,
     'shared' => false,
     'type' => 'implicit');
 
-// End Login/Maintenance preferences
+// End Accounts preferences
 
 
 // Message Composition preferences
@@ -525,6 +550,7 @@ $_prefs['stationery_link'] = array(
     'desc' => _("To the stationery and form responses."));
 
 $_prefs['stationery'] = array(
+    // value = serialize(array())
     'value' => 'a:0:{}',
     'locked' => false,
     'shared' => false,
@@ -536,7 +562,7 @@ $_prefs['mailto_handler'] = array(
     'xurl' => 'javascript:if(typeof navigator.registerProtocolHandler==\'undefined\')alert(\''
         . addslashes(_("Your browser does not support this feature."))
         . '\');else navigator.registerProtocolHandler(\'mailto\',\''
-        . Util::addParameter(Horde::applicationUrl('compose.php', true),
+        . Horde_Util::addParameter(Horde::applicationUrl('compose.php', true),
                              array('actionID' => 'mailto_link', 'to' => ''), false)
         . '%s\',\'' . $GLOBALS['registry']->get('name') . '\');',
     'desc' => sprintf(_("Click here to open all mailto: links in %s."), $GLOBALS['registry']->get('name')));
@@ -577,8 +603,9 @@ $_prefs['compose_confirm'] = array(
 
 // allow the user to add a "X-Priority" header when composing messages?
 $_prefs['set_priority'] = array(
-    'value' => 0,
-    'locked' => false,
+    'value' => 1,
+    // Locked by default
+    'locked' => true,
     'shared' => false,
     'type' => 'checkbox',
     'desc' => _("Set the X-Priority header when composing messages?"));
@@ -602,9 +629,14 @@ $_prefs['compose_html'] = array(
     'desc' => _("Compose messages with an HTML GUI by default (if browser supports the feature)?")
 );
 
-// The list of buttons to show in FCKeditor
-$_prefs['fckeditor_buttons'] = array(
-    'value' => "[['FontFormat','FontName','FontSize'],['Bold','Italic','Underline'],['TextColor','BGColor'],'/',['JustifyLeft','JustifyCenter','JustifyRight','JustifyFull'],['OrderedList','UnorderedList','Outdent','Indent'],['Link'],['Undo','Redo']]",
+// The list of buttons to show in CKeditor
+// See http://docs.cksource.com/CKEditor_3.x/Developers_Guide/Toolbar for
+// details on configuration
+$_prefs['ckeditor_buttons'] = array(
+    'value' => "[['Source','Maximize','-','Templates'],['Cut','Copy','Paste','PasteText','PasteFromWord'],['Undo','Redo','-','Find','Replace','-','SelectAll','RemoveFormat'],'/',['NumberedList','BulletedList','-','Outdent','Indent','Blockquote'],['JustifyLeft','JustifyCenter','JustifyRight','JustifyBlock'],['Link','Unlink'],['Image','Flash','Table','HorizontalRule','Smiley','SpecialChar'],'/',['Bold','Italic','Underline','Strike','-','Subscript','Superscript'],['TextColor','BGColor'],'/',['Styles','Format','Font','FontSize']]",
+    // Use the following line for a very basic set of buttons:
+    // 'value' => "['Bold','Italic','-','NumberedList','BulletedList','-','Link','Unlink']",
+    // Locked by default
     'locked' => true,
     'shared' => false,
     'type' => 'textarea',
@@ -637,8 +669,7 @@ $_prefs['sending_charset'] = array(
     'locked' => false,
     'shared' => true,
     'type' => 'enum',
-    'enum' => array_merge(array('' => _("Default")),
-                  $GLOBALS['nls']['encodings']),
+    'enum' => array_merge(array('' => _("Default")), Horde_Nls::$config['encodings']),
     'desc' => _("Your default charset for sending messages:"));
 
 // Select widget for the 'default_encrypt' preference
@@ -657,10 +688,12 @@ $_prefs['save_attachments'] = array(
     'locked' => false,
     'shared' => false,
     'type' => 'enum',
-    'enum' => array('always' => _("Always save attachments"),
-                    'prompt_yes' => _("Prompt every time an attachment is sent; default to YES"),
-                    'prompt_no' => _("Prompt every time an attachment is sent; default to NO"),
-                    'never' => _("Never save attachments")),
+    'enum' => array(
+        'always' => _("Always save attachments"),
+        'prompt_yes' => _("Prompt every time an attachment is sent; default to YES"),
+        'prompt_no' => _("Prompt every time an attachment is sent; default to NO"),
+        'never' => _("Never save attachments")
+    ),
     'desc' => _("When saving sent-mail, should we save attachment data?"),
     'help' => 'prefs-save_attachments');
 
@@ -685,7 +718,8 @@ $_prefs['disposition_request_read'] = array(
 // Should the original message be included?
 $_prefs['reply_quote'] = array(
     'value' => 1,
-    'locked' => false,
+    // Locked by default
+    'locked' => true,
     'shared' => false,
     'type' => 'checkbox',
     'desc' => _("Include original message in a reply?"));
@@ -699,21 +733,9 @@ $_prefs['reply_format'] = array(
     'type' => 'checkbox',
     'desc' => _("When replying/forwarding to a message, should we use the same format as the original message?"));
 
-// What should the default forward method be?
-$_prefs['forward_default'] = array(
-    'value' => 'forward_all',
-    'locked' => false,
-    'shared' => false,
-    'type' => 'enum',
-    'enum' => array('forward_all' => _("Entire Message"),
-                    'forward_body' => _("Body Text Only"),
-                    'forward_attachments' => _("Body Text with Attachments")),
-    'desc' => _("Default forwarding method:"),
-    'help' => 'message-forward');
-
 // Should the original message be included?
 $_prefs['forward_bodytext'] = array(
-    'value' => 1,
+    'value' => 0,
     'locked' => false,
     'shared' => false,
     'type' => 'checkbox',
@@ -759,14 +781,18 @@ $_prefs['unseen_drafts'] = array(
     'desc' => _("Save drafts as unseen?"));
 
 // auto-save drafts? value is in minutes, 0 == don't save.
-// Only works w/DIMP - does not show in prefs screen by default
+// Only works w/DIMP
 $_prefs['auto_save_drafts'] = array(
     'value' => 5,
-    'locked' => false,
+    // Locked by default
+    'locked' => true,
     'shared' => false,
     'type' => 'enum',
-    'enum' => array(0 => _("No"),
-                    5 => _("Every 5 minutes")),
+    'enum' => array(
+        0 => _("No"),
+        1 => _("Every minute"),
+        5 => _("Every 5 minutes")
+    ),
     'desc' => _("Save drafts automatically while composing?"),
 );
 
@@ -787,7 +813,7 @@ $_prefs['auto_delete_drafts'] = array(
 // filter message content?
 $_prefs['filtering'] = array(
     'value' => 0,
-    'locked' => false,
+    'locked' => true,
     'shared' => false,
     'type' => 'checkbox',
     'desc' => _("Filter message content for profanity?"));
@@ -806,41 +832,61 @@ $_prefs['delete_spam_after_report'] = array(
     'locked' => false,
     'shared' => false,
     'type' => 'enum',
-    'enum' => array(0 => _("Nothing"),
-                    1 => _("Delete spam messages")),
-    'desc' => _("What should we do with spam messages after they have been reported as spam or innocent?"),
+    'enum' => array(
+        0 => _("Nothing"),
+        1 => _("Delete message")
+    ),
+    'desc' => _("What should we do with spam messages after they have been reported as spam?"),
     'help' => 'prefs-delete_spam_after_report'
 );
 if (!$is_pop3) {
     $_prefs['delete_spam_after_report']['enum'][2] =
-        _("Move spam messages to spam folder and innocent messages to INBOX");
+        _("Move to spam folder");
 }
 
-// Replace image tags in HTML messages with blank images?
+// What should we do with spam messages after reporting them as innocent?
+$_prefs['move_ham_after_report'] = array(
+    'value' => 0,
+    'locked' => false,
+    'shared' => false,
+    'type' => 'enum',
+    'enum' => array(
+        0 => _("Nothing")
+    ),
+    'desc' => _("What should we do with spam messages after they have been reported as innocent?"),
+    'help' => 'prefs-move_ham_after_report'
+);
+if (!$is_pop3) {
+    $_prefs['move_ham_after_report']['enum'][1] =
+        _("Move to Inbox");
+}
+
+// Replace image tags in inline viewed HTML messages with blank images?
 $_prefs['html_image_replacement'] = array(
     'value' => 1,
     'locked' => false,
     'shared' => false,
     'type' => 'checkbox',
-    'desc' => _("Block images in HTML messages unless they are specifically requested?"),
+    'desc' => _("Block images in inline viewed HTML messages unless they are specifically requested?"),
     'help' => 'prefs-html_image_replacement'
 );
 
-// By default, automatically show images in HTML messages if the sender is in
-// the user's addressbook?
+// By default, automatically show images in inline viewed HTML messages if the
+// sender is in the user's addressbook?
 $_prefs['html_image_addrbook'] = array(
     'value' => 1,
     'locked' => false,
     'shared' => false,
     'type' => 'checkbox',
-    'desc' => _("Automatically show images in HTML messages when the sender is in my address book?"),
+    'desc' => _("Automatically show images in inline viewed HTML messages when the sender is in my address book?"),
     'help' => 'prefs-html_image_addrbook'
 );
 
 // should we try to mark different conversations with different colors?
 $_prefs['highlight_text'] = array(
     'value' => 1,
-    'locked' => false,
+    // Locked by default
+    'locked' => true,
     'shared' => false,
     'type' => 'checkbox',
     'desc' => _("Mark different levels of quoting with different colors?"));
@@ -848,7 +894,8 @@ $_prefs['highlight_text'] = array(
 // should we try to mark simple markup with html tags?
 $_prefs['highlight_simple_markup'] = array(
     'value' => 1,
-    'locked' => false,
+    // Locked by default
+    'locked' => true,
     'shared' => false,
     'type' => 'checkbox',
     'desc' => _("Mark simple markup?"));
@@ -859,17 +906,20 @@ $_prefs['show_quoteblocks'] = array(
     'locked' => false,
     'shared' => false,
     'type' => 'enum',
-    'enum' => array('shown' => _("Shown"),
-                    'thread' => _("Hidden in Thread View"),
-                    'list' => _("Hidden in List Messages"),
-                    'listthread' => _("Hidden in Thread View and List Messages"),
-                    'hidden' => _("Hidden")),
+    'enum' => array(
+        'shown' => _("Shown"),
+        'thread' => _("Hidden in Thread View"),
+        'list' => _("Hidden in List Messages"),
+        'listthread' => _("Hidden in Thread View and List Messages"),
+        'hidden' => _("Hidden")
+    ),
     'desc' => _("Should large blocks of quoted text be shown or hidden by default? It can be toggled easily whichever you choose."));
 
 // should we dim signatures?
 $_prefs['dim_signature'] = array(
-    'value' => 1,
-    'locked' => false,
+    'value' => 0,
+    // Locked by default
+    'locked' => true,
     'shared' => false,
     'type' => 'checkbox',
     'desc' => _("Dim signatures?"));
@@ -882,26 +932,36 @@ $_prefs['emoticons'] = array(
     'type' => 'checkbox',
     'desc' => _("Convert textual emoticons into graphical ones?"));
 
-// how do we display message parts?
+// how do we display message parts in the summary?
 $_prefs['parts_display'] = array(
     'value' => 'atc',
     'locked' => false,
     'shared' => false,
     'type' => 'enum',
-    'enum' => array('all' => _("Show all parts"),
-                    'atc' => _("Show attachments only"),
-                    'none' => _("Don't show any parts")),
-    'desc' => _("How do you want to display the parts of a message by default?"));
+    'enum' => array(
+        'all' => _("Show all parts"),
+        'atc' => _("Show attachments only")
+    ),
+    'desc' => _("Which message parts do you want to display in the summary?"));
+
+// Should attachment summaries be displayed inline?
+$_prefs['atc_display'] = array(
+    'value' => 1,
+    'locked' => false,
+    'shared' => false,
+    'type' => 'checkbox',
+    'desc' => _("Display attachment summary information within the message text?"));
 
 // Display custom headers (configured via the identity screen) when viewing
 // messages?
 $_prefs['mail_hdr'] = array(
+    // Value is a list of headers to display, separated by "\n"
+    // e.g.: "Message-ID\nX-Spam-Level"
     'value' => '',
-//  'value' => "Message-ID\nX-Spam-Level",
     'locked' => false,
     'shared' => false,
     'type' => 'textarea',
-    'desc' => _("Additional headers to display when viewing: <em>(optional, enter each header on a new line)</em>"));
+    'desc' => _("Additional headers to display when viewing: <em>(enter each header on a new line)</em>"));
 
 // default message character set
 $_prefs['default_msg_charset'] = array(
@@ -913,14 +973,16 @@ $_prefs['default_msg_charset'] = array(
     'locked' => false,
     'shared' => false,
     'type' => 'enum',
-    'enum' => array_merge(array('' => _("Default (US-ASCII)")),
-                          $GLOBALS['nls']['encodings']),
+    'enum' => array_merge(
+        array('' => _("Default (US-ASCII)")), Horde_Nls::$config['encodings']
+    ),
     'desc' => _("The default charset for messages with no charset information:"),
     'help' => 'prefs-default_msg_charset');
 
 $_prefs['disposition_send_mdn'] = array(
-    'value' => 0,
-    'locked' => false,
+    'value' => 1,
+    // Locked by default
+    'locked' => true,
     'shared' => false,
     'type' => 'checkbox',
     'desc' => _("Prompt to send read receipt when requested by the sender?"),
@@ -965,7 +1027,7 @@ $_prefs['vtrash_id'] = array(
 
 // display the 'Empty Trash' link in the menubar?
 $_prefs['empty_trash_menu'] = array(
-    'value' => 1,
+    'value' => 0,
     'locked' => false,
     'shared' => false,
     'type' => 'checkbox',
@@ -997,12 +1059,14 @@ $_prefs['refresh_time'] = array(
     'locked' => false,
     'shared' => false,
     'type' => 'enum',
-    'enum' => array(0 => _("Never"),
-                    30 => _("Every 30 seconds"),
-                    60 => _("Every minute"),
-                    300 => _("Every 5 minutes"),
-                    900 => _("Every 15 minutes"),
-                    1800 => _("Every half hour")),
+    'enum' => array(
+        0 => _("Never"),
+        30 => _("Every 30 seconds"),
+        60 => _("Every minute"),
+        300 => _("Every 5 minutes"),
+        900 => _("Every 15 minutes"),
+        1800 => _("Every half hour")
+    ),
     'desc' => _("Refresh Folder Views:"),
 );
 
@@ -1029,101 +1093,167 @@ $_prefs['soundselect'] = array('type' => 'special');
 // End New Mail preferences
 
 
-// Message Preview Preferences
+// IMAP Flag preferences
 
-$_prefs['preview_enabled'] = array(
-    'value' => '0',
-    'locked' => false,
-    'shared' => false,
-    'type' => 'checkbox',
-    'desc' => _("Enable message previews?")
+// UI for flag management.
+$_prefs['flagmanagement'] = array(
+    'type' => 'special'
 );
 
-$_prefs['preview_maxlen'] = array(
-    'value' => 250,
+// Message flags
+$_prefs['msgflags'] = array(
+    // Format:
+    //   KEY: Flag name
+    //   VALUE: Array with the following entries
+    //          'a' - (string) [abbreviation] The abbreviation used in
+    //                the mimp (minimal) view.
+    //                DEFAULT: Don't show flag
+    //          'b' - (string) [background] The CSS background color
+    //                DEFAULT: Use value of 'msgflags_color'
+    //          'c' - (string) [class] The CSS background class (used to
+    //                display status icon).
+    //                NO DEFAULT (entry required)
+    //          'd' - (boolean) [delete] If true, entry can be deleted.
+    //                DEFAULT: false
+    //          'l' - (string) [label] The flag text label.
+    //                NO DEFAULT (entry required)
+    //          't' - (string) [type] The flag type:
+    //                'atc' - Attachment information
+    //                'imap' - IMAP system flags (not settable by user)
+    //                'imapp' - IMAP flags (personal flags - created by user
+    //                          through the prefs interface)
+    //                'imapu' - IMAP system flags (settable by user)
+    //                'imp' - IMP defined flags
+    //                NO DEFAULT (entry required)
+    'value' => json_encode(array(
+        // Static internal imp flags (i.e. status icons)
+        // THESE ENTRIES MUST NOT BE DELETED
+        'personal' => array(
+            'a' => '+',
+            'c' => 'flagPersonal',
+            'l' => _("Personal"),
+            't' => 'imp'
+        ),
+        'highpri' => array(
+            'a' => '!',
+            'b' => '#ffcccc',
+            'c' => 'flagHighpriority',
+            'l' => _("High Priority"),
+            't' => 'imp'
+        ),
+        'lowpri' => array(
+            'a' => '0',
+            'c' => 'flagLowpriority',
+            'l' => _("Low Priority"),
+            't' => 'imp'
+        ),
+
+        // Attachment flags
+        // THESE ENTRIES MUST NOT BE DELETED
+        'signed' => array(
+            'c' => 'flagSignedmsg',
+            'l' => _("Message is Signed"),
+            't' => 'atc'
+        ),
+        'encrypt' => array(
+            'c' => 'flagEncryptmsg',
+            'l' => _("Message is Encrypted"),
+            't' => 'atc'
+        ),
+        'attach' => array(
+            'c' => 'flagAttachmsg',
+            'l' => _("Message has Attachments"),
+            't' => 'atc'
+        ),
+
+        // IMAP flags
+        // KEY: IMAP flag as it exists on the IMAP server
+        // VALUES (additional to base values):
+        //   'n' - (boolean) [NOT match] Don't match the flag.
+        //         DEFAULT: false
+
+        // System IMAP flags (RFC 3501 [2.3.2])
+        '\\seen' => array(
+            'a' => 'N',
+            'b' => '#eeeeff',
+            'c' => 'flagUnseen',
+            'l' => _("Unseen"),
+            'n' => true,
+            't' => 'imapu'
+        ),
+        '\\answered' => array(
+            'a' => 'r',
+            'b' => '#ccffcc',
+            'c' => 'flagAnswered',
+            'l' => _("Answered"),
+            // By default, this flag is not settable by the user - it is
+            // automatically set when a message is replied to.
+            't' => 'imap'
+        ),
+        '\\draft' => array(
+            'a' => 'd',
+            'c' => 'flagDraft',
+            'l' => _("Draft"),
+            // By default, this flag is not settable by the user - it is
+            // automatically set/reset when a message is drafted/finished.
+            't' => 'imap'
+        ),
+
+        // Forwarded flag (RFC 5550 [5.9])
+        '$forwarded' => array(
+            'a' => 'F',
+            'b' => '#aadddd',
+            'c' => 'flagForwarded',
+            'l' => _("Forwarded"),
+            // Pursuant to RFC, this flag SHOULD NOT be changed by the user
+            't' => 'imap'
+        ),
+
+        // Continued: System IMAP flags (RFC 3501 [2.3.2])
+        '\\flagged' => array(
+            'a' => '*',
+            'b' => '#ffcccc',
+            'c' => 'flagFlagged',
+            'l' => _("Flagged for Followup"),
+            't' => 'imapu'
+        ),
+        '\\deleted' => array(
+            'a' => 'D',
+            'b' => '#999999',
+            'c' => 'flagDeleted',
+            'l' => _("Deleted"),
+            't' => 'imapu'
+        ),
+    )),
     'locked' => false,
     'shared' => false,
-    'type' => 'enum',
-    'enum' => array(100 => _("100 characters"),
-                    250 => _("250 characters"),
-                    500 => _("500 characters"),
-                    1000 => _("1000 characters")),
-    'desc' => _("Characters to display:")
+    'type' => 'implicit'
 );
 
-$_prefs['preview_strip_nl'] = array(
-    'value' => '1',
-    'locked' => false,
-    'shared' => false,
-    'type' => 'checkbox',
-    'desc' => _("Strip linebreaks?")
-);
-
-$_prefs['preview_show_unread'] = array(
-    'value' => '1',
-    'locked' => false,
-    'shared' => false,
-    'type' => 'checkbox',
-    'desc' => _("Show previews for unread messages only?")
-);
-
-$_prefs['preview_show_tooltip'] = array(
-    'value' => '0',
-    'locked' => false,
-    'shared' => false,
-    'type' => 'checkbox',
-    'desc' => _("Show previews in tooltips?")
-);
-
-// End Message Preview
-
-
-// Fetch Mail preferences
-
-// Change this if you want to customize how fetchmailprefs.php works.
-$_prefs['fetchmail_link'] = array(
-    'type' => 'link',
-    'url' => 'fetchmailprefs.php',
-    'img' => 'fetchmail.png',
-    'desc' => _("Edit your preferences for accessing other mail accounts."));
-
-// Show the Fetch mail icon on the menubar?
-$_prefs['fetchmail_menu'] = array(
-    'value' => 1,
-    'locked' => false,
-    'shared' => false,
-    'type' => 'checkbox',
-    'desc' => _("Show the Fetch Mail icon on the menubar?"));
-
-// Don't change anything here.
-$_prefs['fm_accounts'] = array(
-    'value' => 'a:0:{}',
+// The default color to use for flags that don't require row highlighting.
+$_prefs['msgflags_color'] = array(
+    'value' => '#ffffff',
     'locked' => false,
     'shared' => false,
     'type' => 'implicit');
 
-$_prefs['fetchmail_login'] = array(
-    'value' => 0,
-    'locked' => false,
-    'shared' => false,
-    'type' => 'implicit');
-
-// End Fetch Mail preferences
-
+// End IMAP Flag preferences
 
 // Display Options preferences
 
-// which page to start on when opening mailbox
+// Where to start when opening mailbox?
 $_prefs['mailbox_start'] = array(
     'value' => IMP::MAILBOX_START_FIRSTUNSEEN,
     'locked' => false,
     'shared' => false,
     'type' => 'enum',
-    'enum' => array(IMP::MAILBOX_START_FIRSTUNSEEN => _("Page with the First (oldest) Unseen Message"),
-                    IMP::MAILBOX_START_LASTUNSEEN => _("Page with the Last (newest) Unseen Message"),
-                    IMP::MAILBOX_START_FIRSTPAGE => _("First Mailbox Page"),
-                    IMP::MAILBOX_START_LASTPAGE => _("Last Mailbox Page")),
-    'desc' => _("When opening a new mailbox for the first time, which page do you want to start on?"),
+    'enum' => array(
+        IMP::MAILBOX_START_FIRSTUNSEEN => _("First (oldest) Unseen Message"),
+        IMP::MAILBOX_START_LASTUNSEEN => _("Last (newest) Unseen Message"),
+        IMP::MAILBOX_START_FIRSTPAGE => _("First Page"),
+        IMP::MAILBOX_START_LASTPAGE => _("Last Page")
+    ),
+    'desc' => _("When opening a mailbox for the first time, where do you want to start?"),
     'help' => 'prefs-mailbox_start');
 
 // default sorting column
@@ -1132,13 +1262,15 @@ $_prefs['sortby'] = array(
     'locked' => false,
     'shared' => false,
     'type' => 'enum',
-    'enum' => array(Horde_Imap_Client::SORT_ARRIVAL => _("Arrival Time"),
-                    Horde_Imap_Client::SORT_DATE => _("Message Date"),
-                    Horde_Imap_Client::SORT_FROM => _("From Address"),
-                    Horde_Imap_Client::SORT_TO => _("To Address"),
-                    Horde_Imap_Client::SORT_SUBJECT => _("Subject Field"),
-                    Horde_Imap_Client::SORT_SIZE => _("Message Size"),
-                    Horde_Imap_Client::SORT_THREAD => _("Thread View")),
+    'enum' => array(
+        Horde_Imap_Client::SORT_ARRIVAL => _("Arrival Time"),
+        Horde_Imap_Client::SORT_DATE => _("Message Date"),
+        Horde_Imap_Client::SORT_FROM => _("From Address"),
+        Horde_Imap_Client::SORT_TO => _("To Address"),
+        Horde_Imap_Client::SORT_SUBJECT => _("Subject"),
+        Horde_Imap_Client::SORT_SIZE => _("Message Size"),
+        Horde_Imap_Client::SORT_THREAD => _("Thread")
+    ),
     'desc' => _("Default sorting criteria:"));
 
 // default sorting direction
@@ -1147,12 +1279,15 @@ $_prefs['sortdir'] = array(
     'locked' => false,
     'shared' => false,
     'type' => 'enum',
-    'enum' => array(0 => _("Ascending"),
-                    1 => _("Descending")),
+    'enum' => array(
+        0 => _("Ascending"),
+        1 => _("Descending")
+    ),
     'desc' => _("Default sorting direction:"));
 
 // sort prefs for individual folders
 $_prefs['sortpref'] = array(
+    // value = serialize(array())
     'value' => 'a:0:{}',
     'locked' => false,
     'shared' => false,
@@ -1160,7 +1295,7 @@ $_prefs['sortpref'] = array(
 
 // mailbox constraints
 $_prefs['max_msgs'] = array(
-    'value' => 20,
+    'value' => 30,
     'locked' => false,
     'shared' => false,
     'type' => 'number',
@@ -1179,6 +1314,18 @@ $_prefs['from_link'] = array(
     ),
     'desc' => _("The From: column of the message should be linked:"));
 
+// Display attachment information in mailbox list.
+// Disabled by default, and not shown to user, because this display requires
+// substantial overhead to parse the message structures of all message in
+// the mailbox list at view time.
+$_prefs['atc_flag'] = array(
+    'value' => 0,
+    // Locked by default
+    'locked' => true,
+    'shared' => false,
+    'type' => 'checkbox',
+    'desc' => _("Display attachment information about a message in the mailbox listing?"));
+
 // Time format for messages dated today
 $_prefs['time_format'] = array(
     'value' => '%X',
@@ -1196,13 +1343,15 @@ $_prefs['time_format'] = array(
 
 // expand folder tree by default
 $_prefs['nav_expanded'] = array(
-    'value' => 0,
+    'value' => 2,
     'locked' => false,
     'shared' => false,
     'type' => 'enum',
-    'enum' => array(0 => _("No"),
-                    1 => _("Yes"),
-                    2 => _("Remember the last view")),
+    'enum' => array(
+        0 => _("No"),
+        1 => _("Yes"),
+        2 => _("Remember the last view")
+    ),
     'desc' => _("Expand the entire folder tree by default in the folders view?"));
 
 // folder tree view style
@@ -1211,8 +1360,10 @@ $_prefs['tree_view'] = array(
     'locked' => false,
     'shared' => false,
     'type' => 'enum',
-    'enum' => array(0 => _("Combine all namespaces"),
-                    1 => _("Show non-private mailboxes in separate folders")),
+    'enum' => array(
+        0 => _("Combine all namespaces"),
+        1 => _("Show non-private mailboxes in separate folders")
+    ),
     'desc' => _("How should namespaces be displayed in the folder tree view?")
 );
 
@@ -1222,14 +1373,16 @@ $_prefs['nav_expanded_sidebar'] = array(
     'locked' => false,
     'shared' => false,
     'type' => 'enum',
-    'enum' => array(0 => _("No"),
-                    1 => _("Yes"),
-                    2 => _("Current expanded status in the folders view")),
+    'enum' => array(
+        0 => _("No"),
+        1 => _("Yes"),
+        2 => _("Current expanded status in the folders view")
+    ),
     'desc' => _("Expand the entire folder tree by default in the sidebar?"));
 
 // poll all folders for new mail?
 $_prefs['nav_poll_all'] = array(
-    'value' => false,
+    'value' => 0,
     'locked' => $is_pop3,
     'shared' => false,
     'type' => 'checkbox',
@@ -1237,6 +1390,7 @@ $_prefs['nav_poll_all'] = array(
 
 // list of folders to expand by default
 $_prefs['expanded_folders'] = array(
+    // value = serialize(array())
     'value' => 'a:0:{}',
     'locked' => false,
     'shared' => false,
@@ -1354,6 +1508,20 @@ $_prefs['add_source'] = array(
 // End Address book preferences
 
 
+// Event preferences
+
+// Amount of minutes to consider a event as a non-conflicting one in iTip
+$_prefs['conflict_interval'] = array(
+    'value' => 30,
+    'locked' => false,
+    'shared' => false,
+    'type' => 'number',
+    'desc' => _("Minutes needed to consider a event as a non-conflicting one in iTip")
+);
+
+// End Calendar preferences
+
+
 // PGP options
 
 // Activate PGP support?
@@ -1433,20 +1601,101 @@ $_prefs['smime_additional_cert'] = array(
 
 // End S/MIME Options
 
-// MIMP Options
+// Minimalist View Options
 
 // display only the first 250 characters of a message on first message view?
 $_prefs['mimp_preview_msg'] = array(
     'value' => 0,
-    'locked' => true,
+    'locked' => false,
     'shared' => false,
     'type' => 'checkbox',
     'desc' => _("Display only the first 250 characters of a message initially?")
 );
 
-// End MIMP Options
+$_prefs['mimp_max_from_chars'] = array(
+    'value' => 10,
+    'locked' => true,
+    'shared' => false,
+    'type' => 'number',
+    'desc' => _("In the mailbox view, how many characters of From: addresses should we show before truncating?")
+);
 
-// DIMP Options
+$_prefs['mimp_max_subj_chars'] = array(
+    'value' => 20,
+    'locked' => true,
+    'shared' => false,
+    'type' => 'number',
+    'desc' => _("In the mailbox view, how many characters of Subject: lines should we show before truncating?")
+);
+
+$_prefs['mimp_download_confirm'] = array(
+    'value' => 0,
+    'locked' => true,
+    'shared' => false,
+    'type' => 'number',
+    'desc' => _("Only show download confirmation page if message part is greater than this size, in bytes. Set to 0 to always require the confirmation page.")
+);
+
+// End Minimalist View Options
+
+// Standard View Options
+
+// Previews are disabled by default as it can be performance intensive,
+// especially without caching.
+$_prefs['preview_enabled'] = array(
+    // Disabled and locked by default
+    'value' => 0,
+    'locked' => true,
+    'shared' => false,
+    'type' => 'checkbox',
+    'desc' => _("Enable message previews?")
+);
+
+$_prefs['preview_maxlen'] = array(
+    'value' => 250,
+    // Locked by default
+    'locked' => true,
+    'shared' => false,
+    'type' => 'enum',
+    'enum' => array(
+        100 => _("100 characters"),
+        250 => _("250 characters"),
+        500 => _("500 characters"),
+        1000 => _("1000 characters")
+    ),
+    'desc' => _("Characters to display:")
+);
+
+$_prefs['preview_strip_nl'] = array(
+    'value' => 1,
+    // Locked by default
+    'locked' => true,
+    'shared' => false,
+    'type' => 'checkbox',
+    'desc' => _("Strip linebreaks?")
+);
+
+$_prefs['preview_show_unread'] = array(
+    'value' => 1,
+    // Locked by default
+    'locked' => true,
+    'shared' => false,
+    'type' => 'checkbox',
+    'desc' => _("Show previews for unread messages only?")
+);
+
+$_prefs['preview_show_tooltip'] = array(
+    'value' => 0,
+    // Locked by default
+    'locked' => true,
+    'shared' => false,
+    'type' => 'checkbox',
+    'desc' => _("Show previews in tooltips?")
+);
+
+// End Standard View Options
+
+// Dynamic View Options
 
 // Login preferences (dimp)
 $_prefs['dimp_login_view'] = array(
@@ -1454,14 +1703,28 @@ $_prefs['dimp_login_view'] = array(
     'locked' => false,
     'shared' => false,
     'type' => 'enum',
-    'enum' => array('portal' => _("Portal"),
-                    'inbox' => _("Inbox")),
-    'desc' => _("The page to view immediately after login in DIMP.")
+    'enum' => array(
+        'portal' => _("Portal"),
+        'inbox' => _("Inbox")
+    ),
+    'desc' => _("The page to view immediately after login.")
 );
 
-// Other Implicit DIMP preferences
+// Other implicit dynamic view preferences
+$_prefs['dimp_qsearch_field'] = array(
+    'value' => 'all',
+    'locked' => false,
+    'shared' => false,
+    'type' => 'implicit');
+
 $_prefs['dimp_show_preview'] = array(
     'value' => true,
+    'locked' => false,
+    'shared' => false,
+    'type' => 'implicit');
+
+$_prefs['dimp_splitbar'] = array(
+    'value' => 0,
     'locked' => false,
     'shared' => false,
     'type' => 'implicit');
@@ -1472,7 +1735,7 @@ $_prefs['dimp_toggle_headers'] = array(
     'shared' => false,
     'type' => 'implicit');
 
-// End DIMP Options
+// End Dynamic View Options
 
 // Other entries (used internally in IMP)
 

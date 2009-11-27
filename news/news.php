@@ -4,14 +4,18 @@
  *
  * $Id: news.php 1190 2009-01-21 16:10:50Z duck $
  *
- * Copyright Obala d.o.o. (www.obala.si)
+ * Copyright 2009 The Horde Project (http://www.horde.org/)
+ *
+ * See the enclosed file COPYING for license information (GPL). If you
+ * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
  *
  * @author  Duck <duck@obala.net>
  * @package News
  */
+
 require_once dirname(__FILE__) . '/lib/base.php';
 
-$id = Util::getFormData('id');
+$id = Horde_Util::getFormData('id');
 $row = $news->get($id);
 
 // check if the news exists
@@ -22,7 +26,7 @@ if ($row instanceof PEAR_Error) {
 }
 
 // check if the news exists
-if (($version = Util::getFormData('version')) !== null) {
+if (($version = Horde_Util::getFormData('version')) !== null) {
     $sql = 'SELECT created, user_uid, content FROM ' . $news->prefix . '_versions WHERE id = ? AND version = ?';
     $version_data = $news->db->getRow($sql, array($id, $version), DB_FETCHMODE_ASSOC);
     if (empty($version_data)) {
@@ -33,7 +37,7 @@ if (($version = Util::getFormData('version')) !== null) {
         $row['content'] = $version_data['content'][NLS::select()]['content'];
         $row['title'] = $version_data['content'][NLS::select()]['title'] .
                         ' (v.' . $version . _(" by ") . $version_data['user_uid'] .
-                        ' @ ' . $news->dateFormat($version_data['created'])  . ')';
+                        ' @ ' . News::dateFormat($version_data['created'])  . ')';
     }
 } else {
     $news->logView($id);
@@ -43,7 +47,6 @@ $title = $row['title'];
 $template_path = News::getTemplatePath($row['category1'], 'news');
 $browse_url = Horde::applicationUrl('browse.php');
 
-Horde::addScriptFile('popup.js', 'horde', true);
 require_once NEWS_TEMPLATES . '/common-header.inc';
 require_once NEWS_TEMPLATES . '/menu.inc';
 

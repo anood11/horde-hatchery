@@ -2,16 +2,20 @@
 /**
  * News
  *
- * $Id: note.php 890 2008-09-23 09:58:23Z duck $
+ * $Id: note.php 1241 2009-01-29 23:27:58Z duck $
  *
- * Copyright Obala d.o.o. (www.obala.si)
+ * Copyright 2009 The Horde Project (http://www.horde.org/)
+ *
+ * See the enclosed file COPYING for license information (GPL). If you
+ * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
  *
  * @author  Duck <duck@obala.net>
  * @package News
  */
+
 require_once dirname(__FILE__) . '/lib/base.php';
 
-$id = Util::getFormData('id');
+$id = Horde_Util::getFormData('id');
 $row = $news->get($id);
 if ($row instanceof PEAR_Error) {
     $notification->push($row);
@@ -19,8 +23,8 @@ if ($row instanceof PEAR_Error) {
     exit;
 }
 
-$body = $row['title'] . "\n\n"getUrlFor
-       . _("On") . ': ' . $news->dateFormat($row['publish']) . "\n"
+$body = $row['title'] . "\n\n"
+       . _("On") . ': ' . News::dateFormat($row['publish']) . "\n"
        . _("Link") . ': ' . News::getUrlFor('news', $id) . "\n\n"
        . strip_tags($row['content']);
 
@@ -30,14 +34,11 @@ $vNote = &Horde_iCalendar::newComponent('vnote', $vCal);
 $vNote->setAttribute('BODY', $body);
 
 /* Attempt to add the new vNote item to the requested notepad. */
-$res = $registry->call('notes/import', array($vNote, 'text/x-vnote'));
-
-if ($res instanceof PEAR_Error) {
-    $notification->push($res);
-    header('Location: ' . News::getUrlFor('news', $id));
-    exit;
-} else {
+try {
+    $registry->call('notes/import', array($vNote, 'text/x-vnote'));
     $notification->push(_("News sucessfuly added to you notes."), 'horde.success');
     header('Location: ' . $registry->getInitialPage('mnemo'));
-    exit;
+} catch (Horde_Exception $e) {
+    $notification->push($e);
+    header('Location: ' . News::getUrlFor('news', $id));
 }

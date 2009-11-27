@@ -2,13 +2,16 @@
 /**
  * $Id: trackback.php 803 2008-08-27 08:29:20Z duck $
  *
+ * Copyright 2009 The Horde Project (http://www.horde.org/)
  *
- * Copyright Obala d.o.o. (www.obala.si)
+ * See the enclosed file COPYING for license information (GPL). If you
+ * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
  *
  * @author  Duck <duck@obala.net>
  * @package News
  */
-define('AUTH_HANDLER', true);
+
+$news_authentication = 'none';
 require_once dirname(__FILE__) . '/lib/base.php';
 
 if ($browser->isRobot()) {
@@ -19,12 +22,12 @@ header('Content-type: text/xml');
 
 /* Try to create object */
 $trackback_data = array(
-    'id'        => Util::getFormData('id'),
+    'id'        => Horde_Util::getFormData('id'),
     'host'      => $_SERVER['REMOTE_ADDR'],
-    'title'     => Util::getFormData('title'),
-    'excerpt'   => Util::getFormData('excerpt'),
-    'url'       => Util::getFormData('url'),
-    'blog_name' => Util::getFormData('blog_name')
+    'title'     => Horde_Util::getFormData('title'),
+    'excerpt'   => Horde_Util::getFormData('excerpt'),
+    'url'       => Horde_Util::getFormData('url'),
+    'blog_name' => Horde_Util::getFormData('blog_name')
 );
 
 $trackback = News::loadTrackback($trackback_data);

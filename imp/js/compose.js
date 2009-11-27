@@ -1,1 +1,419 @@
-var display_unload_warning=true,textarea_ready=true;function confirmCancel(a){if(window.confirm(IMP.text.compose_cancel)){display_unload_warning=false;if(popup){if(cancel_url){self.location=cancel_url}else{self.close()}}else{window.location=cancel_url}return true}else{Event.extend(a);a.stop();return false}}function setCursorPosition(c,a){if(c.setSelectionRange){Field.focus(c);c.setSelectionRange(a,a)}else{if(c.createTextRange){var b=c.createTextRange();b.collapse(true);b.moveStart("character",a);b.moveEnd("character",0);Field.select(b);b.scrollIntoView(true)}}}function redirectSubmit(a){if($F("to")==""){alert(IMP.text.compose_recipient);$("to").focus();Event.extend(a);a.stop();return false}$("redirect").setStyle({cursor:"wait"});display_unload_warning=false;return true}function change_identity(a){var m=identities[$F("last_identity")],d=identities[a],b,e,g,l;if(rtemode){e=FCKeditorAPI.GetInstance("message");b=e.GetHTML.replace(/\r\n/g,"\n");g="<p><!--begin_signature--><!--end_signature--></p>";l="<p><!--begin_signature-->"+d[0].replace(/^ ?<br \/>\n/,"").replace(/ +/g," ")+"<!--end_signature--></p>";b=b.replace(/<p class="imp-signature">\s*<!--begin_signature-->[\s\S]*?<!--end_signature-->\s*<\/p>/,g)}else{b=$F("message").replace(/\r\n/g,"\n");g=m[0].replace(/^\n/,"");l=d[0].replace(/^\n/,"")}var k=(m[1])?b.indexOf(g):b.lastIndexOf(g);if(k!=-1){if(d[1]==m[1]){b=b.substring(0,k)+l+b.substring(k+g.length,b.length)}else{if(d[1]){b=l+b.substring(0,k)+b.substring(k+g.length,b.length)}else{b=b.substring(0,k)+b.substring(k+g.length,b.length)+l}}b=b.replace(/\r\n/g,"\n").replace(/\n/g,"\r\n");$("last_identity").setValue(a);window.status=IMP.text.compose_sigreplace}else{window.status=IMP.text.compose_signotreplace}if(rtemode){e.SetHTML(b)}else{$("message").setValue(b)}var j=$("sent_mail_folder");if(smf_check){var c=0;$A(j.options).detect(function(i){if(i.value==d[2]){j.selectedIndex=c;return true}++c})}else{if(j.firstChild){j.replaceChild(document.createTextNode(d[2]),j.firstChild)}else{j.appendChild(document.createTextNode(d[2]))}}var h=$("ssm");if(h){h.checked=d[3]}var f=$("bcc");if(f){bccval=f.value;if(m[4]){var n=new RegExp(m[4]+",? ?","gi");bccval=bccval.replace(n,"");if(bccval){bccval=bccval.replace(/, ?$/,"")}}if(d[4]){if(bccval){bccval+=", "}bccval+=d[4]}f.setValue(bccval)}}function uniqSubmit(b,a){if(a){Event.extend(a);a.stop()}if(b=="send_message"){if(($F("subject")=="")&&!window.confirm(IMP.text.compose_nosubject)){return}if(compose_spellcheck&&IMP.SpellCheckerObject&&!IMP.SpellCheckerObject.isActive()){IMP.SpellCheckerObject.spellCheck();return}}if(IMP.SpellCheckerObject){IMP.SpellCheckerObject.resume()}if(!Prototype.Browser.WebKit){$("compose").setStyle({cursor:"wait"})}display_unload_warning=false;$("actionID").setValue(b);_uniqSubmit()}function _uniqSubmit(){if(textarea_ready){$("compose").submit()}else{_uniqSubmit.defer()}}function attachmentChanged(){var a=[],e=0;$("upload_atc").select('input[type="file"]').each(function(g){a[a.length]=g});if(max_attachments!==null&&a.length==max_attachments){return}a.each(function(g){if(g.value.length>0){e++}});if(e==a.length){var d=$("attachment_row_"+e);if(d){var f=new Element("TD",{align:"left"}).insert(new Element("STRONG").insert(IMP.text.compose_file+" "+(e+1)+":")).insert("&nbsp;");var c=new Element("INPUT",{type:"file",name:"upload_"+(e+1),size:25});c.observe("change",attachmentChanged);f.insert(c);var b=new Element("TR",{id:"attachment_row_"+(e+1)}).insert(f);d.parentNode.insertBefore(b,d.nextSibling)}}}function initializeSpellChecker(){if(typeof IMP.SpellCheckerObject!="object"){initializeSpellChecker.defer();return}IMP.SpellCheckerObject.onBeforeSpellCheck=function(){IMP.SpellCheckerObject.htmlAreaParent="messageParent";IMP.SpellCheckerObject.htmlArea=$("message").adjacent("iframe[id*=message]").first();$("message").setValue(FCKeditorAPI.GetInstance("message").GetHTML());textarea_ready=false};IMP.SpellCheckerObject.onAfterSpellCheck=function(){IMP.SpellCheckerObject.htmlArea=IMP.SpellCheckerObject.htmlAreaParent=null;var a=FCKeditorAPI.GetInstance("message");a.SetHTML($("message").value);a.Events.AttachEvent("OnAfterSetHTML",function(){textarea_ready=true})}}document.observe("dom:loaded",function(){$$("INPUT").each(function(a){if(a.type!="submit"&&a.type!="button"){a.observe("keydown",function(b){if(b.keyCode==10||b.keyCode==Event.KEY_RETURN){b.stop();return false}})}});if(cursor_pos!==null&&$("message")){setCursorPosition($("message"),cursor_pos)}if(redirect){$("to").focus()}else{if(Prototype.Browser.IE){$("subject").observe("keydown",function(a){if(a.keyCode==Event.KEY_TAB&&!a.shiftKey){a.stop();$("message").focus()}})}if(rtemode){initializeSpellChecker()}if($("to")&&!$F("to")){$("to").focus()}else{if(!$F("subject")){if(rtemode){$("subject").focus()}else{$("message").focus()}}}}});Event.observe(window,"load",function(){if(compose_popup&&!reloaded){var b,a=redirect?$("redirect"):$("compose");b=Math.min(a.getHeight(),screen.height-100)-document.viewport.getHeight();if(b>0){window.resizeBy(0,b)}}});Event.observe(window,"beforeunload",function(){if(display_unload_warning){return IMP.text.compose_discard}});
+/**
+ * Provides the javascript for the compose.php script (standard view).
+ *
+ * See the enclosed file COPYING for license information (GPL). If you
+ * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
+ */
+
+var ImpCompose = {
+    // Variables defined in compose.php:
+    //   cancel_url, spellcheck, cursor_pos, identities, max_attachments,
+    //   popup, redirect, reloaded, rtemode, smf_check, skip_spellcheck
+    display_unload_warning: true,
+
+    confirmCancel: function(e)
+    {
+        if (window.confirm(IMP.text.compose_cancel)) {
+            this.display_unload_warning = false;
+            if (this.popup) {
+                if (this.cancel_url) {
+                    self.location = this.cancel_url;
+                } else {
+                    self.close();
+                }
+            } else {
+                window.location = this.cancel_url;
+            }
+        } else {
+            e.stop();
+        }
+    },
+
+    /**
+     * Sets the cursor to the given position.
+     */
+    setCursorPosition: function(input, position)
+    {
+        if (input.setSelectionRange) {
+            /* This works in Mozilla */
+            Field.focus(input);
+            input.setSelectionRange(position, position);
+            if (position) {
+                (function() { input.scrollTop = input.scrollHeight - input.offsetHeight; }).defer();
+            }
+        } else if (input.createTextRange) {
+            /* This works in IE */
+            var range = input.createTextRange();
+            range.collapse(true);
+            range.moveStart('character', position);
+            range.moveEnd('character', 0);
+            Field.select(range);
+            range.scrollIntoView(true);
+        }
+    },
+
+    changeIdentity: function(elt)
+    {
+        var id = $F(elt),
+            last = this.identities[$F('last_identity')],
+            next = this.identities[id],
+            i = 0,
+            bcc = $('bcc'),
+            save = $('ssm'),
+            smf = $('sent_mail_folder'),
+            lastSignature, msg, nextSignature, pos, re;
+
+        // If the rich text editor is on, we'll use a regexp to find the
+        // signature comment and replace its contents.
+        if (this.rtemode) {
+            msg = CKEDITOR.instances.composeMessage.getData().replace(/\r\n/g, '\n');
+
+            lastSignature = '<p><!--begin_signature--><!--end_signature--></p>';
+            nextSignature = '<p><!--begin_signature-->' + next[0].replace(/^ ?<br \/>\n/, '').replace(/ +/g, ' ') + '<!--end_signature--></p>';
+
+            // Dot-all functionality achieved with [\s\S], see:
+            // http://simonwillison.net/2004/Sep/20/newlines/
+            msg = msg.replace(/<p class="imp-signature">\s*<!--begin_signature-->[\s\S]*?<!--end_signature-->\s*<\/p>/, lastSignature);
+        } else {
+            msg = $F('composeMessage').replace(/\r\n/g, '\n');
+
+            lastSignature = last[0].replace(/^\n/, '');
+            nextSignature = next[0].replace(/^\n/, '');
+        }
+
+        pos = (last[1]) ? msg.indexOf(lastSignature) : msg.lastIndexOf(lastSignature);
+        if (pos != -1) {
+            if (next[1] == last[1]) {
+                msg = msg.substring(0, pos) + nextSignature + msg.substring(pos + lastSignature.length, msg.length);
+            } else if (next[1]) {
+                msg = nextSignature + msg.substring(0, pos) + msg.substring(pos + lastSignature.length, msg.length);
+            } else {
+                msg = msg.substring(0, pos) + msg.substring(pos + lastSignature.length, msg.length) + nextSignature;
+            }
+
+            msg = msg.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+
+            $('last_identity').setValue(id);
+            window.status = IMP.text.compose_sigreplace;
+        } else {
+            window.status = IMP.text.compose_signotreplace;
+        }
+
+        if (this.rtemode) {
+            CKEDITOR.instances.composeMessage.setData(msg);
+        } else {
+            $('composeMessage').setValue(msg);
+        }
+
+
+        if (this.smf_check) {
+            $A(smf.options).detect(function(f) {
+                if (f.value == next[2]) {
+                    smf.selectedIndex = i;
+                    return true;
+                }
+                ++i;
+            });
+        } else {
+            if (smf.firstChild) {
+                smf.replaceChild(document.createTextNode(next[2]), smf.firstChild);
+            } else {
+                smf.appendChild(document.createTextNode(next[2]));
+            }
+        }
+
+        if (save) {
+            save.checked = next[3];
+        }
+        if (bcc) {
+            bccval = bcc.value;
+
+            if (last[4]) {
+                re = new RegExp(last[4] + ",? ?", 'gi');
+                bccval = bccval.replace(re, "");
+                if (bccval) {
+                    bccval = bccval.replace(/, ?$/, "");
+                }
+            }
+
+            if (next[4]) {
+                if (bccval) {
+                    bccval += ', ';
+                }
+                bccval += next[4];
+            }
+
+            bcc.setValue(bccval);
+        }
+    },
+
+    uniqSubmit: function(actionID, e)
+    {
+        var form;
+
+        if (!Object.isUndefined(e)) {
+            e.stop();
+        }
+
+        switch (actionID) {
+        case 'redirect':
+            if ($F('to') == '') {
+                alert(IMP.text.compose_recipient);
+                $('to').focus();
+                return;
+            }
+
+            form = $('redirect');
+            break;
+
+        case 'send_message':
+            if (($F('subject') == '') &&
+                !window.confirm(IMP.text.compose_nosubject)) {
+                return;
+            }
+
+            if (!this.skip_spellcheck &&
+                this.spellcheck &&
+                IMP.SpellCheckerObject &&
+                !IMP.SpellCheckerObject.isActive()) {
+                IMP.SpellCheckerObject.spellCheck(this.onNoSpellError.bind(this, actionID, e));
+                return;
+            }
+
+            this.skip_spellcheck = false;
+
+            if (IMP.SpellCheckerObject) {
+                IMP.SpellCheckerObject.resume();
+            }
+
+            // fall through
+
+        case 'add_attachment':
+        case 'save_draft':
+            form = $('compose');
+            $('actionID').setValue(actionID);
+            break;
+
+        case 'toggle_editor':
+            form = $('compose');
+            break;
+
+        default:
+            return;
+        }
+
+        // Ticket #6727; this breaks on WebKit w/FCKeditor.
+        if (!Prototype.Browser.WebKit) {
+            form.setStyle({ cursor: 'wait' });
+        }
+
+        this.display_unload_warning = false;
+        form.submit();
+    },
+
+    onNoSpellError: function(actionID, e)
+    {
+        this.skip_spellcheck = true;
+        this.uniqSubmit(actionID, e);
+    },
+
+    attachmentChanged: function()
+    {
+        var fields = [],
+            usedFields = 0,
+            lastRow, newRow, td;
+
+        $('upload_atc').select('input[type="file"]').each(function(i) {
+            fields[fields.length] = i;
+        });
+
+        if (this.max_attachments !== null &&
+            fields.length == this.max_attachments) {
+            return;
+        }
+
+        fields.each(function(i) {
+            if (i.value.length > 0) {
+                usedFields++;
+            }
+        });
+
+        if (usedFields == fields.length) {
+            lastRow = $('attachment_row_' + usedFields);
+            if (lastRow) {
+                td = new Element('TD', { align: 'left' }).insert(new Element('STRONG').insert(IMP.text.compose_file + ' ' + (usedFields + 1) + ':')).insert('&nbsp;')
+
+                td.insert(new Element('INPUT', { type: 'file', id: 'upload_' + (usedFields + 1), name: 'upload_' + (usedFields + 1), size: 25 }));
+
+                newRow = new Element('TR', { id: 'attachment_row_' + (usedFields + 1) }).insert(td);
+
+                lastRow.parentNode.insertBefore(newRow, lastRow.nextSibling);
+            }
+        }
+    },
+
+    initializeSpellChecker: function()
+    {
+        if (typeof IMP.SpellCheckerObject != 'object') {
+            // If we fired before the onload that initializes the spellcheck,
+            // wait.
+            this.initializeSpellChecker.bind(this).defer();
+            return;
+        }
+
+        IMP.SpellCheckerObject.onBeforeSpellCheck = this._beforeSpellCheck.bind(this);
+        IMP.SpellCheckerObject.onAfterSpellCheck = this._afterSpellCheck.bind(this);
+    },
+
+    _beforeSpellCheck: function()
+    {
+        IMP.SpellCheckerObject.htmlAreaParent = 'composeMessageParent';
+        $('composeMessage').next().hide();
+        CKEDITOR.instances.composeMessage.updateElement();
+    },
+
+    _afterSpellCheck: function()
+    {
+        IMP.SpellCheckerObject.htmlAreaParent = null;
+        CKEDITOR.instances.composeMessage.setData($F('composeMessage'));
+        $('composeMessage').next().show();
+    },
+
+    clickHandler: function(e)
+    {
+        if (e.isRightClick()) {
+            return;
+        }
+
+        var elt = e.element(), name;
+
+        while (Object.isElement(elt)) {
+            if (elt.hasClassName('button')) {
+                name = elt.readAttribute('name');
+                switch (name) {
+                case 'btn_add_attachment':
+                case 'btn_redirect':
+                case 'btn_save_draft':
+                case 'btn_send_message':
+                    this.uniqSubmit(name.substring(4), e);
+                    break;
+
+                case 'btn_cancel_compose':
+                    this.confirmCancel(e);
+                    break;
+                }
+            }
+
+            elt = elt.up();
+        }
+    },
+
+    changeHandler: function(e)
+    {
+        var elt = e.element(),
+            id = elt.identify();
+
+        switch (id) {
+        case 'identity':
+            this.changeIdentity(elt);
+            break;
+
+        case 'stationery':
+            this.uniqSubmit('change_stationery', e);
+            break;
+
+        case 'sent_mail_folder':
+            $('ssm').writeAttribute('checked', 'checked');
+            break;
+
+        default:
+            if (id.substring(0, 7) == 'upload_') {
+                this.attachmentChanged();
+            }
+            break;
+        }
+    },
+
+    onDomLoad: function()
+    {
+        /* Prevent Return from sending messages - it should bring us out of
+         * autocomplete, not submit the whole form. */
+        $$('INPUT').each(function(i) {
+            /* Attach to everything but button and submit elements. */
+            if (i.type != 'submit' && i.type != 'button') {
+                i.observe('keydown', function(e) {
+                    if (e.keyCode == 10 || e.keyCode == Event.KEY_RETURN) {
+                        e.stop();
+                        return false;
+                    }
+                });
+            }
+        });
+
+        if (this.cursor_pos !== null && $('composeMessage')) {
+            this.setCursorPosition($('composeMessage'), this.cursor_pos);
+        }
+
+        if (this.redirect) {
+            $('to').focus();
+        } else {
+            if (Prototype.Browser.IE) {
+                $('subject').observe('keydown', function(e) {
+                    if (e.keyCode == Event.KEY_TAB && !e.shiftKey) {
+                        e.stop();
+                        $('composeMessage').focus();
+                    }
+                });
+            }
+
+            if (this.rtemode) {
+                this.initializeSpellChecker();
+            }
+
+            if ($('to') && !$F('to')) {
+                $('to').focus();
+            } else if (!$F('subject')) {
+                if (this.rtemode) {
+                    $('subject').focus();
+                } else {
+                    $('composeMessage').focus();
+                }
+            }
+        }
+
+        document.observe('click', this.clickHandler.bindAsEventListener(this));
+        document.observe('change', this.changeHandler.bindAsEventListener(this));
+
+        this.resize.bind(this).delay(0.25);
+    },
+
+    resize: function()
+    {
+        var d, e = this.redirect ? $('redirect') : $('compose');
+
+        if (this.popup && !this.reloaded) {
+            e = e.getHeight();
+            if (!e) {
+                return this.resize.bind(this).defer();
+            }
+            d = Math.min(e, screen.height - 100) - document.viewport.getHeight();
+            if (d > 0) {
+                window.resizeBy(0, d);
+            }
+        }
+    },
+
+    onBeforeUnload: function()
+    {
+        if (this.display_unload_warning) {
+            return IMP.text.compose_discard;
+        }
+    }
+
+};
+
+/* Code to run on window load. */
+document.observe('dom:loaded', ImpCompose.onDomLoad.bind(ImpCompose));
+
+/* Warn before closing the window. */
+Event.observe(window, 'beforeunload', ImpCompose.onBeforeUnload.bind(ImpCompose));

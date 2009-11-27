@@ -2,7 +2,7 @@
 <h1><?php echo $title ?></h1>
 
 <?php
-if ($user == Auth::getAuth()) {
+if ($user == Horde_Auth::getAuth()) {
     echo $form->renderActive(null, null, '', 'post') . '<br />';
 }
 ?>
@@ -17,34 +17,7 @@ if ($user == Auth::getAuth()) {
 
 if ($profile['user_video']) {
 
-?>
-
-<object type="application/x-shockwave-flash" data="<?php echo $registry->get('webroot', 'oscar') ?>/videos/flow_player.swf" width="400" height="300">
-<param name="allowScriptAccess" value="sameDomain" />
-<param name="movie" value="<?php echo $registry->get('webroot', 'oscar') ?>/videos/flow_player.swf" />
-<param name="quality" value="high" />
-<param name="wmode" value="transparent" />
-<param name="autoPlay" value="true" />
-<param name="autoRewind" value="true" />
-<param name="allowfullscreen" value="true" />
-<param name="useNativeFullScreen" value="true" />
-<param name="loop" value="false" />
-<param name="protected" value="true" />
-<param name="flashvars" value="config={
-    playList: [ {
-        url: '<?php echo $registry->get('webroot', 'horde') ?>/vfs/.horde/oscar/<?php echo substr(str_pad($profile['user_video'], 2, 0, STR_PAD_LEFT), -2) . '/' . $profile['user_video'] . '/' . $profile['user_video'] ?>.flv',
-        } ],
-        streamingServer: 'lighttpd',
-    autoBuffering: true,
-    autoPlay: false,
-    initialScale: 'fit',
-    headersOverVideo: 'locked',
-    headerBarBackgroundColor: -1,
-    headerBarGloss: 'none',
-    menuItems: [ false, false, false, false, false, false ]}" />
-</object>
-
-<?php
+    echo $registry->call('video/getEmbedCode', array($profile['user_video']));
 
 } elseif ($profile['user_picture']) {
 
@@ -77,9 +50,9 @@ include FOLKS_TEMPLATES . '/user/actions.php';
             echo '<span class="offline">' . _("Offline") . '</span>';
             if ($profile['last_online_on'] &&
                 ($profile['last_online'] == 'all' ||
-                Auth::isAuthenticated() && (
+                Horde_Auth::isAuthenticated() && (
                     $profile['last_online'] == 'authenticated' ||
-                    $profile['last_online'] == 'friends' && $folks_driver->isFriend($user, Auth::getAuth())))
+                    $profile['last_online'] == 'friends' && $friends_driver->isFriend(Horde_Auth::getAuth())))
                 ) {
                 echo ' ' . _("Last time online") . ': ' . Folks::format_datetime($profile['last_online_on']);
             }
@@ -106,7 +79,15 @@ foreach ($profile['activity_log'] as $item) {
 
 <tr>
     <td><strong><?php echo _("Age") ?></strong></td>
-    <td><?php $age = Folks::calcAge($profile['user_birthday']); echo $age['age'] . ' (' . $age['sign'] . ')'?></td>
+    <td>
+        <?php
+            $age = Folks::calcAge($profile['user_birthday']);
+            echo $age['age'];
+            if ($age['sign']) {
+                echo ' (' . $age['sign'] . ')';
+            }
+        ?>
+    </td>
 </tr>
 <tr>
     <td><strong><?php echo _("Gender") ?></strong></td>
@@ -132,14 +113,14 @@ foreach ($profile['activity_log'] as $item) {
 </tr>
 
 <?php
-$friends = $folks_driver->getFriends($user);
+$friends = $friends_driver->getFriends();
 if (!empty($friends)):
 ?>
 <tr>
 <td class="header" colspan="2">
 <span style="float: right">
-<a href="<?php echo Horde::applicationUrl('edit/friends.php') ?>" title="<?php echo _("Edit my firends") ?>"><img src="<?php echo $registry->getImageDir('horde') ?>/plus.png" /></a>
-<a href="<?php echo Util::addParameter(Horde::applicationUrl('edit/friends.php'), 'user', $user) ?>" title="<?php echo sprintf(_("Add %s as a friend?"), $user) ?>"><img src="<?php echo $registry->getImageDir('horde') ?>/nav/right.png" /></a>
+<a href="<?php echo Horde::applicationUrl('edit/friends/index.php') ?>" title="<?php echo _("Edit my firends") ?>"><img src="<?php echo $registry->getImageDir('horde') ?>/plus.png" /></a>
+<a href="<?php echo Horde_Util::addParameter(Horde::applicationUrl('edit/friends/index.php'), 'user', $user) ?>" title="<?php echo sprintf(_("Add %s as a friend?"), $user) ?>"><img src="<?php echo $registry->getImageDir('horde') ?>/nav/right.png" /></a>
 </span>
 <?php echo _("Friends") ?> (<?php echo count($friends) ?>)
 </td>
@@ -241,7 +222,7 @@ $path = $registry->get('webroot', 'genie');
 <tr>
 <td class="header" colspan="2">
 <span style="float: right">
-<a href="<?php echo $path ?>/wishlist.php?wishlist=<?php echo Auth::getAuth() ?>" title="<?php echo _("Add your content") ?>"><img src="<?php echo $registry->getImageDir('horde') ?>/plus.png" /></a>
+<a href="<?php echo $path ?>/wishlist.php?wishlist=<?php echo Horde_Auth::getAuth() ?>" title="<?php echo _("Add your content") ?>"><img src="<?php echo $registry->getImageDir('horde') ?>/plus.png" /></a>
 <a href="<?php echo $path ?>" title="<?php echo _("Preview") ?>"><img src="<?php echo $registry->getImageDir('horde') ?>/nav/right.png" /></a>
 </span>
 <a href="<?php echo $path ?>/wishlist.php?wishlist=<?php echo $user ?>" title="<?php echo _("Others user content") ?>" ><?php echo $registry->get('name', 'genie') ?> (<?php echo $profile['count_wishes'] ?>)</a>
@@ -267,7 +248,7 @@ $path = $registry->get('webroot', 'ansel');
 <tr>
 <td class="header" colspan="2">
 <span style="float: right">
-<a href="<?php echo $path ?>/view.php?groupby=owner&view=List&owner=<?php echo Auth::getAuth() ?>" title="<?php echo _("Add your content") ?>"><img src="<?php echo $registry->getImageDir('horde') ?>/plus.png" /></a>
+<a href="<?php echo $path ?>/view.php?groupby=owner&view=List&owner=<?php echo Horde_Auth::getAuth() ?>" title="<?php echo _("Add your content") ?>"><img src="<?php echo $registry->getImageDir('horde') ?>/plus.png" /></a>
 <a href="<?php echo $path ?>" title="<?php echo _("Preview") ?>"><img src="<?php echo $registry->getImageDir('horde') ?>/nav/right.png" /></a>
 </span>
 <a href="<?php echo $path ?>/view.php?groupby=owner&view=List&owner=<?php echo $user ?>" title="<?php echo _("Others user content") ?>" ><?php echo $registry->get('name', 'ansel') ?> (<?php echo $profile['count_galleries'] ?>)</a> |
@@ -355,7 +336,7 @@ $path = $registry->get('webroot', 'schedul');
 <td class="header" colspan="2">
 <span style="float: right">
 <a href="/uporabniki/edit/activity.php" title="<?php echo _("Add your content") ?>"><img src="<?php echo $registry->getImageDir('horde') ?>/plus.png" /></a>
-<a href="/uporabniki/friends.php" title="<?php echo _("Preview") ?>"><img src="<?php echo $registry->getImageDir('horde') ?>/nav/right.png" /></a>
+<a href="/uporabniki/friends/index.php" title="<?php echo _("Preview") ?>"><img src="<?php echo $registry->getImageDir('horde') ?>/nav/right.png" /></a>
 </span>
 <?php echo _("Activity") ?>
 </td>
@@ -392,29 +373,28 @@ case 'never':
     break;
 
 case 'authenticated':
-    $allow_comments = Auth::isAuthenticated();
+    $allow_comments = Horde_Auth::isAuthenticated();
     if ($allow_comments) {
-        if ($folks_driver->isBlacklisted($user,  Auth::getAuth())) {
+        if ($friends_driver->isBlacklisted(Horde_Auth::getAuth())) {
             $allow_comments = false;
             $comments_reason = sprintf(_("You are on %s blacklist."), $user);
         }
     } else {
         $comments_reason = _("Only authenticated users can post comments.");
         if ($conf['hooks']['permsdenied']) {
-            $comments_reason = Horde::callHook('_perms_hook_denied', array('folks'), 'horde', $comments_reason);
+            $comments_reason = Horde::callHook('perms_denied', array('folks'));
         }
     }
     break;
 
 case 'friends':
-    $allow_comments = $folks_driver->isFriend($user, Auth::getAuth());
+    $allow_comments = $friends_driver->isFriend(Horde_Auth::getAuth());
     $comments_reason = _("Only authenticated users can post comments.");
     break;
 
 default:
     $allow_comments = true;
-
-    if (Auth::isAuthenticated() && $folks_driver->isBlacklisted($user,  Auth::getAuth())) {
+    if (Horde_Auth::isAuthenticated() && $friends_driver->isBlacklisted(Horde_Auth::getAuth())) {
         $allow_comments = false;
         $comments_reason = sprintf(_("You are on %s blacklist."), $user);
     }

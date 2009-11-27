@@ -1,1 +1,494 @@
-var frames={horde_main:true},DimpCore={remove_gc:[],server_error:0,buttons:["button_reply","button_forward","button_spam","button_ham","button_deleted"],debug:function(a,b){if(!this.is_logout&&DIMP.conf.debug){alert(a+": "+(b instanceof Error?b.name+"-"+b.message:Object.inspect(b))+(b.lineNumber?" (Line #"+b.lineNumber+")":""))}},toRangeString:function(a){var b="";$H(a).each(function(f){if(!f.value.size()){return}var d=f.value.numericSort(),e=last=d.shift(),c=[];d.each(function(g){if(last+1==g){last=g}else{c.push(e+(last==e?"":(":"+last)));e=last=g}});c.push(e+(last==e?"":(":"+last)));b+="{"+f.key.length+"}"+f.key+c.join(",")});return b},parseRangeString:function(g){var e,b,c,f,a={},d=[];g=g.strip();while(!g.blank()){if(!g.startsWith("{")){break}c=g.indexOf("}");e=Number(g.substr(1,c-1));f=g.substr(c+1,e);c+=e+1;b=g.indexOf("{",c);if(b==-1){uidstr=g.substr(c);g=""}else{uidstr=g.substr(c,b-c);g=g.substr(b)}uidstr.split(",").each(function(i){var h=i.split(":");if(h.size()==1){d.push(Number(i))}else{d=d.concat($A($R(Number(h[0]),Number(h[1]))))}});a[f]=d}return a},doAction:function(f,g,e,h,d){var a,c={};if(!this.doActionOpts){this.doActionOpts={onException:function(b,i){this.debug("onException",i)}.bind(this),onFailure:function(b,i){this.debug("onFailure",b)}.bind(this),evalJS:false,evalJSON:true}}d=Object.extend(this.doActionOpts,d||{});g=$H(g);f=f.startsWith("*")?f.substring(1):DIMP.conf.URI_IMP+"/"+f;if(e){if(e.viewport_selection){a=e.getBuffer();if(a.getMetaData("search")){e.get("dataob").each(function(b){if(!c[b.view]){c[b.view]=[]}c[b.view].push(b.imapuid)})}else{c[a.getView()]=e.get("uid")}e=c}g.set("uid",this.toRangeString(e))}if(DIMP.conf.SESSION_ID){g.update(DIMP.conf.SESSION_ID.toQueryParams())}d.parameters=g.toQueryString();d.onComplete=function(b,i){this.doActionComplete(b,h)}.bind(this);new Ajax.Request(f,d)},doActionComplete:function(b,d){this.inAjaxCallback=true;var a;if(!b.responseJSON){if(++this.server_error==3){this.showNotifications([{type:"horde.error",message:DIMP.text.ajax_timeout}])}this.inAjaxCallback=false;return}a=b.responseJSON;if(!a.msgs){a.msgs=[]}if(a.response&&Object.isFunction(d)){if(DIMP.conf.debug){d(a)}else{try{d(a)}catch(c){}}}if(this.server_error>=3){a.msgs.push({type:"horde.success",message:DIMP.text.ajax_recover})}this.server_error=0;if(!a.msgs_noauto){this.showNotifications(a.msgs)}if(this.onDoActionComplete){this.onDoActionComplete(a)}this.inAjaxCallback=false},setTitle:function(a){document.title=DIMP.conf.name+" :: "+a},showNotifications:function(a){if(!a.size()||this.is_logout){return}a.find(function(b){switch(b.type){case"dimp.timeout":this.logout(DIMP.conf.timeout_url);return true;case"horde.error":case"horde.message":case"horde.success":case"horde.warning":case"imp.reply":case"imp.forward":case"imp.redirect":case"dimp.request":case"dimp.sticky":var e,d,c,g=$("alerts"),h=new Element("DIV",{className:b.type.replace(".","-")}),f=b.message;if(!g){g=new Element("DIV",{id:"alerts"});$(document.body).insert(g)}if($w("dimp.request dimp.sticky").indexOf(b.type)==-1){f=f.unescapeHTML().unescapeHTML()}g.insert(h.update(f));if(DIMP.conf.is_ie6){e=new Element("DIV",{id:"ie6alertsfix"}).clonePosition(h,{setLeft:false,setTop:false});e.insert(h.remove());g.insert(e)}if($w("horde.error dimp.request dimp.sticky").indexOf(b.type)==-1){this.alertsFade.bind(this,h).delay(b.type=="horde.warning"?10:3)}if(b.type=="dimp.request"){this.alertrequest=h}if(c=$("alertslog")){switch(b.type){case"horde.error":d=DIMP.text.alog_error;break;case"horde.message":d=DIMP.text.alog_message;break;case"horde.success":d=DIMP.text.alog_success;break;case"horde.warning":d=DIMP.text.alog_warning;break}if(d){c=c.down("DIV UL");if(c.down().hasClassName("noalerts")){c.down().remove()}c.insert(new Element("LI").insert(new Element("P",{className:"label"}).insert(d)).insert(new Element("P",{className:"indent"}).insert(f).insert(new Element("SPAN",{className:"alertdate"}).insert("["+(new Date).toLocaleString()+"]"))))}}}},this)},alertsFade:function(a){if(a){Effect.Fade(a,{duration:1.5,afterFinish:this.removeAlert.bind(this)})}},toggleAlertsLog:function(){var a=$("alertsloglink").down("A"),c=$("alertslog").down("DIV"),b={duration:0.5};if(c.visible()){Effect.BlindUp(c,b);a.update(DIMP.text.showalog)}else{Effect.BlindDown(c,b);a.update(DIMP.text.hidealog)}},removeAlert:function(c){try{var a=$(c.element),b=a.up();this.addGC(a.remove());if(!b.childElements().size()&&b.readAttribute("id")=="ie6alertsfix"){this.addGC(b.remove())}}catch(d){this.debug("removeAlert",d)}},compose:function(c,b){var a=DIMP.conf.compose_url;b=b||{};if(c){b.type=c}this.popupWindow(this.addURLParam(a,b),"compose"+new Date().getTime())},popupWindow:function(b,a){if(!(window.open(b,a.replace(/\W/g,"_"),"width="+DIMP.conf.popup_width+",height="+DIMP.conf.popup_height+",status=1,scrollbars=yes,resizable=yes"))){this.showNotifications([{type:"horde.warning",message:DIMP.text.popup_block}])}},closePopup:function(){if(this.inAjaxCallback){this.closePopup.bind(this).defer()}else{window.close()}},logout:function(a){this.is_logout=true;this.redirect(a||(DIMP.conf.URI_IMP+"/LogOut"))},redirect:function(a){a=this.addURLParam(a);if(parent.frames.horde_main){parent.location=a}else{window.location=a}},removeMouseEvents:function(a){this.DMenu.removeElement($(a).identify());this.addGC(a)},addPopdown:function(b,a){var c=$(b);c.insert({after:$($("popdown_img").cloneNode(false)).writeAttribute("id",b+"_img").show()});this.DMenu.addElement(b+"_img","ctx_"+a,{offset:c.up(),left:true})},buildAddressLinks:function(d,a){var e,c,b=d.size();if(b>15){c=$("largeaddrspan").cloneNode(true);a.insert(c);e=c.down(".dispaddrlist");c=c.down();this.clickObserveHandler({d:c,f:function(f){[f.down(),f.down(1),f.next()].invoke("toggle")}.curry(c)});c=c.down();c.setText(c.getText().replace("%d",b))}else{e=a}d.each(function(j,h){var f,g;if(j.raw){f=j.raw}else{g=j.personal?(j.personal+" <"+j.inner+">"):j.inner;f=new Element("A",{className:"address",personal:j.personal,email:j.inner,address:g}).insert(g.escapeHTML());this.DMenu.addElement(f.identify(),"ctx_contacts",{offset:f,left:true})}e.insert(f);if(h+1!=b){e.insert(", ")}},this);return a},removeAddressLinks:function(a){[a.select(".address"),a.select(".largeaddrtoggle")].flatten().compact().each(this.removeMouseEvents.bind(this))},addGC:function(a){this.remove_gc=this.remove_gc.concat(a)},addURLParam:function(a,c){var b=a.indexOf("?");c=$H(c);if(DIMP.conf.SESSION_ID){c.update(DIMP.conf.SESSION_ID.toQueryParams())}if(b!=-1){c.update(a.toQueryParams());a=a.substring(0,b)}return c.size()?(a+"?"+c.toQueryString()):a},reloadMessage:function(a){if(typeof DimpFullmessage!="undefined"){window.location=this.addURLParam(document.location.href,a)}else{DimpBase.loadPreview(null,a)}},_clickHandler:function(c){if(c.isRightClick()){return}var a=c.element(),d,b;if(this.alertrequest){this.alertsFade(this.alertrequest);this.alertrequest=null}while(Object.isElement(a)){d=a.readAttribute("id");switch(d){case"partlist_toggle":b=$("partlist");$("partlist_col","partlist_exp").invoke("toggle");if(b.visible()){Effect.BlindUp(b,{duration:0.2})}else{Effect.BlindDown(b,{duration:0.2})}c.stop();return;case"msg_print":window.print();c.stop();return;case"msg_view_source":this.popupWindow(this.addURLParam(DIMP.conf.URI_VIEW,{index:DIMP.conf.msg_index,mailbox:DIMP.conf.msg_folder,actionID:"view_source",id:0},true),DIMP.conf.msg_index+"|"+DIMP.conf.msg_folder);break;case"ctx_contacts_new":this.compose("new",{to:this.DMenu.element().readAttribute("address")});break;case"ctx_contacts_add":this.doAction("AddContact",{name:this.DMenu.element().readAttribute("personal"),email:this.DMenu.element().readAttribute("email")},null,true);break;case"alertsloglink":this.toggleAlertsLog();break;case"alerts":this.alertsFade(a);break}a=a.up()}}};if(typeof ContextSensitive!="undefined"){DimpCore.DMenu=new ContextSensitive()}document.observe("dom:loaded",function(){try{if(parent.opener&&parent.opener.location.host==window.location.host&&parent.opener.DimpCore){DIMP.baseWindow=parent.opener.DIMP.baseWindow||parent.opener}}catch(a){}if(!DIMP.conf.spam_reporting){DimpCore.buttons=DimpCore.buttons.without("button_spam")}if(!DIMP.conf.ham_reporting){DimpCore.buttons=DimpCore.buttons.without("button_ham")}new PeriodicalExecuter(function(){if(DimpCore.remove_gc.size()){try{$A(DimpCore.remove_gc.splice(0,75)).compact().invoke("stopObserving")}catch(b){DimpCore.debug("remove_gc[].stopObserving",b)}}},10);document.observe("click",DimpCore._clickHandler.bindAsEventListener(DimpCore))});Event.observe(window,"load",function(){DimpCore.window_load=true});Element.addMethods({setText:function(b,c){var a=0;$A(b.childNodes).each(function(d){if(d.nodeType==3){if(a++){Element.remove(d)}else{d.nodeValue=c}}});if(!a){$(b).insert(c)}},getText:function(b,a){var c="";$A(b.childNodes).each(function(d){if(d.nodeType==3){c+=d.nodeValue}else{if(a&&d.hasChildNodes()){c+=$(d).getText(true)}}});return c}});Object.extend(Array.prototype,{numericSort:function(){return this.collect(Number).sort(function(d,c){if(d>c){return 1}else{if(d<c){return-1}}return 0})}});Object.extend(String.prototype,{evalScripts:function(){var re=/function\s+([^\s(]+)/g;this.extractScripts().each(function(s){var func;eval(s);while(func=re.exec(s)){window[func[1]]=eval(func[1])}})}});
+/**
+ * DimpCore.js - Dimp UI application logic.
+ *
+ * Copyright 2005-2009 The Horde Project (http://www.horde.org/)
+ *
+ * See the enclosed file COPYING for license information (GPL). If you
+ * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
+ */
+
+/* DimpCore object. */
+var DimpCore = {
+    // Vars used and defaulting to null/false:
+    //   DMenu, Growler, inAjaxCallback, is_init, is_logout
+    //   onDoActionComplete
+    growler_log: true,
+    is_ie6: Prototype.Browser.IE && !window.XMLHttpRequest,
+    server_error: 0,
+
+    doActionOpts: {
+        onException: function(r, e) { DimpCore.debug('onException', e); },
+        onFailure: function(t, o) { DimpCore.debug('onFailure', t); },
+        evalJS: false,
+        evalJSON: true
+    },
+
+    debug: function(label, e)
+    {
+        if (!this.is_logout && window.console && window.console.error) {
+            window.console.error(label, Prototype.Browser.Gecko ? e : $H(e).inspect());
+        }
+    },
+
+    // Convert object to an IMP UID Range string. See IMP::toRangeString()
+    // ob = (object) mailbox name as keys, values are array of uids.
+    toRangeString: function(ob)
+    {
+        var str = '';
+
+        $H(ob).each(function(o) {
+            if (!o.value.size()) {
+                return;
+            }
+
+            var u = o.value.numericSort(),
+                first = u.shift(),
+                last = first,
+                out = [];
+
+            u.each(function(k) {
+                if (last + 1 == k) {
+                    last = k;
+                } else {
+                    out.push(first + (last == first ? '' : (':' + last)));
+                    first = last = k;
+                }
+            });
+            out.push(first + (last == first ? '' : (':' + last)));
+            str += '{' + o.key.length + '}' + o.key + out.join(',');
+        });
+
+        return str;
+    },
+
+    // Parses an IMP UID Range string. See IMP::parseRangeString()
+    // str = (string) An IMP UID range string.
+    parseRangeString: function(str)
+    {
+        var count, end, i, mbox,
+            mlist = {},
+            uids = [];
+        str = str.strip();
+
+        while (!str.blank()) {
+            if (!str.startsWith('{')) {
+                break;
+            }
+            i = str.indexOf('}');
+            count = Number(str.substr(1, i - 1));
+            mbox = str.substr(i + 1, count);
+            i += count + 1;
+            end = str.indexOf('{', i);
+            if (end == -1) {
+                uidstr = str.substr(i);
+                str = '';
+            } else {
+                uidstr = str.substr(i, end - i);
+                str = str.substr(end);
+            }
+
+            uidstr.split(',').each(function(e) {
+                var r = e.split(':');
+                if (r.size() == 1) {
+                    uids.push(Number(e));
+                } else {
+                    uids = uids.concat($A($R(Number(r[0]), Number(r[1]))));
+                }
+            });
+
+            mlist[mbox] = uids;
+        }
+
+        return mlist;
+    },
+
+    /* 'action' -> if action begins with a '*', the exact string will be used
+     *  instead of sending the action to the IMP handler.
+     *  'opts' -> ajaxopts, callback, uids */
+    doAction: function(action, params, opts)
+    {
+        action = action.startsWith('*')
+            ? action.substring(1)
+            : DIMP.conf.URI_AJAX + '/' + action;
+        params = $H(params);
+        opts = opts || {};
+
+        var b,
+            ajaxopts = Object.extend(this.doActionOpts, opts.ajaxopts || {}),
+            tmp = {};
+
+        if (opts.uids) {
+            if (opts.uids.viewport_selection) {
+                b = opts.uids.getBuffer();
+                if (b.getMetaData('search')) {
+                    opts.uids.get('dataob').each(function(r) {
+                        if (!tmp[r.view]) {
+                            tmp[r.view] = [];
+                        }
+                        tmp[r.view].push(r.imapuid);
+                    });
+                } else {
+                    tmp[b.getView()] = opts.uids.get('uid');
+                }
+                opts.uids = tmp;
+            }
+            params.set('uid', this.toRangeString(opts.uids));
+        }
+
+        ajaxopts.parameters = this.addRequestParams(params);
+        ajaxopts.onComplete = function(t, o) { this.doActionComplete(t, opts.callback); }.bind(this);
+
+        new Ajax.Request(action, ajaxopts);
+    },
+
+    // params - (Hash)
+    addRequestParams: function(params)
+    {
+        var p = params.clone();
+
+        if (DIMP.conf.SESSION_ID) {
+            p.update(DIMP.conf.SESSION_ID.toQueryParams());
+        }
+
+        return p;
+    },
+
+    doActionComplete: function(request, callback)
+    {
+        this.inAjaxCallback = true;
+
+        if (!request.responseJSON) {
+            if (++this.server_error == 3) {
+                this.showNotifications([ { type: 'horde.error', message: DIMP.text.ajax_timeout } ]);
+            }
+            this.inAjaxCallback = false;
+            return;
+        }
+
+        var r = request.responseJSON;
+
+        if (!r.msgs) {
+            r.msgs = [];
+        }
+
+        if (r.response && Object.isFunction(callback)) {
+            try {
+                callback(r);
+            } catch (e) {
+                this.debug('doActionComplete', e);
+            }
+        }
+
+        if (this.server_error >= 3) {
+            r.msgs.push({ type: 'horde.success', message: DIMP.text.ajax_recover });
+        }
+        this.server_error = 0;
+
+        this.showNotifications(r.msgs);
+
+        if (r.response && this.onDoActionComplete) {
+            this.onDoActionComplete(r.response);
+        }
+
+        this.inAjaxCallback = false;
+    },
+
+    setTitle: function(title)
+    {
+        document.title = DIMP.conf.name + ' :: ' + title;
+    },
+
+    showNotifications: function(msgs)
+    {
+        if (!msgs.size() || this.is_logout) {
+            return;
+        }
+
+        msgs.find(function(m) {
+            var log = 0;
+
+            switch (m.type) {
+            case 'dimp.timeout':
+                this.logout(m.message);
+                return true;
+
+            case 'horde.error':
+            case 'horde.message':
+            case 'horde.success':
+            case 'horde.warning':
+                log = 1;
+                // Fall through to below case.
+
+            case 'imp.reply':
+            case 'imp.forward':
+            case 'imp.redirect':
+                this.Growler.growl(m.message, {
+                    className: m.type.replace('.', '-'),
+                    life: 8,
+                    log: log,
+                    sticky: m.type == 'horde.error'
+                });
+            }
+        }, this);
+    },
+
+    compose: function(type, args)
+    {
+        var url = DIMP.conf.URI_COMPOSE;
+        args = args || {};
+        if (type) {
+            args.type = type;
+        }
+        this.popupWindow(this.addURLParam(url, args), 'compose' + new Date().getTime());
+    },
+
+    popupWindow: function(url, name)
+    {
+        if (!(window.open(url, name.replace(/\W/g, '_'), 'width=' + DIMP.conf.popup_width + ',height=' + DIMP.conf.popup_height + ',status=1,scrollbars=yes,resizable=yes'))) {
+            this.showNotifications([ { type: 'horde.warning', message: DIMP.text.popup_block } ]);
+        }
+    },
+
+    closePopup: function()
+    {
+        // Mozilla bug/feature: it will not close a browser window
+        // automatically if there is code remaining to be performed (or, at
+        // least, not here) unless the mouse is moved or a keyboard event
+        // is triggered after the callback is complete. (As of FF 2.0.0.3 and
+        // 1.5.0.11).  So wait for the callback to complete before attempting
+        // to close the window.
+        if (this.inAjaxCallback) {
+            this.closePopup.bind(this).defer();
+        } else {
+            window.close();
+        }
+    },
+
+    logout: function(url)
+    {
+        this.is_logout = true;
+        this.redirect(url || (DIMP.conf.URI_AJAX + '/LogOut'));
+    },
+
+    redirect: function(url, force)
+    {
+        var ptr = parent.frames.horde_main ? parent : window;
+
+        ptr.location.assign(this.addURLParam(url));
+
+        // Catch browsers that don't redirect on assign().
+        if (force && !Prototype.Browser.WebKit) {
+            (function() { ptr.location.reload(); }).delay(0.5);
+        }
+    },
+
+    /* Add dropdown menus to addresses. */
+    buildAddressLinks: function(alist, elt)
+    {
+        var base, tmp,
+            cnt = alist.size();
+
+        if (cnt > 15) {
+            tmp = $('largeaddrspan').cloneNode(true).writeAttribute('id', 'largeaddrspan_active');
+            elt.insert(tmp);
+            base = tmp.down('.dispaddrlist');
+            tmp = tmp.down('.largeaddrlist');
+            tmp.setText(tmp.getText().replace('%d', cnt));
+        } else {
+            base = elt;
+        }
+
+        alist.each(function(o, i) {
+            var a;
+            if (o.raw) {
+                a = o.raw;
+            } else {
+                a = new Element('A', { className: 'address' }).store({ personal: o.personal, email: o.inner, address: (o.personal ? (o.personal + ' <' + o.inner + '>') : o.inner) });
+                if (o.personal) {
+                    a.writeAttribute({ title: o.inner }).insert(o.personal.escapeHTML());
+                } else {
+                    a.insert(o.inner.escapeHTML());
+                }
+                this.DMenu.addElement(a.identify(), 'ctx_contacts', { offset: a, left: true });
+            }
+            base.insert(a);
+            if (i + 1 != cnt) {
+                base.insert(', ');
+            }
+        }, this);
+
+        return elt;
+    },
+
+    /* Add message log info to message view. */
+    updateMsgLog: function(log)
+    {
+        var tmp = '';
+        log.each(function(entry) {
+            tmp += '<li><span class="iconImg imp-' + entry.t + '"></span>' + entry.m + '</li>';
+        });
+        $('msgloglist').down('UL').update(tmp);
+    },
+
+    /* Removes event handlers from address links. */
+    removeAddressLinks: function(id)
+    {
+        id.select('.address').each(function(elt) {
+            this.DMenu.removeElement(elt.identify());
+        }, this);
+    },
+
+    addURLParam: function(url, params)
+    {
+        var q = url.indexOf('?');
+        params = $H(params);
+
+        if (DIMP.conf.SESSION_ID) {
+            params.update(DIMP.conf.SESSION_ID.toQueryParams());
+        }
+
+        if (q != -1) {
+            params.update(url.toQueryParams());
+            url = url.substring(0, q);
+        }
+
+        return params.size() ? (url + '?' + params.toQueryString()) : url;
+    },
+
+    reloadMessage: function(params)
+    {
+        if (typeof DimpFullmessage != 'undefined') {
+            window.location = this.addURLParam(document.location.href, params);
+        } else {
+            DimpBase.loadPreview(null, params);
+        }
+    },
+
+    /* Mouse click handler. */
+    clickHandler: function(e)
+    {
+        if (e.isRightClick()) {
+            return;
+        }
+
+        var elt = e.element(), id, tmp;
+
+        while (Object.isElement(elt)) {
+            id = elt.readAttribute('id');
+
+            switch (id) {
+            case 'msg_print':
+                window.print();
+                break;
+
+            case 'alertsloglink':
+                $('alertsloglink').down('A').update(this.Growler.toggleLog() ? DIMP.text.hidealog : DIMP.text.showalog);
+                break;
+
+            case 'largeaddrspan_active':
+                tmp = elt.down();
+                if (!tmp.next().visible() ||
+                    e.element().hasClassName('largeaddrlist')) {
+                    [ tmp.down(), tmp.down(1), tmp.next() ].invoke('toggle');
+                }
+                break;
+
+            default:
+                // CSS class based matching
+                if (elt.hasClassName('unblockImageLink')) {
+                    IMP.unblockImages(e);
+                } else if (elt.hasClassName('toggleQuoteShow')) {
+                    [ elt, elt.next() ].invoke('toggle');
+                    elt.next(1).blindDown({ duration: 0.2, queue: { position: 'end', scope: 'showquote', limit: 2 } });
+                } else if (elt.hasClassName('toggleQuoteHide')) {
+                    [ elt, elt.previous() ].invoke('toggle');
+                    elt.next().blindUp({ duration: 0.2, queue: { position: 'end', scope: 'showquote', limit: 2 } });
+                } else if (elt.hasClassName('pgpVerifyMsg')) {
+                    elt.replace(DIMP.text.verify);
+                    DimpCore.reloadMessage({ pgp_verify_msg: 1 });
+                    e.stop();
+                } else if (elt.hasClassName('smimeVerifyMsg')) {
+                    elt.replace(DIMP.text.verify);
+                    DimpCore.reloadMessage({ smime_verify_msg: 1 });
+                    e.stop();
+                }
+                break;
+            }
+
+            elt = elt.up();
+        }
+    },
+
+    contextOnShow: function(ctx_id, baseelt)
+    {
+        var tmp;
+
+        switch (ctx_id) {
+        case 'ctx_contacts':
+            tmp = $(ctx_id).down('DIV.contactAddr');
+            if (tmp) {
+                tmp.next().remove();
+                tmp.remove();
+            }
+
+            // Add e-mail info to context menu if personal name is shown on
+            // page.
+            if (baseelt.retrieve('personal')) {
+                $(ctx_id).insert({ top: new Element('DIV', { className: 'sep' }) });
+                $(ctx_id).insert({ top: new Element('DIV', { className: 'contactAddr' }).insert(baseelt.retrieve('email').escapeHTML()) });
+            }
+            break;
+        }
+    },
+
+    contextOnClick: function(elt, baseelt, menu)
+    {
+        switch (elt.readAttribute('id')) {
+        case 'ctx_contacts_new':
+            this.compose('new', { to: baseelt.retrieve('address') });
+            break;
+
+        case 'ctx_contacts_add':
+            this.doAction('AddContact', { name: baseelt.retrieve('personal'), email: baseelt.retrieve('email') }, {}, true);
+            break;
+        }
+    },
+
+    /* DIMP initialization function. */
+    init: function()
+    {
+        if (this.is_init) {
+            return;
+        }
+        this.is_init = true;
+
+        if (typeof ContextSensitive != 'undefined') {
+            this.DMenu = new ContextSensitive({
+                onClick: this.contextOnClick.bind(this),
+                onShow: this.contextOnShow.bind(this)
+            });
+        }
+
+        /* Add Growler notification handler. */
+        this.Growler = new Growler({
+            location: 'br',
+            log: this.growler_log,
+            noalerts: DIMP.text.noalerts
+        });
+
+        /* Add click handler. */
+        document.observe('click', DimpCore.clickHandler.bindAsEventListener(DimpCore));
+
+        /* Determine base window. Need a try/catch block here since, if the
+         * page was loaded by an opener out of this current domain, this will
+         * throw an exception. */
+        try {
+            if (parent.opener &&
+                parent.opener.location.host == window.location.host &&
+                parent.opener.DimpCore) {
+                DIMP.baseWindow = parent.opener.DIMP.baseWindow || parent.opener;
+            }
+        } catch (e) {}
+    }
+
+};

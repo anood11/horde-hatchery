@@ -1,1 +1,101 @@
-var IMPDialog={display:function(a){if(Object.isString(a)){a=decodeURIComponent(a).evalJSON(true)}if(a.dialog_load){new Ajax.Request(a.dialog_load,{onComplete:this._onComplete.bind(this)})}else{this._display(a)}},_onComplete:function(a){this._display(a.responseJSON.response)},_display:function(a){this.action=a.action;this.params=a.params;this.uri=a.uri;var b=new Element("FORM",{action:"#",id:"RB_confirm"}).insert(new Element("P").insert(a.text));if(a.form){b.insert(a.form)}else{b.insert(new Element("INPUT",{name:"dialog_input",type:"text",size:15}))}if(a.ok_text){b.insert(new Element("INPUT",{type:"button",className:"button",value:a.ok_text}).observe("click",this._onClick.bind(this)))}b.insert(new Element("INPUT",{type:"button",className:"button",value:a.cancel_text}).observe("click",this._close.bind(this))).observe("keydown",function(c){if((c.keyCode||c.charCode)==Event.KEY_RETURN){c.stop();this._onClick(c)}}.bind(this));RedBox.overlay=true;RedBox.onDisplay=Form.focusFirstElement.curry(b);RedBox.showHtml(b)},_close:function(){var a=RedBox.getWindowContents();[a,a.descendants()].flatten().compact().invoke("stopObserving");RedBox.close()},_onClick:function(a){var b=$H((!this.params||Object.isArray(this.params))?{}:this.params);b.update(a.findElement("form").serialize(true));new Ajax.Request(this.uri,{parameters:b,onSuccess:this._onSuccess.bind(this),onFailure:this._onFailure.bind(this)})},_onSuccess:function(r){r=r.responseJSON;if(r.response.success){this._close();if(this.action){if(Object.isFunction(this.action)){this.action()}else{eval(this.action)()}}else{location.reload()}}else{if(r.response.error){alert(r.response.error)}}},_onFailure:function(a){}};
+/**
+ * Javascript code used to display a RedBox dialog.
+ *
+ * Copyright 2008-2009 The Horde Project (http://www.horde.org/)
+ *
+ * See the enclosed file COPYING for license information (GPL). If you
+ * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
+ *
+ * @author Michael Slusarz <slusarz@curecanti.org>
+ */
+
+var IMPDialog = {
+
+    display: function(data)
+    {
+        if (Object.isString(data)) {
+            data = decodeURIComponent(data).evalJSON(true);
+        }
+        if (data.dialog_load) {
+            new Ajax.Request(data.dialog_load, { onComplete: this._onComplete.bind(this) });
+        } else {
+            this._display(data);
+        }
+    },
+
+    _onComplete: function(response)
+    {
+        this._display(response.responseJSON.response);
+    },
+
+    _display: function(data)
+    {
+        this.action = data.action;
+        this.params = data.params;
+        this.uri = data.uri;
+
+        var n = new Element('FORM', { action: '#', id: 'RB_confirm' }).insert(
+                    new Element('P').insert(data.text)
+                );
+
+        if (data.form) {
+            n.insert(data.form);
+        } else {
+            n.insert(new Element('INPUT', { name: 'dialog_input', type: data.password ? 'password' : 'text', size: 15 }));
+        }
+
+        if (data.ok_text) {
+            n.insert(
+                new Element('INPUT', { type: 'button', className: 'button', value: data.ok_text }).observe('click', this._onClick.bind(this))
+            );
+        }
+
+        n.insert(
+            new Element('INPUT', { type: 'button', className: 'button', value: data.cancel_text }).observe('click', this._close.bind(this))
+        ).observe('keydown', function(e) { if ((e.keyCode || e.charCode) == Event.KEY_RETURN) { e.stop(); this._onClick(e); } }.bind(this));
+
+        RedBox.overlay = true;
+        RedBox.onDisplay = Form.focusFirstElement.curry(n);
+        RedBox.showHtml(n);
+    },
+
+    _close: function()
+    {
+        var c = RedBox.getWindowContents();
+        [ c, c.descendants()].flatten().compact().invoke('stopObserving');
+        RedBox.close();
+    },
+
+    _onClick: function(e)
+    {
+        var params = $H((!this.params || Object.isArray(this.params)) ? {} : this.params);
+        params.update(e.findElement('form').serialize(true));
+
+        new Ajax.Request(this.uri, { parameters: params, onSuccess: this._onSuccess.bind(this), onFailure: this._onFailure.bind(this) });
+    },
+
+    _onSuccess: function(r)
+    {
+        r = r.responseJSON;
+
+        if (r.response.success) {
+            this._close();
+            if (this.action) {
+                if (Object.isFunction(this.action)) {
+                    this.action();
+                } else {
+                    eval(this.action)();
+                }
+            } else {
+                location.reload();
+            }
+        } else if (r.response.error) {
+            alert(r.response.error);
+        }
+    },
+
+    _onFailure: function(r)
+    {
+    }
+
+};

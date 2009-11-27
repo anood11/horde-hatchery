@@ -6,7 +6,7 @@
  * <pre>
  * 'sourceroot': The source root for this repository
  * 'paths': Hash with the locations of all necessary binaries: 'rcsdiff',
- *          'rlog', 'cvsps', 'cvsps_home' and the temp path: 'temp'
+ *          'rlog', 'cvsps', 'cvsps_home', and 'temp' (the temp path).
  * </pre>
  *
  * Copyright 2000-2009 The Horde Project (http://www.horde.org/)
@@ -15,10 +15,18 @@
  * did not receive this file, see http://www.fsf.org/copyleft/lgpl.html.
  *
  * @author  Anil Madhavapeddy <anil@recoil.org>
+ * @author  Michael Slusarz <slusarz@horde.org>
  * @package Horde_Vcs
  */
 class Horde_Vcs_Cvs extends Horde_Vcs_Rcs
 {
+    /**
+     * Does driver support patchsets?
+     *
+     * @var boolean
+     */
+    protected $_patchsets = true;
+
     /**
      * Does driver support deleted files?
      *
@@ -34,13 +42,15 @@ class Horde_Vcs_Cvs extends Horde_Vcs_Rcs
     protected $_branches = true;
 
     /**
-     * Returns the temporary file path.
+     * Does this driver support the given feature?
      *
-     * @return string  Temporary file path.
+     * @return boolean  True if driver supports the given feature.
      */
-    public function getTempPath()
+    public function hasFeature($feature)
     {
-        return $this->_paths['temp'];
+        return (($feature != 'patchsets') || $this->getPath('cvsps'))
+            ? parent::hasFeature($feature)
+            : false;
     }
 
     /**
@@ -50,6 +60,66 @@ class Horde_Vcs_Cvs extends Horde_Vcs_Rcs
     {
         return @is_file($where . ',v') ||
                @is_file(dirname($where) . '/Attic/' . basename($where) . ',v');
+    }
+
+    /**
+     * Obtain the differences between two revisions of a file.
+     *
+     * @param Horde_Vcs_File $file  The desired file.
+     * @param string $rev1          Original revision number to compare from.
+     * @param string $rev2          New revision number to compare against.
+     * @param array $opts           The following optional options:
+     * <pre>
+     * 'num' - (integer) DEFAULT: 3
+     * 'type' - (string) DEFAULT: 'unified'
+     * 'ws' - (boolean) DEFAULT: true
+     * </pre>
+     *
+     * @return string|boolean  False on failure, or a string containing the
+     *                         diff on success.
+     */
+    protected function _diff($file, $rev1, $rev2, $opts)
+    {
+        $fullName = $file->queryFullPath();
+        $diff = array();
+        $flags = '-kk ';
+
+        if (!$opts['ws']) {
+            $flags .= ' -bB ';
+        }
+
+        switch ($opts['type']) {
+        case 'context':
+            $flags .= '-p --context=' . escapeshellarg((int)$opts['num']);
+            break;
+
+        case 'unified':
+            $flags .= '-p --unified=' . escapeshellarg((int)$opts['num']);
+            break;
+
+        case 'column':
+            $flags .= '--side-by-side --width=120';
+            break;
+
+        case 'ed':
+            $flags .= '-e';
+            break;
+        }
+
+        // Windows versions of cvs always return $where with forwards slashes.
+        if (VC_WINDOWS) {
+            $fullName = str_replace(DIRECTORY_SEPARATOR, '/', $fullName);
+        }
+
+        // TODO: add options for $hr options - however these may not be
+        // compatible with some diffs.
+        $command = escapeshellcmd($this->getPath('rcsdiff')) . ' ' . $flags . ' -r' . escapeshellarg($rev1) . ' -r' . escapeshellarg($rev2) . ' ' . escapeshellarg($fullName) . ' 2>&1';
+        if (VC_WINDOWS) {
+            $command .= ' < ' . escapeshellarg(__FILE__);
+        }
+
+        exec($command, $diff, $retval);
+        return ($retval > 0) ? $diff : array();
     }
 
     /**
@@ -73,23 +143,17 @@ class Horde_Vcs_Cvs extends Horde_Vcs_Rcs
 
     /**
      * TODO
-     */
-    public function getPatchsetObject($filename, $cache = null)
-    {
-        return parent::getPatchsetObject($this->sourceroot() . '/' . $filename, $cache);
-    }
-
-    /**
-     * TODO
+     *
+     * @throws Horde_Vcs_Exception
      */
     public function annotate($fileob, $rev)
     {
         $this->assertValidRevision($rev);
 
-        $tmpfile = Util::getTempFile('vc', true, $this->getTempPath());
+        $tmpfile = Horde_Util::getTempFile('vc', true, $this->_paths['temp']);
         $where = $fileob->queryModulePath();
 
-        $pipe = popen($this->getPath('cvs') . ' -n server > ' . escapeshellarg($tmpfile), VC_WINDOWS ? 'wb' : 'w');
+        $pipe = popen(escapeshellcmd($this->getPath('cvs')) . ' -n server > ' . escapeshellarg($tmpfile), VC_WINDOWS ? 'wb' : 'w');
 
         $out = array(
             'Root ' . $this->sourceroot(),
@@ -162,12 +226,13 @@ class Horde_Vcs_Cvs extends Horde_Vcs_Rcs
      * @param string $rev       Revision number to check out.
      *
      * @return resource  A stream pointer to the head of the checkout.
+     * @throws Horde_Vcs_Exception
      */
     public function checkout($fullname, $rev)
     {
-        $rep->assertValidRevision($rev);
+        $this->assertValidRevision($rev);
 
-        if (!($RCS = popen($this->getPath('co') . ' ' . escapeshellarg('-p' . $rev) . ' ' . escapeshellarg($fullname) . " 2>&1", VC_WINDOWS ? 'rb' : 'r'))) {
+        if (!($RCS = popen(escapeshellcmd($this->getPath('co')) . ' ' . escapeshellarg('-p' . $rev) . ' ' . escapeshellarg($fullname) . " 2>&1", VC_WINDOWS ? 'rb' : 'r'))) {
             throw new Horde_Vcs_Exception('Couldn\'t perform checkout of the requested file');
         }
 
@@ -194,120 +259,32 @@ class Horde_Vcs_Cvs extends Horde_Vcs_Rcs
 }
 
 /**
- * Horde_Vcs_Cvs diff class.
- *
- * Copyright Anil Madhavapeddy, <anil@recoil.org>
- *
- * @author  Anil Madhavapeddy <anil@recoil.org>
- * @package Horde_Vcs
- */
-class Horde_Vcs_Diff_Cvs extends Horde_Vcs_Diff
-{
-    /**
-     * Obtain the differences between two revisions of a file.
-     *
-     * @param Horde_Vcs $rep        A repository object.
-     * @param Horde_Vcs_File $file  The desired file.
-     * @param string $rev1         Original revision number to compare from.
-     * @param string $rev2         New revision number to compare against.
-     * @param string $type         The type of diff (e.g. 'unified').
-     * @param integer $num         Number of lines to be used in context and
-     *                             unified diffs.
-     * @param boolean $ws          Show whitespace in the diff?
-     *
-     * @return string|boolean  False on failure, or a string containing the
-     *                         diff on success.
-     */
-    public function get($rep, $file, $rev1, $rev2, $type = 'context',
-                        $num = 3, $ws = true)
-    {
-        /* Check that the revision numbers are valid. */
-        $rev1 = $rep->isValidRevision($rev1) ? $rev1 : '1.1';
-        $rev2 = $rep->isValidRevision($rev1) ? $rev2 : '1.1';
-
-        $fullName = $file->queryFullPath();
-        $diff = array();
-        $options = '-kk ';
-        if (!$ws) {
-            $opts = ' -bB ';
-            $options .= $opts;
-        } else {
-            $opts = '';
-        }
-
-        switch ($type) {
-        case 'context':
-            $options = $opts . '-p --context=' . (int)$num;
-            break;
-
-        case 'unified':
-            $options = $opts . '-p --unified=' . (int)$num;
-            break;
-
-        case 'column':
-            $options = $opts . '--side-by-side --width=120';
-            break;
-
-        case 'ed':
-            $options = $opts . '-e';
-            break;
-        }
-
-        // Windows versions of cvs always return $where with forwards slashes.
-        if (VC_WINDOWS) {
-            $fullName = str_replace(DIRECTORY_SEPARATOR, '/', $fullName);
-        }
-
-        // TODO: add options for $hr options - however these may not be
-        // compatible with some diffs.
-        $command = $rep->getPath('rcsdiff') . " $options -r$rev1 -r$rev2 \"" . escapeshellcmd($fullName) . '" 2>&1';
-        if (VC_WINDOWS) {
-            $command .= ' < "' . __FILE__ . '"';
-        }
-
-        exec($command, $diff, $retval);
-        return ($retval > 0) ? $diff : array();
-    }
-
-}
-
-/**
  * Horde_Vcs_Cvs directory class.
  *
- * Copyright Anil Madhavapeddy, <anil@recoil.org>
- *
  * @author  Anil Madhavapeddy <anil@recoil.org>
+ * @author  Michael Slusarz <slusarz@horde.org>
  * @package Horde_Vcs
  */
 class Horde_Vcs_Directory_Cvs extends Horde_Vcs_Directory
 {
     /**
-     * Creates a CVS Directory object to store information
-     * about the files in a single directory in the repository.
+     * Create a Directory object to store information about the files in a
+     * single directory in the repository
      *
-     * @param Horde_Vcs $rep           A repository object
-     * @param string $dn              Path to the directory.
-     * @param Horde_Vcs_Directory $pn  The parent Directory object to this one.
+     * @param Horde_Vcs $rep  The Repository object this directory is part of.
+     * @param string $dn      Path to the directory.
+     * @param array $opts     TODO
+     *
+     * @throws Horde_Vcs_Exception
      */
-    public function __construct($rep, $dn, $pn = '')
+    public function __construct($rep, $dn, $opts = array())
     {
-        parent::__construct($rep, $dn, $pn);
-        $this->_dirName = $rep->sourceroot() . "/$dn";
-    }
+        parent::__construct($rep, $dn, $opts);
+        $this->_dirName = $rep->sourceroot() . '/' . $dn;
 
-    /**
-     * Tell the object to open and browse its current directory, and
-     * retrieve a list of all the objects in there.  It then populates
-     * the file/directory stack and makes it available for retrieval.
-     *
-     * @return boolean  True on success.
-     */
-    public function browseDir($cache = null, $quicklog = true,
-                              $showattic = false)
-    {
         /* Make sure we are trying to list a directory */
         if (!@is_dir($this->_dirName)) {
-            throw new Horde_Vcs_Exception('Unable to find directory ' . $this->_dirName);
+            throw new Horde_Vcs_Exception('Unable to find directory: ' . $this->_dirName);
         }
 
         /* Open the directory for reading its contents */
@@ -330,7 +307,7 @@ class Horde_Vcs_Directory_Cvs extends Horde_Vcs_Directory
                 }
             } elseif (@is_file($path) && (substr($name, -2) == ',v')) {
                 /* Spawn a new file object to represent this file. */
-                $this->_files[] = $this->_rep->getFileObject(substr($path, strlen($this->_rep->sourceroot()), -2), array('cache' => $cache, 'quicklog' => $quicklog));
+                $this->_files[] = $rep->getFileObject(substr($path, strlen($rep->sourceroot()), -2), array('quicklog' => !empty($opts['quicklog'])));
             }
         }
 
@@ -338,9 +315,9 @@ class Horde_Vcs_Directory_Cvs extends Horde_Vcs_Directory
         closedir($DIR);
 
         /* If we want to merge the attic, add it in here. */
-        if ($showattic) {
+        if (!empty($opts['showattic'])) {
             try {
-                $atticDir = new Horde_Vcs_Directory_Cvs($this->_rep, $this->_moduleName . '/Attic', $this);
+                $atticDir = new Horde_Vcs_Directory_Cvs($rep, $this->_moduleName . '/Attic', $opts, $this);
                 $this->_atticFiles = $atticDir->queryFileList();
                 $this->_mergedFiles = array_merge($this->_files, $this->_atticFiles);
             } catch (Horde_Vcs_Exception $e) {}
@@ -349,21 +326,59 @@ class Horde_Vcs_Directory_Cvs extends Horde_Vcs_Directory
         return true;
     }
 
+    /**
+     * TODO
+     */
+    public function getBranches()
+    {
+        return array('HEAD');
+    }
+
 }
 
 /**
  * Horde_Vcs_Cvs file class.
  *
- * Copyright Anil Madhavapeddy, <anil@recoil.org>
- *
  * @author  Anil Madhavapeddy <anil@recoil.org>
+ * @author  Michael Slusarz <slusarz@horde.org>
  * @package Horde_Vcs
  */
 class Horde_Vcs_File_Cvs extends Horde_Vcs_File
 {
-    /* @TODO */
-    public $filename;
-    protected $_branch = '';
+    /**
+     * TODO
+     *
+     * @var string
+     */
+    protected $_accum;
+
+    /**
+     * TODO
+     *
+     * @var array
+     */
+    protected $_revsym = array();
+
+    /**
+     * TODO
+     *
+     * @var array
+     */
+    protected $_symrev = array();
+
+    /**
+     * TODO
+     *
+     * @var array
+     */
+    protected $_revlist = array();
+
+    /**
+     * TODO
+     *
+     * @var array
+     */
+    protected $_branches = array();
 
     /**
      * Create a repository file object, and give it information about
@@ -372,17 +387,12 @@ class Horde_Vcs_File_Cvs extends Horde_Vcs_File
      * @param TODO $rep    TODO
      * @param string $fl   Full path to this file.
      * @param array $opts  TODO
+     *
+     * @throws Horde_Vcs_Exception
      */
     public function __construct($rep, $fl, $opts = array())
     {
-        $this->rep = $rep;
-        $this->name = basename($fl);
-        $this->dir = dirname($fl);
-        $this->filename = $fl;
-        $this->quicklog = !empty($opts['quicklog']);
-        if (!empty($opts['branch'])) {
-            $this->_branch = $opts['branch'];
-        }
+        parent::__construct($rep, $fl, $opts);
 
         /* Check that we are actually in the filesystem. */
         $file = $this->queryFullPath();
@@ -390,78 +400,93 @@ class Horde_Vcs_File_Cvs extends Horde_Vcs_File
             throw new Horde_Vcs_Exception('File Not Found: ' . $file);
         }
 
-        /* Call the RCS rlog command to retrieve the file
-         * information. */
-        $flag = $this->quicklog ? ' -r ' : ' ';
-
-        $cmd = $this->rep->getPath('rlog') . $flag . escapeshellarg($file);
-        exec($cmd, $return_array, $retval);
+        $ret_array = array();
+        $cmd = escapeshellcmd($rep->getPath('rlog')) . ($this->_quicklog ? ' -r' : '') . ' ' . escapeshellarg($file);
+        exec($cmd, $ret_array, $retval);
 
         if ($retval) {
             throw new Horde_Vcs_Exception('Failed to spawn rlog to retrieve file log information for ' . $file);
         }
 
-        $accum = $revsym = $symrev = array();
+        $branches = array();
         $state = 'init';
 
-        foreach ($return_array as $line) {
+        foreach ($ret_array as $line) {
             switch ($state) {
             case 'init':
-                if (!strncmp('head: ', $line, 6)) {
-                    $this->head = substr($line, 6);
-                    $this->branches['HEAD'] = $this->head;
-                } elseif (!strncmp('branch:', $line, 7)) {
+                if (strpos($line, 'head: ') === 0) {
+                    $this->_branches['HEAD'] = substr($line, 6);
+                    $this->_revlist['HEAD'] = $rep->getRevisionRange($this, '1.1', $this->_branches['HEAD']);
+                } elseif (strpos($line, 'branch:') === 0) {
                     $state = 'rev';
                 }
                 break;
 
             case 'rev':
-                if (!strncmp('----------', $line, 10)) {
+                if (strpos($line, '----------') === 0) {
                     $state = 'info';
-                    $this->symrev = $symrev;
-                    $this->revsym = $revsym;
                 } elseif (preg_match("/^\s+([^:]+):\s+([\d\.]+)/", $line, $regs)) {
-                    // Check to see if this is a branch
+                    // Check to see if this is a branch.
                     if (preg_match('/^(\d+(\.\d+)+)\.0\.(\d+)$/', $regs[2])) {
-                        $branchRev = $this->toBranch($regs[2]);
-                        $this->branches[$regs[1]] = $branchRev;
+                        $rev = $regs[2];
+                        $end = strrpos($rev, '.');
+                        $rev[$end] = 0;
+                        $branchRev = (($end2 = strrpos($rev, '.')) === false)
+                            ? substr($rev, ++$end)
+                            : substr_replace($rev, '.', $end2, ($end - $end2 + 1));
+
+                        /* $branchRev is only the branching point, NOT the
+                         * HEAD of the branch. To determine the HEAD, we need
+                         * to parse all of the log data first. Yuck. */
+                        $branches[$regs[1]] = $branchRev . '.';
                     } else {
-                        $symrev[$regs[1]] = $regs[2];
-                        if (empty($revsym[$regs[2]])) {
-                            $revsym[$regs[2]] = array();
+                        $this->_symrev[$regs[1]] = $regs[2];
+                        if (empty($this->_revsym[$regs[2]])) {
+                            $this->_revsym[$regs[2]] = array();
                         }
-                        $revsym[$regs[2]][] = $regs[1];
+                        $this->_revsym[$regs[2]][] = $regs[1];
                     }
                 }
                 break;
 
             case 'info':
-                if (strncmp('==============================', $line, 30) &&
-                    strcmp('----------------------------', $line)) {
-                    $accum[] = $line;
-                } elseif (count($accum)) {
-                    // Spawn a new Horde_Vcs_Log object and add it to the logs
-                    // hash.
-                    $log = new Horde_Vcs_Log_Cvs($this);
-                    $err = $log->processLog($accum);
+                if ((strpos($line, '==============================') === false) &&
+                    (strpos($line, '----------------------------') === false)) {
+                    $this->_accum[] = $line;
+                } elseif (count($this->_accum)) {
+                    $log = $rep->getLogObject($this, null);
                     $rev = $log->queryRevision();
-                    $branch = $log->queryBranch();
-                    if (empty($this->_branch) ||
-                        in_array($this->_branch, $log->queryBranch()) ||
-                        (($this->rep->cmp($rev, $this->branches[$this->_branch]) === -1) &&
-                         (empty($branch) ||
-                          in_array('HEAD', $branch) ||
-                          (strpos($this->branches[$this->_branch], $rev) === 0)))) {
-                        $log->setBranch($branch);
-                        $this->logs[$rev] = $log;
-                        $this->revs[] = $rev;
+                    $onbranch = false;
+                    $onhead = (substr_count($rev, '.') == 1);
+
+                    // Determine branch information.
+                    if ($onhead) {
+                        $onbranch = (empty($this->_branch) || $this->_branch == 'HEAD') ||
+                            ($rep->cmp($branches[$this->_branch], $rev) === 1);
+                    } elseif ($this->_branch != 'HEAD') {
+                        foreach ($branches as $key => $val) {
+                            if (strpos($rev, $val) === 0) {
+                                $onbranch = true;
+                                $log->setBranch($key);
+                                if (!isset($this->_branches[$key])) {
+                                    $this->_branches[$key] = $rev;
+                                    $this->_revlist[$key] = $rep->getRevisionRange($this, '1.1', $rev);
+                                }
+                                break;
+                            }
+                        }
                     }
-                    $accum = array();
+
+                    if ($onbranch) {
+                        $this->_revs[] = $rev;
+                        $this->_logs[$rev] = $log;
+                    }
+
+                    $this->_accum = array();
                 }
                 break;
             }
         }
-
     }
 
     /**
@@ -471,7 +496,7 @@ class Horde_Vcs_File_Cvs extends Horde_Vcs_File
      */
     public function isDeleted()
     {
-        return (substr($this->dir, -5) == 'Attic');
+        return (substr($this->_dir, -5) == 'Attic');
     }
 
     /**
@@ -482,17 +507,7 @@ class Horde_Vcs_File_Cvs extends Horde_Vcs_File
      */
     public function queryName()
     {
-        return preg_replace('/,v$/', '', $this->name);
-    }
-
-    /**
-     * Return the HEAD (most recent) revision number for this file.
-     *
-     * @return string  HEAD revision number
-     */
-    public function queryHead()
-    {
-        return $this->head;
+        return preg_replace('/,v$/', '', $this->_name);
     }
 
     /**
@@ -502,7 +517,7 @@ class Horde_Vcs_File_Cvs extends Horde_Vcs_File
      */
     public function queryFullPath()
     {
-        return $this->dir . '/' . $this->name;
+        return parent::queryModulePath();
     }
 
     /**
@@ -512,31 +527,7 @@ class Horde_Vcs_File_Cvs extends Horde_Vcs_File
      */
     public function queryModulePath()
     {
-        return preg_replace('|^'. $this->rep->sourceroot() . '/?(.*),v$|', '\1', $this->queryFullPath());
-    }
-
-    /**
-     * Given a revision number of the form x.y.0.z, this remaps it
-     * into the appropriate branch number, which is x.y.z
-     *
-     * @param string $rev  Even-digit revision number of a branch
-     *
-     * @return string  Odd-digit Branch number
-     */
-    public function toBranch($rev)
-    {
-        /* Check if we have a valid revision number */
-        if (!$this->rep->isValidRevision($rev) ||
-            (($end = strrpos($rev, '.')) === false)) {
-            return false;
-        }
-
-        $rev[$end] = 0;
-        if (($end2 = strrpos($rev, '.')) === false) {
-            return substr($rev, ++$end);
-        }
-
-        return substr_replace($rev, '.', $end2, ($end - $end2 + 1));
+        return preg_replace('|^'. $this->_rep->sourceroot() . '/?(.*),v$|', '\1', $this->queryFullPath());
     }
 
     /**
@@ -544,48 +535,42 @@ class Horde_Vcs_File_Cvs extends Horde_Vcs_File
      */
     public function getBranchList()
     {
-/*
-// $trunk contains an array of trunk revisions.
-$trunk = array();
-
-// $branches is a hash with the branch revision as the key, and value
-// being an array of revs on that branch.
-$branches = array();
-
-// Populate $col with a list of all the branch points.
-foreach ($fl->branches as $rev) {
-    $branches[$rev] = array();
-}
-
-// For every revision, figure out if it is a trunk revision, or
-// instead associated with a branch.  If trunk, add it to the $trunk
-// array.  Otherwise, add it to an array in $branches[$branch].
-foreach ($fl->logs as $log) {
-    $rev = $log->queryRevision();
-    $baseRev = $rev_ob->strip($rev, 1);
-    $branchFound = false;
-    foreach ($fl->branches as $branch => $name) {
-        if ($branch == $baseRev) {
-            array_unshift($branches[$branch], $rev);
-            $branchFound = true;
-        }
+        return $this->_revlist();
     }
-    // If its not a branch, then add it to the trunk.
-    // TODO: this silently drops vendor branches atm! - avsm.
-    if (!$branchFound && $rev_ob->sizeof($rev) == 2) {
-        array_unshift($trunk, $rev);
-    }
-}
 
-foreach ($branches as $col => $rows) {
-    // If this branch has no actual commits on it, then it's a stub
-    // branch, and we can remove it for this view.
-    if (!sizeof($rows)) {
-        unset($branches[$col]);
+    /**
+     * TODO
+     */
+    public function queryRevsym($rev)
+    {
+        return isset($this->_revsym[$rev])
+            ? $this->_revsym[$rev]
+            : array();
     }
-}
-*/
+
+    /**
+     * TODO
+     */
+    public function querySymbolicRevisions()
+    {
+        return $this->_symrev;
     }
+
+    /**
+     * TODO
+     */
+    public function getAccum()
+    {
+        return $this->_accum;
+    }
+
+    /**
+     * TODO
+     */
+     public function queryBranches()
+     {
+         return $this->_branches;
+     }
 
 }
 
@@ -593,15 +578,27 @@ foreach ($branches as $col => $rows) {
  * Horde_Vcs_cvs Log class.
  *
  * @author  Anil Madhavapeddy <anil@recoil.org>
+ * @author  Michael Slusarz <slusarz@horde.org>
  * @package Horde_Vcs
  */
 class Horde_Vcs_Log_Cvs extends Horde_Vcs_Log
 {
-    /* Cached branch info. */
+    /**
+     * Cached branch info.
+     *
+     * @var string
+     */
     protected $_branch;
 
-    public function processLog($raw)
+    /**
+     * Constructor.
+     */
+    public function __construct($rep, $fl, $rev)
     {
+        parent::__construct($rep, $fl, $rev);
+
+        $raw = $fl->getAccum();
+
         /* Initialise a simple state machine to parse the output of rlog */
         $state = 'init';
         while (!empty($raw) && $state != 'done') {
@@ -610,7 +607,7 @@ class Horde_Vcs_Log_Cvs extends Horde_Vcs_Log
             case 'init':
                 $line = array_shift($raw);
                 if (preg_match("/revision (.+)$/", $line, $parts)) {
-                    $this->rev = $parts[1];
+                    $this->_rev = $parts[1];
                     $state = 'date';
                 }
                 break;
@@ -619,10 +616,10 @@ class Horde_Vcs_Log_Cvs extends Horde_Vcs_Log
             case 'date':
                 $line = array_shift($raw);
                 if (preg_match("|^date:\s+(\d+)[-/](\d+)[-/](\d+)\s+(\d+):(\d+):(\d+).*?;\s+author:\s+(.+);\s+state:\s+(\S+);(\s+lines:\s+([0-9\s+-]+))?|", $line, $parts)) {
-                    $this->date = gmmktime($parts[4], $parts[5], $parts[6], $parts[2], $parts[3], $parts[1]);
-                    $this->author = $parts[7];
-                    $this->state = $parts[8];
-                    $this->lines = isset($parts[10]) ? $parts[10] : '';
+                    $this->_date = gmmktime($parts[4], $parts[5], $parts[6], $parts[2], $parts[3], $parts[1]);
+                    $this->_author = $parts[7];
+                    $this->_state = $parts[8];
+                    $this->_lines = isset($parts[10]) ? $parts[10] : '';
                     $state = 'branches';
                 }
                 break;
@@ -638,8 +635,8 @@ class Horde_Vcs_Log_Cvs extends Horde_Vcs_Log
                      * push valid revisions into the branches array */
                     $brs = preg_split('/;\s*/', $br[1]);
                     foreach ($brs as $brpoint) {
-                        if ($this->rep->isValidRevision($brpoint)) {
-                            $this->branches[] = $brpoint;
+                        if ($rep->isValidRevision($brpoint)) {
+                            $this->_branches[] = $brpoint;
                         }
                     }
                     array_shift($raw);
@@ -651,26 +648,31 @@ class Horde_Vcs_Log_Cvs extends Horde_Vcs_Log
         }
 
         /* Assume the rest of the lines are the log message */
-        $this->log = implode("\n", $raw);
-        $this->tags = isset($this->file->revsym[$this->rev]) ?
-            $this->file->revsym[$this->rev] :
-            array();
+        $this->_log = implode("\n", $raw);
+        $this->_tags = $fl->queryRevsym($this->_rev);
     }
 
+    /**
+     * TODO
+     */
     public function setBranch($branch)
     {
-        $this->_branch = $branch;
+        $this->_branch = array($branch);
     }
 
+    /**
+     * TODO
+     */
     public function queryBranch()
     {
         if (!empty($this->_branch)) {
             return $this->_branch;
         }
 
-        $key = array_keys($this->file->branches, $this->rev);
+        $branches = $this->_file->queryBranches();
+        $key = array_keys($branches, $this->_rev);
         return empty($key)
-            ? array_keys($this->file->branches, $this->rep->strip($this->rev, 1))
+            ? array_keys($branches, $this->_rep->strip($this->_rev, 1))
             : $key;
     }
 
@@ -679,59 +681,58 @@ class Horde_Vcs_Log_Cvs extends Horde_Vcs_Log
 /**
  * Horde_Vcs_Cvs Patchset class.
  *
- * Copyright Anil Madhavapeddy, <anil@recoil.org>
- *
  * @author  Anil Madhavapeddy <anil@recoil.org>
+ * @author  Michael Slusarz <slusarz@horde.org>
  * @package Horde_Vcs
  */
 class Horde_Vcs_Patchset_Cvs extends Horde_Vcs_Patchset
 {
-    protected $_dir;
-    protected $_name;
-
     /**
-     * Create a patchset object.
+     * Constructor
      *
-     * @param string $file  The filename to get patchsets for.
-     */
-    public function __construct($rep, $file, $cache = null)
-    {
-        $this->_name = basename($file);
-        $this->_dir = dirname($file);
-        $this->_ctime = time() - filemtime($file . ',v');
-
-        parent::__construct($rep, $file, $cache);
-    }
-
-    /**
-     * Populate the object with information about the patchsets that
-     * this file is involved in.
+     * @param Horde_Vcs $rep  A Horde_Vcs repository object.
+     * @param string $file    The filename to create a patchset for.
+     * @param array $opts     Additional options.
+     * <pre>
+     * 'file' - (string) The filename to process.
+     *          REQUIRED for this driver.
+     * 'range' - (array) The patchsets to process.
+     *           DEFAULT: None (all patchsets are processed).
+     * </pre>
      *
-     * @return boolean  True on success.
+     * @throws Horde_Vcs_Exception
      */
-    public function getPatchsets()
+    public function __construct($rep, $opts = array())
     {
+        $file = $rep->sourceroot() . '/' . $opts['file'];
+
         /* Check that we are actually in the filesystem. */
-        if (!is_file($this->getFullPath() . ',v')) {
+        if (!$rep->isFile($file)) {
             throw new Horde_Vcs_Exception('File Not Found');
         }
 
         /* Call cvsps to retrieve all patchsets for this file. */
-        $cvsps_home = $this->_rep->getPath('cvsps_home');
+        $cvsps_home = $rep->getPath('cvsps_home');
         $HOME = !empty($cvsps_home) ?
-            'HOME=' . $cvsps_home . ' ' :
+            'HOME=' . escapeshellarg($cvsps_home) . ' ' :
             '';
 
-        $cmd = $HOME . $this->_rep->getPath('cvsps') . ' -u --cvs-direct --root ' . escapeshellarg($this->_rep->sourceroot) . ' -f ' . escapeshellarg($this->_name) . ' ' . escapeshellarg($this->_dir);
-        exec($cmd, $return_array, $retval);
+        $rangecmd = empty($opts['range'])
+            ? ''
+            : ' -s ' . escapeshellarg(implode(',', $opts['range']));
+
+        $ret_array = array();
+        $cmd = $HOME . escapeshellcmd($rep->getPath('cvsps')) . $rangecmd . ' -u --cvs-direct --root ' . escapeshellarg($rep->sourceroot()) . ' -f ' . escapeshellarg(basename($file)) . ' ' . escapeshellarg(dirname($file));
+        exec($cmd, $ret_array, $retval);
         if ($retval) {
-            throw new Horde_Vcs_Exception('Failed to spawn cvsps to retrieve patchset information');
+            throw new Horde_Vcs_Exception('Failed to spawn cvsps to retrieve patchset information.');
         }
 
-        $this->_patchsets = array();
         $state = 'begin';
-        foreach ($return_array as $line) {
+        reset($ret_array);
+        while (list(,$line) = each($ret_array)) {
             $line = trim($line);
+
             if ($line == '---------------------') {
                 $state = 'begin';
                 continue;
@@ -746,27 +747,28 @@ class Horde_Vcs_Patchset_Cvs extends Horde_Vcs_Patchset
 
             case 'info':
                 $info = explode(':', $line, 2);
+                $info[1] = ltrim($info[1]);
+
                 switch ($info[0]) {
                 case 'Date':
-                    if (preg_match('|(\d{4})/(\d{2})/(\d{2}) (\d{2}):(\d{2}):(\d{2})|', $info[1], $date)) {
-                        $this->_patchsets[$id]['date'] = gmmktime($date[4], $date[5], $date[6], $date[2], $date[3], $date[1]);
-                    }
+                    $d = new DateTime($info[1]);
+                    $this->_patchsets[$id]['date'] = $d->format('U');
                     break;
 
                 case 'Author':
-                    $this->_patchsets[$id]['author'] = trim($info[1]);
+                    $this->_patchsets[$id]['author'] = $info[1];
                     break;
 
                 case 'Branch':
-                    if (trim($info[1]) != 'HEAD') {
-                        $this->_patchsets[$id]['branch'] = trim($info[1]);
-                    }
+                    $this->_patchsets[$id]['branches'] = ($info[1] == 'HEAD')
+                        ? array()
+                        : array($info[1]);
                     break;
 
                 case 'Tag':
-                    if (trim($info[1]) != '(none)') {
-                        $this->_patchsets[$id]['tag'] = trim($info[1]);
-                    }
+                    $this->_patchsets[$id]['tags'] = ($info[1] == '(none)')
+                        ? array()
+                        : array($info[1]);
                     break;
 
                 case 'Log':
@@ -779,7 +781,7 @@ class Horde_Vcs_Patchset_Cvs extends Horde_Vcs_Patchset
             case 'log':
                 if ($line == 'Members:') {
                     $state = 'members';
-                    $this->_patchsets[$id]['log'] = trim($this->_patchsets[$id]['log']);
+                    $this->_patchsets[$id]['log'] = rtrim($this->_patchsets[$id]['log']);
                     $this->_patchsets[$id]['members'] = array();
                 } else {
                     $this->_patchsets[$id]['log'] .= $line . "\n";
@@ -789,26 +791,27 @@ class Horde_Vcs_Patchset_Cvs extends Horde_Vcs_Patchset
             case 'members':
                 if (!empty($line)) {
                     $parts = explode(':', $line);
-                    $revs = explode('->', $parts[1]);
-                    $this->_patchsets[$id]['members'][] = array('file' => $parts[0],
-                                                                'from' => $revs[0],
-                                                                'to' => $revs[1]);
+                    list($from, $to) = explode('->', $parts[1], 2);
+                    $status = self::MODIFIED;
+
+                    if ($from == 'INITIAL') {
+                        $from = null;
+                        $status = self::ADDED;
+                    } elseif (substr($to, -6) == '(DEAD)') {
+                        $to = null;
+                        $status = self::DELETED;
+                    }
+
+                    $this->_patchsets[$id]['members'][] = array(
+                        'file' => $parts[0],
+                        'from' => $from,
+                        'status' => $status,
+                        'to' => $to
+                    );
                 }
                 break;
             }
         }
-
-        return true;
-    }
-
-    /**
-     * Return the fully qualified filename of this object.
-     *
-     * @return string  Fully qualified filename of this object
-     */
-    function getFullPath()
-    {
-        return $this->_dir . '/' . $this->_name;
     }
 
 }

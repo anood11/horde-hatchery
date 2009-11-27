@@ -2,9 +2,7 @@
  Upgrading IMP
 ===============
 
-:Last update:   $Date: 2008/10/20 03:54:39 $
-:Revision:      $Revision: 1.33 $
-:Contact:       imp@lists.horde.org
+:Contact: imp@lists.horde.org
 
 
 These are instructions to upgrade from earlier IMP versions.
@@ -20,14 +18,76 @@ This is a non-exhaustive, quick explanation of what has changed between an IMP
 HTML GUI editor
 ---------------
 
-IMP only supports the FCKeditor javscript HTML GUI editor.  Xinha is no longer
-supported.
+IMP only supports the CKeditor javascript HTML rich text editor.  Xinha is no
+longer supported.
 
-* servers.php has changed
-* imp_hook_vinfo has changed
-* alternative_display, attachment_display pref is gone.
-* imp_hook_spam_bounce -> imp_hook_spam_email
-* imp_hook_msglist_format input has changed.
+Button configuration is now stored in the prefs value 'ckeditor_buttons'. The
+old 'fckeditor_buttons' setting is no longer used and can be safely removed.
+
+
+Server Options
+--------------
+
+The 'realm' option has been removed.  Altering usernames at runtime should
+instead by accomplished by using Horde's 'authusername' and/or IMP's
+'preauthenticate' hooks.
+
+
+Configuration Options
+---------------------
+
+Configuration relating to displaying the terms of agreement, GnuPg, OpenSSL,
+spellchecking, and login redirection have been moved to Horde.
+
+The 'show_preview' option has been removed; enabling previews is now handled
+by the 'show_preview' preference.
+
+The 'max_from_chars' and 'max_subj_chars' configuration options for the
+minimal (mimp) display have been moved to preferences ('mimp_max_from_chars'
+and 'mimp_max_subj_chars').
+
+The 'limit_factor' configuration option has been removed.
+
+
+Preferences
+-----------
+
+The following preferences are no longer used and may be safely removed from
+your ``config/prefs.php`` file and your preferences backend::
+
+   'alternative_display'
+   'attachment_display'
+   'forward_default'
+
+
+Hooks
+-----
+
+* hooks.php has changed
+* Hook: spam_bounce -> spam_email
+* imp_hook_vinfo has been removed - use preauth hook instead
+* msglist_format hook has been removed - instead:
+*  x-priority now handled in the core code
+*  old attachment icon handling see atc_flag pref
+*  msglist_flags hook now used to dynamically set flags on messages
+
+
+Fetchmail
+---------
+
+All code relating to fetchmail has been removed (TODO: prefs/config?).
+
+
+Server configuration
+--------------------
+
+The format of servers.php has changed.
+
+
+Maintenance Tasks
+-----------------
+
+TODO
 
 
 Upgrading IMP From 4.1.x To 4.2.x
@@ -165,7 +225,6 @@ The following preferences are no longer used and may be safely removed from
 your ``config/prefs.php`` file and your preferences backend::
 
    'disposition_request_delivery'
-   'disposition_send_mdn'
    'wrap_width'
 
 

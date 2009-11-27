@@ -3,7 +3,7 @@
 /**
  * This script parses MIME messages and deactivates users with returned emails.
  *
- * $Id: mail-filter.php 1020 2008-10-31 09:25:56Z duck $
+ * $Id: mail-filter.php 1234 2009-01-28 18:44:02Z duck $
  *
  * Copyright 2008-2009 The Horde Project (http://www.horde.org/)
  *
@@ -37,25 +37,21 @@ Options:
 EOU;
 }
 
-define('AUTH_HANDLER', true);
-define('HORDE_BASE', dirname(__FILE__) . '/../..');
-
 // Do CLI checks and environment setup first.
-require_once HORDE_BASE . '/lib/core.php';
-require_once 'Horde/CLI.php';
+require_once dirname(__FILE__) . '/../../lib/core.php';
 
 // Make sure no one runs this from the web.
-if (!Horde_CLI::runningFromCLI()) {
+if (!Horde_Cli::runningFromCLI()) {
     exit("Must be run from the command line\n");
 }
 
 // Load the CLI environment - make sure there's no time limit, init some
 // variables, etc.
-Horde_CLI::init();
-$cli = &Horde_CLI::singleton();
+Horde_Cli::init();
+$cli = Horde_Cli::singleton();
 
+$horde_authentication = 'none';
 require_once dirname(__FILE__) . '/../lib/base.php';
-require_once 'Console/Getopt.php';
 
 // Read command-line parameters.
 $info = array();
@@ -106,7 +102,7 @@ foreach (array('host', 'user', 'pass', 'port', 'protocol', 'folder') as $opt) {
 
 // Set charset to UTF-8 for most flexible conversion between email charset and
 // backend charset.
-NLS::setCharsetEnvironment('UTF-8');
+Horde_Nls::setCharsetEnvironment('UTF-8');
 
 // Read and parse the message.
 $messages = array();
@@ -176,8 +172,7 @@ $title = _("Email problem");
 $body = _("Dear %s, we tried to send you an email, but if turns out that the mail is usable any more. Maybe you run over quota. If your mail is discontinued, please update your profile with the email you are using now at %s.");
 
 // Horde Auto login to send messages with
-$auth = Auth::singleton('auto', array('username' => $opts_hash['--username']));
-$auth->setAuth($opts_hash['--username'], array('transparent' => 1));
+Horde_Auth::setAuth($opts_hash['--username'], array('transparent' => 1));
 
 // Send messages
 foreach ($users as $user) {

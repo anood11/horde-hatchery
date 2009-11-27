@@ -15,117 +15,123 @@ class IMP_Views_ListMessages
     /**
      * Returns a list of messages for use with ViewPort.
      *
-     * @var array $args  TODO
+     * @var array $args  TODO (applyfilter, initial)
      *
      * @return array  TODO
      */
-    public function ListMessages($args)
+    public function listMessages($args)
     {
         $mbox = $args['mbox'];
-        $search_id = null;
+        $is_search = false;
 
         $sortpref = IMP::getSort($mbox);
 
-        /* If we're searching, do search. */
-        if (!empty($args['filter']) &&
-            !empty($args['searchfolder']) &&
-            !empty($args['searchmsg'])) {
+        /* Check for quicksearch request. */
+        if (strlen($args['qsearchmbox'])) {
             /* Create the search query. */
             $query = new Horde_Imap_Client_Search_Query();
 
-            /* Create message search list. */
-            switch ($args['searchmsg']) {
-            case 'msgall':
-                $query->text($args['filter'], false);
-                break;
+            if (strlen($args['qsearchflag'])) {
+                $query->flag($args['qsearchflag'], empty($args['qsearchflagnot']));
+                $is_search = true;
+            } elseif (strlen($args['qsearch'])) {
+                $field = $GLOBALS['prefs']->getValue('dimp_qsearch_field');
+                switch ($field) {
+                case 'body':
+                    $query->text($args['qsearch'], true);
+                    break;
 
-            case 'from':
-                $query->headerText('From', $args['filter']);
-                break;
+                case 'from':
+                case 'subject':
+                    $query->headerText($field, $args['qsearch']);
+                    break;
 
-            case 'to':
-                $query->headerText('To', $args['filter']);
-                break;
+                case 'to':
+                    $query2 = new Horde_Imap_Client_Search_Query();
+                    $query2->headerText('cc', $args['qsearch']);
 
-            case 'subject':
-                $query->headerText('Subject', $args['filter']);
-                break;
-            }
+                    $query3 = new Horde_Imap_Client_Search_Query();
+                    $query3->headerText('bcc', $args['qsearch']);
 
-            /* Create folder search list. */
-            switch ($args['searchfolder']) {
-            case 'all':
-                $imptree = &IMP_IMAP_Tree::singleton();
-                $folder_list = $imptree->folderList();
-                break;
+                    $query->headerText('to', $args['qsearch']);
+                    $query->orSearch(array($query2, $query3));
+                    break;
 
-            case 'current':
-                $folder_list = array($mbox);
-                break;
+                case 'all':
+                default:
+                    $query->text($args['qsearch'], false);
+                    break;
+                }
+
+                $is_search = true;
             }
 
             /* Set the search in the IMP session. */
-            $c_ptr = &$_SESSION['imp']['cache'];
-            $search_id = $GLOBALS['imp_search']->createSearchQuery($query, $folder_list, array(), _("Search Results"), isset($c_ptr['dimp_searchquery']) ? $c_ptr['dimp_searchquery'] : null);
-
-            /* Folder is now the search folder. */
-            $mbox = $c_ptr['dimp_searchquery'] = $GLOBALS['imp_search']->createSearchID($search_id);
+            if ($is_search) {
+                $GLOBALS['imp_search']->createSearchQuery($query, array($args['qsearchmbox']), array(), _("Search Results"), $mbox);
+            }
         }
 
-        $label = IMP::getLabel($mbox);
-
         /* Set the current time zone. */
-        NLS::setTimeZone();
+        Horde_Nls::setTimeZone();
 
         /* Run filters now. */
-        if (!empty($_SESSION['imp']['filteravail']) &&
-            ($mbox == 'INBOX') &&
-            $GLOBALS['prefs']->getValue('filter_on_display')) {
+        if (!$is_search &&
+            !empty($_SESSION['imp']['filteravail']) &&
+            !empty($args['applyfilter']) ||
+            (($mbox == 'INBOX') &&
+             $GLOBALS['prefs']->getValue('filter_on_display'))) {
             $imp_filter = new IMP_Filter();
             $imp_filter->filter($mbox);
         }
 
         /* Generate the sorted mailbox list now. */
-        $imp_mailbox = &IMP_Mailbox::singleton($mbox);
+        $imp_mailbox = IMP_Mailbox::singleton($mbox);
         $sorted_list = $imp_mailbox->getSortedList();
         $msgcount = count($sorted_list['s']);
 
         /* Create the base object. */
-        $result = new stdClass;
-        $result->id = $mbox;
-        $result->reset = false;
-        $result->totalrows = $msgcount;
-        $result->label = $label;
+        $result = $this->getBaseOb($mbox);
         $result->cacheid = $imp_mailbox->getCacheID();
+        $result->totalrows = $msgcount;
+
+        /* If this is the initial request for a mailbox, figure out the
+         * starting location based on user's preferences. */
+        $rownum = $args['initial']
+            ? intval($imp_mailbox->mailboxStart($msgcount))
+            : null;
 
         /* Determine the row slice to process. */
-        if (isset($args['slice_rownum'])) {
-            $rownum = max(1, $args['slice_rownum']);
-            $slice_start = $args['slice_start'];
-            $slice_end = $args['slice_end'];
-        } else {
-            $result->rownum = $rownum = 1;
-            foreach (array_keys($sorted_list['s'], $args['search_uid']) as $val) {
-                if (empty($sorted_list['m'][$val]) ||
-                    ($sorted_list['m'][$val] == $args['search_mbox'])) {
-                    $rownum = $val;
-                    break;
+        if (isset($args['search_uid']) || !is_null($rownum)) {
+            if (is_null($rownum)) {
+                $rownum = 1;
+                foreach (array_keys($sorted_list['s'], $args['search_uid']) as $val) {
+                    if (empty($sorted_list['m'][$val]) ||
+                        ($sorted_list['m'][$val] == $args['search_mbox'])) {
+                        $rownum = $val;
+                        break;
+                    }
                 }
             }
 
-            $slice_start = $rownum - $args['search_before'];
-            $slice_end = $rownum + $args['search_after'];
+            $slice_start = $rownum - $args['before'];
+            $slice_end = $rownum + $args['after'];
             if ($slice_start < 1) {
                 $slice_end += abs($slice_start) + 1;
             } elseif ($slice_end > $msgcount) {
                 $slice_start -= $slice_end - $msgcount;
             }
+
+            $result->rownum = $rownum;
+        } else {
+            $slice_start = $args['slice_start'];
+            $slice_end = $args['slice_end'];
         }
+
         $slice_start = max(1, $slice_start);
         $slice_end = min($msgcount, $slice_end);
 
         /* Mail-specific viewport information. */
-        $result->metadata = new stdClass;
         $md = &$result->metadata;
         if (!IMP::threadSortAvailable($mbox)) {
             $md->nothread = 1;
@@ -138,20 +144,22 @@ class IMP_Views_ListMessages
         if (IMP::isSpecialFolder($mbox)) {
             $md->special = 1;
         }
-        if ($GLOBALS['imp_search']->isSearchMbox($mbox)) {
+        if ($is_search || $GLOBALS['imp_search']->isSearchMbox($mbox)) {
             $md->search = 1;
+        }
+        if ($GLOBALS['imp_imap']->isReadOnly($mbox)) {
+            $md->readonly = 1;
         }
 
         /* Check for mailbox existence now. If there are no messages, there
          * is a chance that the mailbox doesn't exist. If there is at least
          * 1 message, we don't need this check. */
-        if (empty($msgcount) && is_null($search_id)) {
-            $imp_folder = &IMP_Folder::singleton();
+        if (empty($msgcount) && !isset($md->search)) {
+            $imp_folder = IMP_Folder::singleton();
             if (!$imp_folder->exists($mbox)) {
-                $GLOBALS['notification']->push(sprintf(_("Mailbox %s does not exist."), $label), 'horde.error');
+                $GLOBALS['notification']->push(sprintf(_("Mailbox %s does not exist."), IMP::getLabel($mbox)), 'horde.error');
             }
 
-            $result->data = $result->rowlist = array();
             return $result;
         }
 
@@ -161,10 +169,10 @@ class IMP_Views_ListMessages
          * ViewPort). */
         if (!isset($md->search) &&
             !empty($args['cacheid']) &&
-            !empty($args['cached'])) {
+            !empty($args['cache'])) {
             $uid_expire = false;
             try {
-                $status = $GLOBALS['imp_imap']->ob->status($mbox, Horde_Imap_Client::STATUS_UIDVALIDITY);
+                $status = $GLOBALS['imp_imap']->ob()->status($mbox, Horde_Imap_Client::STATUS_UIDVALIDITY);
                 list($old_uidvalid,) = explode('|', $args['cacheid']);
                 $uid_expire = ($old_uidvalid != $status['uidvalidity']);
             } catch (Horde_Imap_Cache_Exception $e) {
@@ -172,19 +180,19 @@ class IMP_Views_ListMessages
             }
 
             if ($uid_expire) {
-                $args['cached'] = array();
+                $args['cache'] = array();
                 $result->reset = $result->resetmd = 1;
             }
         }
 
         /* Get the cached list. */
-        if (empty($args['cached'])) {
+        if (empty($args['cache'])) {
             $cached = array();
         } else {
             if (isset($md->search)) {
-                $cached = Horde_Serialize::unserialize($args['cached'], SERIALIZE_JSON);
+                $cached = Horde_Serialize::unserialize($args['cache'], Horde_Serialize::JSON);
             } else {
-                $cached = IMP::parseRangeString($args['cached']);
+                $cached = $GLOBALS['imp_imap']->ob()->utils->fromSequenceString($args['cache']);
                 $cached = reset($cached);
             }
             $cached = array_flip($cached);
@@ -194,8 +202,8 @@ class IMP_Views_ListMessages
         $data = $msglist = $rowlist = array();
         foreach (range($slice_start, $slice_end) as $key) {
             $uid = $sorted_list['s'][$key] .
-                (isset($sorted_list['m'][$key]['m'])
-                    ? $sorted_list['m'][$key]['m']
+                (isset($sorted_list['m'][$key])
+                    ? IMP::IDX_SEP . $sorted_list['m'][$key]
                     : '');
             if ($uid) {
                 $msglist[$key] = $sorted_list['s'][$key];
@@ -207,22 +215,11 @@ class IMP_Views_ListMessages
         }
         $result->rowlist = $rowlist;
 
-        /* Build the overview list for slice information. */
+        /* Build the list for rangeslice information. */
         if ($args['rangeslice']) {
             $slice = new stdClass;
-            $slice->id = $mbox;
-            $slice->partial = 1;
-            $slice->rowlist = $rowlist;
-
-            $slice_data = array();
-            foreach ($rowlist as $key => $val) {
-                $slice_data[$key] = array(
-                    'imapuid' => $sorted_list['s'][$val],
-                    'mailbox' => isset($sorted_list['m'][$val]['m']) ? $sorted_list['m'][$val]['m'] : $mbox,
-                    'rownum' => $val
-                );
-            }
-            $slice->data = $slice_data;
+            $slice->rangelist = array_keys($rowlist);
+            $slice->view = $mbox;
 
             return $slice;
         }
@@ -231,16 +228,16 @@ class IMP_Views_ListMessages
         $result->data = $this->_getOverviewData($imp_mailbox, $mbox, $data, isset($md->search));
 
         /* Get unseen/thread information. */
-        if (is_null($search_id)) {
-            $imptree = &IMP_IMAP_Tree::singleton();
+        if (!isset($md->search)) {
+            $imptree = IMP_Imap_Tree::singleton();
             $info = $imptree->getElementInfo($mbox);
             if (!empty($info)) {
-                $md->unseen = $info['unseen'];
+                $md->unseen = intval($info['unseen']);
             }
 
             if ($sortpref['by'] == Horde_Imap_Client::SORT_THREAD) {
                 $threadob = $imp_mailbox->getThreadOb();
-                $imp_thread = new IMP_IMAP_Thread($threadob);
+                $imp_thread = new IMP_Imap_Thread($threadob);
                 $md->thread = $imp_thread->getThreadTreeOb($msglist, $sortpref['dir']);
             }
         } else {
@@ -259,60 +256,62 @@ class IMP_Views_ListMessages
      *                                  to process.
      * @param boolean $search           Is this a search mbox?
      *
-     * @return array TODO
+     * @return array  TODO
+     * @throws Horde_Exception
      */
     private function _getOverviewData($imp_mailbox, $folder, $msglist, $search)
     {
-        $lookup = $msgs = array();
+        $msgs = array();
 
         if (empty($msglist)) {
             return $msgs;
         }
 
-        require_once 'Horde/Identity.php';
-
         /* Get mailbox information. */
-        $overview = $imp_mailbox->getMailboxArray($msglist, false, array('list-post'));
-        $charset = NLS::getCharset();
+        $overview = $imp_mailbox->getMailboxArray($msglist, array('headers' => array('list-post', 'x-priority'), 'structure' => $GLOBALS['prefs']->getValue('atc_flag')));
+        $charset = Horde_Nls::getCharset();
         $imp_ui = new IMP_UI_Mailbox($folder);
+        $no_flags_hook = false;
 
         /* Display message information. */
         reset($overview['overview']);
-        while (list($msgIndex, $ob) = each($overview['overview'])) {
+        while (list(,$ob) = each($overview['overview'])) {
             /* Initialize the header fields. */
             $msg = array(
-                'imapuid' => $ob['uid'],
+                'imapuid' => intval($ob['uid']),
                 'menutype' => 'message',
-                'rownum' => $msgIndex,
                 'view' => $ob['mailbox'],
             );
 
             /* Get all the flag information. */
-            $bg = array('msgRow');
-            if ($_SESSION['imp']['protocol'] != 'pop') {
-                if (!in_array('\\seen', $ob['flags'])) {
-                    $bg[] = 'unseen';
-                }
-                if (in_array('\\answered', $ob['flags'])) {
-                    $bg[] = 'answered';
-                }
-                if (in_array('\\draft', $ob['flags'])) {
-                    $bg[] = 'draft';
-                    $msg['menutype'] = 'draft';
-                    $msg['draft'] = 1;
-                }
-                if (in_array('\\flagged', $ob['flags'])) {
-                    $bg[] = 'flagged';
-                }
-                if (in_array('\\deleted', $ob['flags'])) {
-                    $bg[] = 'deletedmsg';
-                }
-                if (in_array('$forwarded', $ob['flags'])) {
-                    $bg[] = 'forwarded';
+            if (!$no_flags_hook) {
+                try {
+                    $ob['flags'] = array_merge($ob['flags'], Horde::callHook('msglist_flags', array($ob, 'dimp'), 'imp'));
+                } catch (Horde_Exception_HookNotSet $e) {
+                    $no_flags_hook = true;
                 }
             }
 
-            $msg['bg'] = $bg;
+            $imp_flags = IMP_Imap_Flags::singleton();
+            $flag_parse = $imp_flags->parse(array(
+                'atc' => isset($ob['structure']) ? $ob['structure'] : null,
+                'flags' => $ob['flags'],
+                'personal' => Horde_Mime_Address::getAddressesFromObject($ob['envelope']['to']),
+                'priority' => $ob['headers']->getValue('x-priority')
+            ));
+
+            if (!empty($flag_parse)) {
+                $msg['flag'] = array();
+                foreach ($flag_parse as $val) {
+                    $msg['flag'][] = $val['flag'];
+                }
+            }
+
+            /* Specific flag checking. */
+            if (in_array('\\draft', $ob['flags'])) {
+                $msg['menutype'] = 'draft';
+                $msg['draft'] = 1;
+            }
 
             /* Format size information. */
             $msg['size'] = htmlspecialchars($imp_ui->getSize($ob['size']), ENT_QUOTES, $charset);
@@ -338,45 +337,39 @@ class IMP_Views_ListMessages
             /* Need both UID and mailbox to create a unique ID string if
              * using a search mailbox.  Otherwise, use only the UID. */
             if ($search) {
-                $msgs[$ob['uid'] . $ob['mailbox']] = $msg;
+                $msgs[$ob['uid'] . IMP::IDX_SEP . $ob['mailbox']] = $msg;
             } else {
                 $msgs[$ob['uid']] = $msg;
-            }
-
-            if (!isset($lookup[$ob['mailbox']])) {
-                $lookup[$ob['mailbox']] = array();
-            }
-            $lookup[$ob['mailbox']][] = $ob['uid'];
-        }
-
-        /* Add user supplied information from hook. */
-        if (!empty($GLOBALS['conf']['imp']['hooks']['msglist_format'])) {
-            foreach (array_keys($lookup) as $mbox) {
-                $ob_f = Horde::callHook('_imp_hook_msglist_format', array($mbox, $lookup[$mbox], 'dimp'), 'imp');
-
-                foreach ($ob_f as $uid => $val) {
-                    if ($search) {
-                        $ptr = &$msgs[$uid . $mbox];
-                    } else {
-                        $ptr = &$msgs[$uid];
-                    }
-
-                    if (!empty($val['atc'])) {
-                        $ptr['atc'] = $val['atc'];
-                    }
-
-                    if (!empty($val['class'])) {
-                        $ptr['bg'] = array_merge($ptr['bg'], $val['class']);
-                    }
-                }
             }
         }
 
         /* Allow user to alter template array. */
-        if (!empty($GLOBALS['conf']['imp']['dimp']['hooks']['mailboxarray'])) {
-            $msgs = Horde::callHook('_imp_hook_dimp_mailboxarray', array($msgs), 'imp');
-        }
+        try {
+            $msgs = Horde::callHook('mailboxarray', array($msgs, 'dimp'), 'imp');
+        } catch (Horde_Exception_HookNotSet $e) {}
 
         return $msgs;
     }
+
+    /**
+     * Prepare the base object used by the ViewPort javascript object.
+     *
+     * @param string $mbox  The mailbox name.
+     *
+     * @return object  The base ViewPort object.
+     */
+    public function getBaseOb($mbox)
+    {
+        $ob = new stdClass;
+        $ob->cacheid = 0;
+        $ob->data = array();
+        $ob->label = IMP::getLabel($mbox);
+        $ob->metadata = new stdClass;
+        $ob->rowlist = array();
+        $ob->totalrows = 0;
+        $ob->view = $mbox;
+
+        return $ob;
+    }
+
 }

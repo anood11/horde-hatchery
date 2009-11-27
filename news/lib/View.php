@@ -2,9 +2,12 @@
 /**
  * News General View Class
  *
- * $Id: View.php 1118 2008-12-04 19:10:41Z duck $
+ * $Id: View.php 1260 2009-02-01 23:15:50Z duck $
  *
- * Copyright Obala d.o.o. (www.obala.si)
+ * Copyright 2009 The Horde Project (http://www.horde.org/)
+ *
+ * See the enclosed file COPYING for license information (GPL). If you
+ * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
  *
  * @author  Duck <duck@obala.net>
  * @package News
@@ -18,7 +21,7 @@ class News_View extends Horde_View {
     {
         /* Set parents defualt data */
         parent::__construct(array('templatePath' => NEWS_TEMPLATES,
-                                  'encoding' => NLS::select()));
+                                  'encoding' => Horde_Nls::select()));
     }
 
     /**
@@ -52,7 +55,7 @@ class News_View extends Horde_View {
      *
      * @param string $tags Video's tags
      */
-    function getTagsLinks($tags)
+    public function getTagsLinks($tags)
     {
         if (empty($tags)) {
             return '';
@@ -62,7 +65,7 @@ class News_View extends Horde_View {
         $search = Horde::applicationUrl('search.php');
         foreach (explode(' ', $tags) as $tag) {
             $html .= '<a href="'
-                    . Util::addParameter($search, array('word' => $tag))
+                    . Horde_Util::addParameter($search, array('word' => $tag))
                      . '">' . $tag . '</a> ';
         }
 

@@ -12,33 +12,31 @@
  * @package IMP
  */
 
-function &_getIMPContents($index, $mailbox)
+function _getIMPContents($uid, $mailbox)
 {
-    if (empty($index)) {
+    if (empty($uid)) {
         return false;
     }
-    $imp_contents = &IMP_Contents::singleton($index . IMP::IDX_SEP . $mailbox);
-    if (is_a($imp_contents, 'PEAR_Error')) {
+    try {
+        $imp_contents = IMP_Contents::singleton($uid . IMP::IDX_SEP . $mailbox);
+        return $imp_contents;
+    } catch (Horde_Exception $e) {
         $GLOBALS['notification']->push(_("Could not retrieve the message from the mail server."), 'horde.error');
         return false;
     }
-    return $imp_contents;
 }
 
-require_once dirname(__FILE__) . '/lib/base.php';
-require_once 'Horde/Identity.php';
+require_once dirname(__FILE__) . '/lib/Application.php';
+new IMP_Application(array('init' => true, 'tz' => true));
 
 /* The message text and headers. */
 $msg = '';
-$header = array(
-    'in_reply_to' => Util::getFormData('in_reply_to'),
-    'references' => Util::getFormData('references')
-);
+$header = array();
 
 /* Set the current identity. */
-$identity = &Identity::singleton(array('imp', 'imp'));
+$identity = Horde_Prefs_Identity::singleton(array('imp', 'imp'));
 if (!$prefs->isLocked('default_identity')) {
-    $identity_id = Util::getFormData('identity');
+    $identity_id = Horde_Util::getFormData('identity');
     if (!is_null($identity_id)) {
         $identity->setDefault($identity_id);
     }
@@ -46,36 +44,31 @@ if (!$prefs->isLocked('default_identity')) {
 
 $save_sent_mail = $prefs->getValue('save_sent_mail');
 $sent_mail_folder = $identity->getValue('sent_mail_folder');
-$index = Util::getFormData('index');
-$thismailbox = Util::getFormData('thismailbox');
+$thismailbox = Horde_Util::getFormData('thismailbox');
+$uid = Horde_Util::getFormData('uid');
 $resume_draft = false;
 
 /* Determine if mailboxes are readonly. */
 $draft = IMP::folderPref($prefs->getValue('drafts_folder'), true);
-$readonly_drafts = (empty($draft)) ? false : $imp_imap->isReadOnly($draft);
+$readonly_drafts = empty($draft) ? false : $imp_imap->isReadOnly($draft);
 if ($imp_imap->isReadOnly($sent_mail_folder)) {
     $save_sent_mail = false;
 }
 
 /* Determine if compose mode is disabled. */
-$compose_disable = !empty($conf['hooks']['disable_compose']) &&
-    Horde::callHook('_imp_hook_disable_compose', array(true), 'imp');
-
-/* Set the current time zone. */
-NLS::setTimeZone();
+$compose_disable = !IMP::canCompose();
 
 /* Initialize the IMP_Compose:: object. */
-$imp_compose = &IMP_Compose::singleton(Util::getFormData('composeCache'));
+$imp_compose = IMP_Compose::singleton(Horde_Util::getFormData('composeCache'));
 
 /* Run through the action handlers. */
-$actionID = Util::getFormData('a');
+$actionID = Horde_Util::getFormData('a');
 switch ($actionID) {
 // 'd' = draft
 case 'd':
-    $result = $imp_compose->resumeDraft($index . IMP::IDX_SEP . $thismailbox);
-    if (is_a($result, 'PEAR_Error')) {
-        $notification->push($result, 'horde.error');
-    } else {
+    try {
+        $result = $imp_compose->resumeDraft($uid . IMP::IDX_SEP . $thismailbox);
+
         $msg = $result['msg'];
         $header = array_merge($header, $result['header']);
         if (!is_null($result['identity']) &&
@@ -85,19 +78,21 @@ case 'd':
             $sent_mail_folder = $identity->getValue('sent_mail_folder');
         }
         $resume_draft = true;
+    } catch (IMP_Compose_Exception $e) {
+        $notification->push($e, 'horde.error');
     }
     break;
 
 case _("Expand Names"):
-    $action = Util::getFormData('action');
+    $action = Horde_Util::getFormData('action');
     $imp_ui = new IMP_UI_Compose();
-    $header['to'] = $imp_ui->expandAddresses(Util::getFormData('to'), $imp_compose);
+    $header['to'] = $imp_ui->expandAddresses(Horde_Util::getFormData('to'), $imp_compose);
     if ($action !== 'rc') {
         if ($prefs->getValue('compose_cc')) {
-            $header['cc'] = $imp_ui->expandAddresses(Util::getFormData('cc'), $imp_compose);
+            $header['cc'] = $imp_ui->expandAddresses(Horde_Util::getFormData('cc'), $imp_compose);
         }
         if ($prefs->getValue('compose_bcc')) {
-            $header['bcc'] = $imp_ui->expandAddresses(Util::getFormData('bcc'), $imp_compose);
+            $header['bcc'] = $imp_ui->expandAddresses(Horde_Util::getFormData('bcc'), $imp_compose);
         }
     }
     if (!is_null($action)) {
@@ -111,55 +106,75 @@ case _("Expand Names"):
 case 'r':
 case 'ra':
 case 'rl':
-    if (!($imp_contents = &_getIMPContents($index, $thismailbox))) {
+    if (!($imp_contents = _getIMPContents($uid, $thismailbox))) {
         break;
     }
     $actions = array('r' => 'reply', 'ra' => 'reply_all', 'rl' => 'reply_list');
-    $reply_msg = $imp_compose->replyMessage($actions[$actionID], $imp_contents, Util::getFormData('to'));
+    $reply_msg = $imp_compose->replyMessage($actions[$actionID], $imp_contents, Horde_Util::getFormData('to'));
     $header = $reply_msg['headers'];
+
+    $notification->push(_("Reply text will be automatically appended to your outgoing message."), 'horde.message');
     break;
 
 // 'f' = forward
 case 'f':
-    if (!($imp_contents = &_getIMPContents($index, $thismailbox))) {
+    if (!($imp_contents = _getIMPContents($uid, $thismailbox))) {
         break;
     }
     $fwd_msg = $imp_compose->forwardMessage($imp_contents);
     $header = $fwd_msg['headers'];
+
+    $notification->push(_("Forwarded message will be automatically added to your outgoing message."), 'horde.message');
     break;
 
 case _("Redirect"):
-    if (!($imp_contents = &_getIMPContents($index, $thismailbox))) {
+    if (!($imp_contents = _getIMPContents($uid, $thismailbox))) {
         break;
     }
 
     $imp_ui = new IMP_UI_Compose();
 
-    $f_to = $imp_ui->getAddressList(Util::getFormData('to'));
+    $f_to = $imp_ui->getAddressList(Horde_Util::getFormData('to'));
 
-    $result = $imp_ui->redirectMessage($f_to, $imp_compose, $imp_contents, NLS::getEmailCharset());
-    if (!is_a($result, 'PEAR_Error')) {
+    try {
+        $imp_ui->redirectMessage($f_to, $imp_compose, $imp_contents, Horde_Nls::getEmailCharset());
         if ($prefs->getValue('compose_confirm')) {
             $notification->push(_("Message redirected successfully."), 'horde.success');
         }
         require IMP_BASE . '/mailbox-mimp.php';
         exit;
+    } catch (Horde_Exception $e) {
+        $actionID = 'rc';
+        $notification->push($e, 'horde.error');
     }
-    $actionID = 'rc';
-    $notification->push($result, 'horde.error');
     break;
 
+case _("Save Draft"):
 case _("Send"):
-    if ($compose_disable) {
+    switch ($actionID) {
+    case _("Save Draft"):
+        if ($readonly_drafts) {
+            break 2;
+        }
+        break;
+
+    case _("Send"):
+        if ($compose_disable) {
+            break 2;
+        }
         break;
     }
-    $message = Util::getFormData('message', '');
-    $f_to = Util::getFormData('to');
+
+    $message = Horde_Util::getFormData('message', '');
+    $f_to = Horde_Util::getFormData('to');
     $f_cc = $f_bcc = null;
     $header = array();
 
-    if ($ctype = Util::getFormData('ctype')) {
-        if (!($imp_contents = &_getIMPContents($index, $thismailbox))) {
+    $thismailbox = $imp_compose->getMetadata('mailbox');
+    $uid = $imp_compose->getMetadata('uid');
+
+    if ($ctype = $imp_compose->getMetadata('reply_type')) {
+        if (!($imp_contents = _getIMPContents($uid, $thismailbox))) {
             break;
         }
 
@@ -174,52 +189,72 @@ case _("Send"):
             $fwd_msg = $imp_compose->forwardMessage($imp_contents);
             $msg = $fwd_msg['body'];
             $message .= "\n" . $msg;
-            $imp_compose->attachIMAPMessage(array($index . IMP::IDX_SEP . $thismailbox), $header);
+            $imp_compose->attachIMAPMessage(array($uid . IMP::IDX_SEP . $thismailbox), $header);
             break;
         }
     }
 
-    $sig = $identity->getSignature();
-    if (!empty($sig)) {
-        $message .= "\n" . $sig;
+    try {
+        $header['from'] = $identity->getFromLine(null, Horde_Util::getFormData('from'));
+    } catch (Horde_Exception $e) {
+        $header['from'] = '';
     }
-
-    $header['from'] = $identity->getFromLine(null, Util::getFormData('from'));
     $header['replyto'] = $identity->getValue('replyto_addr');
-    $header['subject'] = Util::getFormData('subject');
+    $header['subject'] = Horde_Util::getFormData('subject');
 
     $imp_ui = new IMP_UI_Compose();
 
-    $header['to'] = $imp_ui->getAddressList(Util::getFormData('to'));
-    if ($conf['compose']['allow_cc']) {
-        $header['cc'] = $imp_ui->getAddressList(Util::getFormData('cc'));
+    $header['to'] = $imp_ui->getAddressList(Horde_Util::getFormData('to'));
+    if ($prefs->getValue('compose_cc')) {
+        $header['cc'] = $imp_ui->getAddressList(Horde_Util::getFormData('cc'));
     }
-    if ($conf['compose']['allow_bcc']) {
-        $header['bcc'] = $imp_ui->getAddressList(Util::getFormData('bcc'));
+    if ($prefs->getValue('compose_bcc')) {
+        $header['bcc'] = $imp_ui->getAddressList(Horde_Util::getFormData('bcc'));
     }
 
-    $options = array(
-        'save_sent' => $save_sent_mail,
-        'sent_folder' => $sent_mail_folder,
-        'reply_type' => $ctype,
-        'reply_index' => empty($index) ? null : $index . IMP::IDX_SEP . $thismailbox,
-        'readreceipt' => Util::getFormData('request_read_receipt')
-    );
-    $sent = $imp_compose->buildAndSendMessage($message, $header, NLS::getEmailCharset(), false, $options);
+    switch ($actionID) {
+    case _("Save Draft"):
+        try {
+            $notification->push($imp_compose->saveDraft($header, $message, Horde_Nls::getCharset(), false), 'horde.success');
+            $imp_compose->destroy();
+            require IMP_BASE . '/mailbox-mimp.php';
+            exit;
+        } catch (IMP_Compose_Exception $e) {
+            $notification->push($e, 'horde.error');
+        }
+        break;
 
-    if (is_a($sent, 'PEAR_Error')) {
-        $notification->push($sent, 'horde.error');
-    } elseif ($sent) {
-        if (Util::getFormData('resume_draft') &&
-            $prefs->getValue('auto_delete_drafts')) {
-            $imp_message = &IMP_Message::singleton();
-            $idx_array = array($index . IMP::IDX_SEP . $thismailbox);
-            $delete_draft = $imp_message->delete($idx_array, true);
+    case _("Save"):
+        $sig = $identity->getSignature();
+        if (!empty($sig)) {
+            $message .= "\n" . $sig;
         }
 
-        $notification->push(_("Message sent successfully."), 'horde.success');
-        require IMP_BASE . '/mailbox-mimp.php';
-        exit;
+        $options = array(
+            'save_sent' => $save_sent_mail,
+            'sent_folder' => $sent_mail_folder,
+            'readreceipt' => Horde_Util::getFormData('request_read_receipt')
+        );
+
+        try {
+            if ($imp_compose->buildAndSendMessage($message, $header, Horde_Nls::getEmailCharset(), false, $options)) {
+                $imp_compose->destroy();
+
+                if (Horde_Util::getFormData('resume_draft') &&
+                    $prefs->getValue('auto_delete_drafts')) {
+                    $imp_message = IMP_Message::singleton();
+                    $idx_array = array($uid . IMP::IDX_SEP . $thismailbox);
+                    $delete_draft = $imp_message->delete($idx_array, array('nuke' => true));
+                }
+
+                $notification->push(_("Message sent successfully."), 'horde.success');
+                require IMP_BASE . '/mailbox-mimp.php';
+                exit;
+            }
+        } catch (IMP_Compose_Exception $e) {
+            $notification->push($e, 'horde.error');
+        }
+        break;
     }
     break;
 }
@@ -228,23 +263,24 @@ case _("Send"):
 $cacheID = $imp_compose->getCacheId();
 
 $title = _("Message Composition");
+$mimp_render = new Horde_Mobile();
 $mimp_render->set('title', $title);
 
 $select_list = $identity->getSelectList();
 
 /* Grab any data that we were supplied with. */
 if (empty($msg)) {
-    $msg = Util::getFormData('message', '');
+    $msg = Horde_Util::getFormData('message', '');
 }
 foreach (array('to', 'cc', 'bcc', 'subject') as $val) {
     if (empty($header[$val])) {
-        $header[$val] = Util::getFormData($val);
+        $header[$val] = Horde_Util::getFormData($val);
     }
 }
 
-$menu = &new Horde_Mobile_card('o', _("Menu"));
+$menu = new Horde_Mobile_card('o', _("Menu"));
 $mset = &$menu->add(new Horde_Mobile_linkset());
-MIMP::addMIMPMenu($mset, 'compose');
+IMP_Mimp::addMIMPMenu($mset, 'compose');
 
 if ($actionID == 'rc') {
     require IMP_TEMPLATES . '/compose/redirect-mimp.inc';

@@ -4,14 +4,16 @@
  *
  * $Id: add.php 1186 2009-01-21 10:24:00Z duck $
  *
- * Copyright Obala d.o.o. (www.obala.si)
+ * Copyright 2009 The Horde Project (http://www.horde.org/)
+ *
+ * See the enclosed file COPYING for license information (GPL). If you
+ * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
  *
  * @author  Duck <duck@obala.net>
  * @package News
  */
 
 require_once dirname(__FILE__) . '/lib/base.php';
-require_once 'Horde/Variables.php';
 
 /**
  * This routine removes all attributes from a given tag except
@@ -86,19 +88,19 @@ function _max_upload_size()
 }
 
 // Is logged it?
-if (!Auth::isAuthenticated()) {
+if (!Horde_Auth::isAuthenticated()) {
     $notification->push(_("Only authenticated users can post news."), 'horde.warning');
-    Horde::authenticationFailureRedirect();
+    Horde_Auth::authenticateFailure('news');
 }
 
 // Default vars
 $title = _("Add news");
 $default_lang = News::getLang();
-$id = Util::getFormData('id', false);
-$return = Util::getFormData('return', false);
+$id = Horde_Util::getFormData('id', false);
+$return = Horde_Util::getFormData('return', false);
 
 // We just delete default image?
-if ($id && Util::getFormData('submitbutton') == _("Delete existing picture")) {
+if ($id && Horde_Util::getFormData('submitbutton') == _("Delete existing picture")) {
     $result = $news->write_db->query('UPDATE ' . $news->prefix . ' SET picture = ? WHERE id = ?', array(0, $id));
     if ($sources instanceof PEAR_Error) {
         $notification->push($sources);
@@ -110,7 +112,7 @@ if ($id && Util::getFormData('submitbutton') == _("Delete existing picture")) {
 }
 
 // Prepare form
-$vars = Variables::getDefaultVariables();
+$vars = Horde_Variables::getDefaultVariables();
 $form = new Horde_Form($vars, '', 'addnews');
 $form->addHidden('', 'return', 'text', false, true);
 
@@ -124,7 +126,7 @@ if ($id) {
 $form->setSection('content', _("Content"), '', false);
 $form->addVariable(_("News content"), 'content', 'header', false);
 
-$v = &$form->addVariable(_("Publish"), 'publish', 'datetime', true, false, false, $news->datetimeParams());
+$v = &$form->addVariable(_("Publish"), 'publish', 'datetime', true, false, false, News::datetimeParams());
 $v->setDefault(date('Y-m-d H:i:s'));
 $form->addVariable(_("Primary category"), 'category1', 'enum', true, false, false, array($news_cat->getEnum(), _("-- select --")));
 
@@ -213,7 +215,7 @@ if ($conf['attributes']['attachments']) {
     }
 }
 
-if (Auth::isAdmin('news:admin')) {
+if (Horde_Auth::isAdmin('news:admin')) {
 
     $form->setSection('admin', _("Admin"), '', true);
     $form->addVariable(_("News administrator options"), 'content', 'header', false);
@@ -232,13 +234,15 @@ if (Auth::isAdmin('news:admin')) {
     foreach ($registry->listAPIs() as $api) {
         if ($registry->hasMethod($api . '/getSellingForm')) {
             $apis[$api] = array();
-            $articles = $registry->call($api  . '/listCostObjects');
-            if ($articles instanceof PEAR_Error) {
-                $notification->push($articles);
-            } elseif (!empty($articles)) {
-                foreach ($articles[0]['objects'] as $item) {
-                    $apis[$api][$item['id']] = $item['name'];
+            try {
+                $articles = $registry->call($api  . '/listCostObjects');
+                if (!empty($articles)) {
+                    foreach ($articles[0]['objects'] as $item) {
+                        $apis[$api][$item['id']] = $item['name'];
+                    }
                 }
+            } catch (Horde_Exception $e) {
+                $notification->push($e);
             }
         }
     }
@@ -248,8 +252,12 @@ if (Auth::isAdmin('news:admin')) {
     }
 
     // Show from
-    $available = $GLOBALS['registry']->callByPackage('ulaform', 'getForms');
-    if (!($available instanceof PEAR_Error)) {
+    if ($registry->hasMethod('forms/getForms')) {
+        $available = $registry->call('forms/getForms');
+        if ($available instanceof PEAR_Error) {
+            $notification->push($available, 'horde.warning');
+            $available = array();
+        }
         $forms = array();
         foreach ($available as $f) {
             $forms[$f['form_id']] = $f['form_name'];
@@ -264,7 +272,7 @@ if (Auth::isAdmin('news:admin')) {
 if ($form->validate()) {
 
     $status_inserted = false;
-    $allowed_cats = $news_cat->getAllowed(PERMS_DELETE);
+    $allowed_cats = $news_cat->getAllowed(Horde_Perms::DELETE);
     $form->getInfo(null, $info);
 
     // Check permissions
@@ -275,7 +283,7 @@ if ($form->validate()) {
 
     if (!empty($allowed_cats) &&
         (in_array($info['category1'], $allowed_cats) || in_array($info['category2'], $allowed_cats))) {
-        $info['editor'] = Auth::getAuth();
+        $info['editor'] = Horde_Auth::getAuth();
         $info['status'] = News::CONFIRMED;
     }
 
@@ -341,7 +349,7 @@ if ($form->validate()) {
         $data = array($info['sortorder'],
                       $info['status'],
                       $info['publish'],
-                      Auth::getAuth(),
+                      Horde_Auth::getAuth(),
                       $info['editor'],
                       @$info['sourcelink'],
                       isset($info['source']) ? $info['source'] : '',
@@ -351,7 +359,7 @@ if ($form->validate()) {
                       $info['category2'],
                       $info['chars'],
                       sizeof(@$info['attachments']),
-                      isset($galleries) ? $info['gallery'] : 0,
+                      empty($info['gallery']) ? 0 : $info['gallery'],
                       $info['selling'],
                       $info['threads'],
                       empty($info['form_id']) ? 0 : (int)$info['form_id'],
@@ -378,7 +386,7 @@ if ($form->validate()) {
                       $info['category2'],
                       $info['chars'],
                       sizeof(@$info['attachments']),
-                      isset($galleries) ? $info['gallery'] : 0,
+                      empty($info['gallery']) ? 0 : $info['gallery'],
                       $info['selling'],
                       $info['threads'],
                       empty($info['form_id']) ? 0 : (int)$info['form_id'],
@@ -429,29 +437,30 @@ if ($form->validate()) {
 
         // Do we have a gallery?
         if (empty($info['gallery'])) {
-            $abbr = String::substr(strip_tags($info['body'][$default_lang]['content']), 0, $conf['preview']['list_content']);
-            $result = $registry->call('images/createGallery',
-                                        array(null,
-                                                array('name' => $info['body'][$default_lang]['title'],
-                                                        'desc' => $abbr)));
-            if ($result instanceof PEAR_Error) {
-                $notification->push(_("There was an error creating gallery: ") . $result->getMessage(), 'horde.warning');
-            } else {
+            $abbr = Horde_String::substr(strip_tags($info['body'][$default_lang]['content']), 0, $conf['preview']['list_content']);
+            try {
+                $result = $registry->call('images/createGallery',
+                                            array(null,
+                                                    array('name' => $info['body'][$default_lang]['title'],
+                                                            'desc' => $abbr)));
                 $info['gallery'] = $result;
+            } catch (Horde_Exception $e) {
+                $notification->push(_("There was an error creating gallery: ") . $e->getMessage(), 'horde.warning');
             }
         }
 
         if (!empty($info['gallery'])) {
             $news->write_db->query('UPDATE ' . $news->prefix . ' SET gallery = ? WHERE id = ?', array($info['gallery'], $id));
             foreach ($images_uploaded as $i) {
-                $result = $registry->call('images/saveImage',
+                try {
+                    $registry->call('images/saveImage',
                                             array(null, $info['gallery'],
                                                     array('filename' => $info['picture_' . $i]['file'],
                                                             'description' => $info['caption_' . ($i == 0 ? $i . '_' . $default_lang: $i)],
                                                             'type' => $info['picture_' . $i]['type'],
                                                             'data' => file_get_contents($info['picture_' . $i]['file']))));
-                if ($result instanceof PEAR_Error) {
-                    $notification->push(_("There was an error with the uploaded image: ") . $result->getMessage(), 'horde.warning');
+                } catch (Horde_Exception $e) {
+                    $notification->push(_("There was an error with the uploaded image: ") . $e->getMessage(), 'horde.warning');
                 }
             }
         }
@@ -489,9 +498,12 @@ if ($form->validate()) {
             }
         }
         if ($uploaded) {
-            $news->write_db->query('UPDATE ' . $news->prefix . ' SET attachments = ? WHERE id = ?', array(1, $id));
+            $result = $news->write_db->query('UPDATE ' . $news->prefix . ' SET attachments = ? WHERE id = ?', array(1, $id));
+            if ($result instanceof PEAR_Error) {
+                $notification->push($result->getMessage(), 'horde.warning');
+            }
         }
-     }
+    }
 
     // Comments
     if (isset($info['disable_comments']) && $info['disable_comments']) {
@@ -504,7 +516,7 @@ if ($form->validate()) {
                                             . '(id, lang, title, abbreviation, content, picture_comment, tags) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
     foreach ($info['body'] as $lang => $values) {
-        $abbr = String::substr(strip_tags($values['content']), 0, $conf['preview']['list_content']);
+        $abbr = Horde_String::substr(strip_tags($values['content']), 0, $conf['preview']['list_content']);
         $news->write_db->execute($query_body, array($id, $lang, $values['title'], $abbr, $values['content'], $values['caption'], $values['tags']));
     }
 
@@ -516,7 +528,7 @@ if ($form->validate()) {
     }
     $version = $news->db->getOne('SELECT MAX(version) FROM ' . $news->prefix . '_versions WHERE id = ?', array($id));
     $result = $news->write_db->query('INSERT INTO ' . $news->prefix . '_versions (id, version, action, created, user_uid, content) VALUES (?, ?, ?, NOW(), ? ,?)',
-                                array($id, $version + 1, $status_version, Auth::getAuth(), serialize($info['body'])));
+                                array($id, $version + 1, $status_version, Horde_Auth::getAuth(), serialize($info['body'])));
     if ($result instanceof PEAR_Error) {
         $notification->push($result);
     }
@@ -531,7 +543,7 @@ if ($form->validate()) {
         $url = $return;
     } elseif (in_array($info['category1'], $allowed_cats) ||
               in_array($info['category2'], $allowed_cats)) {
-        $url = Util::addParameter(Horde::applicationUrl('edit.php'), 'id', $id);
+        $url = Horde_Util::addParameter(Horde::applicationUrl('edit.php'), 'id', $id);
     } else {
         $url = Horde::applicationUrl('browse.php');
     }
@@ -583,19 +595,18 @@ if ($form->validate()) {
         }
     }
 
-    $form->_submit = _("Update");
-    $form->_reset = _("Reset");
+    $form->setButtons(_("Update"), _("Reset"));
 }
 
 // Add editor now to avoud JS error notifications no redirect
 foreach ($conf['attributes']['languages'] as $key) {
-    Horde_Editor::singleton('fckeditor', array('id' => "content_$key"));
+    Horde_Editor::singleton('Ckeditor', array('id' => "content_$key"));
 }
 
 require_once NEWS_TEMPLATES . '/common-header.inc';
 require_once NEWS_TEMPLATES . '/menu.inc';
 require_once NEWS_TEMPLATES . '/add/before.inc';
 
-$form->renderActive(null, null, Util::addParameter(Horde::applicationUrl('add.php'), 'id', $id, false), 'post');
+$form->renderActive(null, null, Horde_Util::addParameter(Horde::applicationUrl('add.php'), 'id', $id, false), 'post');
 
 require_once $registry->get('templates', 'horde') . '/common-footer.inc';

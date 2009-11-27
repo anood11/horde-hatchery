@@ -1,1 +1,36 @@
-function sbarToggle(){var A=$(document.body),B;if(A.hasClassName("rightPanel")){B=0;A.removeClassName("rightPanel")}else{B=1;A.addClassName("rightPanel")}new Ajax.Request(KronolithVar.pref_api_url,{parameters:{app:"kronolith",pref:"show_panel",value:B}})}document.observe("dom:loaded",function(){$$("#pageControlsInner .checkbox").invoke("observe","click",function(){Views.invalidate();ShowView(kronolithView,{date:kronolithDate.getFullYear()+(kronolithDate.getMonth()+1).toPaddedString(2)+kronolithDate.getDate().toPaddedString(2),toggle_calendar:this.value},false)});$$("#pageControlsInner .calendar-info").invoke("observe","click",function(){RedBox.loading();var A=this.up().select(".checkbox").first().value;new Ajax.Request(KronolithVar.calendar_info_url,{parameters:{c:A},method:"get",onSuccess:function(B){RedBox.showHtml('<div id="RB_info">'+B.responseText+'<input type="button" class="button" onclick="RedBox.close();" value="'+KronolithText.close+'" /></div>')},onFailure:function(B){RedBox.close()}})})});
+function sbarToggle()
+{
+    var body = $(document.body), pref_value;
+
+    if (body.hasClassName('rightPanel')) {
+        pref_value = 0;
+        body.removeClassName('rightPanel');
+    } else {
+        pref_value = 1;
+        body.addClassName('rightPanel');
+    }
+
+    new Ajax.Request(KronolithVar.pref_api_url, { parameters: { pref: 'show_panel', value: pref_value } });
+}
+
+document.observe('dom:loaded', function() {
+    $$('#pageControlsInner .checkbox').invoke('observe', 'click', function() {
+        Views.invalidate();
+        ShowView(kronolithView, { date: kronolithDate.getFullYear() + (kronolithDate.getMonth() + 1).toPaddedString(2) + kronolithDate.getDate().toPaddedString(2), toggle_calendar: this.value }, false);
+    });
+
+    $$('#pageControlsInner .calendar-info').invoke('observe', 'click', function() {
+        RedBox.loading();
+        var calendar_id = this.up().select('.checkbox').first().value;
+        new Ajax.Request(KronolithVar.calendar_info_url, {
+            parameters: { c: calendar_id },
+            method: 'get',
+            onSuccess: function(transport) {
+                RedBox.showHtml('<div id="RB_info">' + transport.responseText + '<input type="button" class="button" onclick="RedBox.close();" value="' + KronolithText.close + '" /></div>');
+            },
+            onFailure: function(transport) {
+                RedBox.close();
+            }
+        });
+    });
+});

@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- $Horde: kronolith/config/conf.xml,v 1.23 2008/10/22 21:14:06 jan Exp $ -->
+<!-- $Id$ -->
 <configuration>
  <configsection name="calendar">
   <configheader>Calendar Driver Settings</configheader>
@@ -51,12 +51,6 @@
   </configswitch>
  </configsection>
 
- <configsection name="metadata">
-  <configheader>Metadata Settings</configheader>
-  <configboolean name="keywords" desc="Should keywords be loaded from
-   config/keywords.php to be assigned to events?">false</configboolean>
- </configsection>
-
  <configsection name="reminder">
   <configheader>Reminder Settings</configheader>
   <configstring name="server_name" desc="Server name from which reminder
@@ -87,8 +81,6 @@
 
  <configsection name="menu">
   <configheader>Menu Settings</configheader>
-  <configboolean name="print" desc="Should we display a Print link in the
-   Kronolith menu?">true</configboolean>
   <configboolean name="import_export" desc="Should we display an Import/Export
    link in the Horde application menus?">true</configboolean>
   <configmultienum name="apps" desc="Select any applications that should be

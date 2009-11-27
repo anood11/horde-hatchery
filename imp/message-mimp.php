@@ -18,26 +18,25 @@
  * @package IMP
  */
 
-require_once dirname(__FILE__) . '/lib/base.php';
+require_once dirname(__FILE__) . '/lib/Application.php';
+new IMP_Application(array('init' => true, 'tz' => true));
 
 /* Make sure we have a valid index. */
-$imp_mailbox = &IMP_Mailbox::singleton($imp_mbox['mailbox'], $imp_mbox['index']);
-if (!$imp_mailbox->isValidIndex()) {
-    header('Location: ' . Util::addParameter(IMP::generateIMPUrl('mailbox-mimp.php', $imp_mbox['mailbox']), array('a' => 'm'), null, false));
+$imp_mailbox = IMP_Mailbox::singleton($imp_mbox['mailbox'], $imp_mbox['uid']);
+if (!$imp_mailbox->isValidIndex(false)) {
+    header('Location: ' . Horde_Util::addParameter(IMP::generateIMPUrl('mailbox-mimp.php', $imp_mbox['mailbox']), array('a' => 'm'), null, false));
     exit;
 }
 
-/* Initialize IMP_Message object. */
-$imp_message = &IMP_Message::singleton();
+$imp_message = IMP_Message::singleton();
+$imp_ui = new IMP_UI_Message();
 
 /* Determine if mailbox is readonly. */
 $readonly = $imp_imap->isReadOnly($imp_mbox['mailbox']);
 
-/* Set the current time zone. */
-NLS::setTimeZone();
-
 /* Run through action handlers */
-$actionID = Util::getFormData('a');
+$actionID = Horde_Util::getFormData('a');
+$msg_delete = false;
 switch ($actionID) {
 // 'd' = delete message
 // 'u' = undelete message
@@ -49,103 +48,135 @@ case 'u':
 
     /* Get mailbox/UID of message. */
     $index_array = $imp_mailbox->getIMAPIndex();
-    $indices_array = array($index_array['mailbox'] => array($index_array['index']));
+    $indices_array = array($index_array['mailbox'] => array($index_array['uid']));
 
     if ($actionID == 'u') {
         $imp_message->undelete($indices_array);
     } else {
-        $result = IMP::checkRequestToken('imp.message-mimp', Util::getFormData('mt'));
-        if (is_a($result, 'PEAR_Error')) {
-            $notification->push($result);
-        } else {
+        try {
+            Horde::checkRequestToken('imp.message-mimp', Horde_Util::getFormData('mt'));
             $imp_message->delete($indices_array);
-            if ($prefs->getValue('mailbox_return')) {
-                header('Location: ' . Util::addParameter(IMP::generateIMPUrl('mailbox-mimp.php', $imp_mbox['mailbox']), array('s' => $imp_mailbox->getMessageIndex()), null, false));
-                exit;
-            }
-            if (($_SESSION['imp']['protocol'] != 'pop') &&
-                !IMP::hideDeletedMsgs() &&
-                !$GLOBALS['prefs']->getValue('use_trash')) {
-                $imp_mailbox->setIndex(1, 'offset');
-            }
+            $msg_delete = false;
+        } catch (Horde_Exception $e) {
+            $notification->push($e);
         }
     }
     break;
+
+// 'rs' = report spam
+// 'ri' = report innocent
+case 'rs':
+case 'ri':
+    if (IMP_Spam::reportSpam(array($index_array['mailbox'] => array($index_array['uid'])), $actionID == 'rs' ? 'spam' : 'innocent') === 1) {
+        $msg_delete = true;
+        break;
+    }
+    break;
+
+// 'c' = confirm download
+// Need to build message information, so don't do action until below.
+}
+
+if ($imp_ui->moveAfterAction()) {
+    $imp_mailbox->setIndex(1, 'offset');
 }
 
 /* We may have done processing that has taken us past the end of the
  * message array, so we will return to mailbox.php if that is the
  * case. */
-if (!$imp_mailbox->isValidIndex()) {
-    header('Location: ' . Util::addParameter(IMP::generateIMPUrl('mailbox-mimp.php', $imp_mbox['mailbox']), array('s' => $imp_mailbox->getMessageIndex()), null, false));
+if (!$imp_mailbox->isValidIndex() ||
+    ($msg_delete && $prefs->getValue('mailbox_return'))) {
+    header('Location: ' . Horde_Util::addParameter(IMP::generateIMPUrl('mailbox-mimp.php', $imp_mbox['mailbox']), array('s' => $imp_mailbox->getMessageIndex()), null, false));
     exit;
 }
 
 /* Now that we are done processing the messages, get the index and
  * array index of the current message. */
 $index_array = $imp_mailbox->getIMAPIndex();
-$index = $index_array['index'];
 $mailbox_name = $index_array['mailbox'];
+$uid = $index_array['uid'];
 
 /* Get envelope/flag/header information. */
 try {
     /* Need to fetch flags before HEADERTEXT, because SEEN flag might be set
      * before we can grab it. */
-    $flags_ret = $imp_imap->ob->fetch($mailbox_name, array(
+    $flags_ret = $imp_imap->ob()->fetch($mailbox_name, array(
         Horde_Imap_Client::FETCH_FLAGS => true,
-    ), array('ids' => array($index)));
-    $fetch_ret = $imp_imap->ob->fetch($mailbox_name, array(
+    ), array('ids' => array($uid)));
+    $fetch_ret = $imp_imap->ob()->fetch($mailbox_name, array(
         Horde_Imap_Client::FETCH_ENVELOPE => true,
         Horde_Imap_Client::FETCH_HEADERTEXT => array(array('parse' => true, 'peek' => $readonly))
-    ), array('ids' => array($index)));
+    ), array('ids' => array($uid)));
 } catch (Horde_Imap_Client_Exception $e) {
-    header('Location: ' . Util::addParameter(IMP::generateIMPUrl('mailbox-mimp.php', $mailbox_name), array('a' => 'm'), null, false));
+    header('Location: ' . Horde_Util::addParameter(IMP::generateIMPUrl('mailbox-mimp.php', $mailbox_name), array('a' => 'm'), null, false));
     exit;
 }
 
-$envelope = $fetch_ret[$index]['envelope'];
-$flags = $flags_ret[$index]['flags'];
-$mime_headers = $fetch_ret[$index]['headertext'][0];
+$envelope = $fetch_ret[$uid]['envelope'];
+$flags = $flags_ret[$uid]['flags'];
+$mime_headers = reset($fetch_ret[$uid]['headertext']);
 $use_pop = ($_SESSION['imp']['protocol'] == 'pop');
 
 /* Parse the message. */
-$imp_contents = &IMP_Contents::singleton($index . IMP::IDX_SEP . $mailbox_name);
-if (is_a($imp_contents, 'PEAR_Error')) {
-    header('Location: ' . Util::addParameter(IMP::generateIMPUrl('mailbox-mimp.php', $mailbox_name), array('a' => 'm'), null, false));
+try {
+    $imp_contents = IMP_Contents::singleton($uid . IMP::IDX_SEP . $mailbox_name);
+} catch (Horde_Exception $e) {
+    header('Location: ' . Horde_Util::addParameter(IMP::generateIMPUrl('mailbox-mimp.php', $mailbox_name), array('a' => 'm'), null, false));
     exit;
 }
-
-/* Create the IMP_UI_Message:: object. */
-$imp_ui = new IMP_UI_Message();
-
-/* Create the Identity object. */
-require_once 'Horde/Identity.php';
-$user_identity = &Identity::singleton(array('imp', 'imp'));
 
 /* Get the starting index for the current message and the message count. */
 $msgindex = $imp_mailbox->getMessageIndex();
 $msgcount = $imp_mailbox->getMessageCount();
 
 /* Generate the mailbox link. */
-$mailbox_link = Util::addParameter(IMP::generateIMPUrl('mailbox-mimp.php', $imp_mbox['mailbox']), array('s' => $msgindex));
-$self_link = IMP::generateIMPUrl('message-mimp.php', $imp_mbox['mailbox'], $index, $mailbox_name);
+$mailbox_link = Horde_Util::addParameter(IMP::generateIMPUrl('mailbox-mimp.php', $imp_mbox['mailbox']), array('s' => $msgindex));
+$self_link = IMP::generateIMPUrl('message-mimp.php', $imp_mbox['mailbox'], $uid, $mailbox_name);
+
+/* Init render object. */
+$mimp_render = new Horde_Mobile();
+
+/* Output download confirmation screen. */
+$atc_id = Horde_Util::getFormData('atc');
+if (($actionID == 'c') && !is_null($atc_id)) {
+    $summary = $imp_contents->getSummary($atc_id, IMP_Contents::SUMMARY_SIZE | IMP_Contents::SUMMARY_DESCRIP_NOLINK_NOHTMLSPECCHARS | IMP_Contents::SUMMARY_DOWNLOAD_NOJS);
+
+    $mimp_render->set('title', _("Verify Download"));
+
+    $null = null;
+    $hb = &$mimp_render->add(new Horde_Mobile_block($null));
+
+    $hb->add(new Horde_Mobile_text(_("Click to verify download of attachment") . ': '));
+    $hb->add(new Horde_Mobile_link($summary['description'], $summary['download']));
+    $t = &$hb->add(new Horde_Mobile_text(sprintf(' [%s] %s', $summary['type'], $summary['size']) . "\n"));
+    $t->set('linebreaks', true);
+
+    $hb = &$mimp_render->add(new Horde_Mobile_block($null));
+    $hb->add(new Horde_Mobile_link(_("Return to message view"), $self_link));
+
+    $mimp_render->display();
+    exit;
+}
+
+/* Create the Identity object. */
+$user_identity = Horde_Prefs_Identity::singleton(array('imp', 'imp'));
 
 /* Develop the list of headers to display. */
 $basic_headers = $imp_ui->basicHeaders();
 $display_headers = $msgAddresses = array();
 
-$format_date = $imp_ui->addLocalTime(nl2br($envelope['date']));
+$format_date = $imp_ui->getLocalTime($envelope['date']);
 if (!empty($format_date)) {
     $display_headers['date'] = $format_date;
 }
 
 /* Build From address links. */
-$display_headers['from'] = $imp_ui->buildAddressLinks($envelope['from']);
+$display_headers['from'] = $imp_ui->buildAddressLinks($envelope['from'], null, false);
 
 /* Build To/Cc/Bcc links. */
 foreach (array('to', 'cc', 'bcc') as $val) {
     $msgAddresses[] = $mime_headers->getValue($val);
-    $addr_val = $imp_ui->buildAddressLinks($envelope[$val]);
+    $addr_val = $imp_ui->buildAddressLinks($envelope[$val], null, false);
     if (!empty($addr_val)) {
         $display_headers[$val] = $addr_val;
     }
@@ -157,8 +188,8 @@ if (($subject = $mime_headers->getValue('subject'))) {
     $subject = IMP::filterText($subject);
 
     /* Generate the shortened subject text. */
-    if (String::length($subject) > $conf['mimp']['mailbox']['max_subj_chars']) {
-        $subject = String::substr($subject, 0, $conf['mimp']['mailbox']['max_subj_chars']) . '...';
+    if (Horde_String::length($subject) > $conf['mimp']['mailbox']['max_subj_chars']) {
+        $subject = Horde_String::substr($subject, 0, $conf['mimp']['mailbox']['max_subj_chars']) . '...';
     }
 } else {
     $subject = _("[No Subject]");
@@ -180,34 +211,29 @@ case 'low':
 
 /* Set the status information of the message. */
 $status = '';
-$identity = null;
-if (!$use_pop) {
-    if (!empty($msgAddresses)) {
-        $identity = $user_identity->getMatchingIdentity($msgAddresses);
-        if (!is_null($identity) ||
-            ($user_identity->getMatchingIdentity($msgAddresses, false) !== null)) {
-            $status .= '+';
-        }
-        if (is_null($identity)) {
-            $identity = $user_identity->getDefault();
-        }
-    }
+$match_identity = $identity = null;
 
-    /* Set status flags. */
-    if (!in_array('\\seen', $flags)) {
-        $status .= 'N';
+if (!empty($msgAddresses)) {
+    $match_identity = $identity = $user_identity->getMatchingIdentity($msgAddresses);
+    if (is_null($identity)) {
+        $identity = $user_identity->getDefault();
     }
-    $flag_array = array(
-        '\\answered' => 'r',
-        '\\draft' => 'D',
-        '\\flagged' => '!',
-        '\\deleted' => 'd',
-        /* Support for the pseudo-standard '$Forwarded' flag. */
-        '$forwarded' => 'F'
-    );
-    foreach ($flag_array as $flag => $desc) {
-        if (in_array($flag, $flags)) {
-            $status .= $desc;
+}
+
+$imp_flags = IMP_Imap_Flags::singleton();
+$flag_parse = $imp_flags->parse(array(
+    'flags' => $flags,
+    'personal' => $match_identity
+));
+
+foreach ($flag_parse as $val) {
+    if (isset($val['abbrev'])) {
+        $status .= $val['abbrev'];
+    } elseif ($val['type'] == 'imapp') {
+        if (Horde_String::length($val['label']) > 8) {
+            $status .= ' *' . Horde_String::substr($val['label'], 0, 5) . '...*';
+        } else {
+            $status .= ' *' . $val['label'] . '*';
         }
     }
 }
@@ -215,11 +241,11 @@ if (!$use_pop) {
 /* Generate previous/next links. */
 $prev_msg = $imp_mailbox->getIMAPIndex(-1);
 if ($prev_msg) {
-    $prev_link = IMP::generateIMPUrl('message-mimp.php', $imp_mbox['mailbox'], $prev_msg['index'], $prev_msg['mailbox']);
+    $prev_link = IMP::generateIMPUrl('message-mimp.php', $imp_mbox['mailbox'], $prev_msg['uid'], $prev_msg['mailbox']);
 }
 $next_msg = $imp_mailbox->getIMAPIndex(1);
 if ($next_msg) {
-    $next_link = IMP::generateIMPUrl('message-mimp.php', $imp_mbox['mailbox'], $next_msg['index'], $next_msg['mailbox']);
+    $next_link = IMP::generateIMPUrl('message-mimp.php', $imp_mbox['mailbox'], $next_msg['uid'], $next_msg['mailbox']);
 }
 
 /* Create the body of the message. */
@@ -265,9 +291,11 @@ foreach ($parts_list as $mime_id => $mime_type) {
 }
 
 /* Display the first 250 characters, or display the entire message? */
-if ($prefs->getValue('mimp_preview_msg') && !Util::getFormData('fullmsg')) {
-    $msg_text = String::substr($msg_text, 0, 250) . " [...]\n";
-    $fullmsg_link = new Horde_Mobile_link(_("View Full Message"), Util::addParameter($self_link, array('fullmsg' => 1)));
+if ($prefs->getValue('mimp_preview_msg') &&
+    !Horde_Util::getFormData('fullmsg') &&
+    (strlen($msg_text) > 250)) {
+    $msg_text = Horde_String::substr(trim($msg_text), 0, 250) . " [...]\n";
+    $fullmsg_link = new Horde_Mobile_link(_("View Full Message"), Horde_Util::addParameter($self_link, array('fullmsg' => 1)));
 } else {
     $fullmsg_link = null;
 }
@@ -278,28 +306,27 @@ $mset = &$menu->add(new Horde_Mobile_linkset());
 
 if (!$readonly) {
     if (in_array('\\deleted', $flags)) {
-        $mset->add(new Horde_Mobile_link(_("Undelete"), Util::addParameter($self_link, array('a' => 'u'))));
+        $mset->add(new Horde_Mobile_link(_("Undelete"), Horde_Util::addParameter($self_link, array('a' => 'u'))));
     } else {
-        $mset->add(new Horde_Mobile_link(_("Delete"), Util::addParameter($self_link, array('a' => 'd', 'mt' => IMP::getRequestToken('imp.message-mimp')))));
+        $mset->add(new Horde_Mobile_link(_("Delete"), Horde_Util::addParameter($self_link, array('a' => 'd', 'mt' => Horde::getRequestToken('imp.message-mimp')))));
     }
 }
 
 $compose_params = array(
-    'index' => $index,
     'identity' => $identity,
-    'thismailbox' => $mailbox_name
+    'thismailbox' => $mailbox_name,
+    'uid' => $uid,
 );
 
 /* Add compose actions (Reply, Reply List, Reply All, Forward, Redirect). */
-if (empty($conf['hooks']['disable_compose']) ||
-    !Horde::callHook('_imp_hook_disable_compose', array(true), 'imp')) {
+if (IMP::canCompose()) {
     $items = array(IMP::composeLink(array(), array('a' => 'r') + $compose_params) => _("Reply"));
 
     if ($list_info['reply_list']) {
         $items[IMP::composeLink(array(), array('a' => 'rl') + $compose_params)] = _("Reply to List");
     }
 
-    if (Horde_Mime_Address::addrArray2String(array_merge($envelope['to'], $envelope['cc']), array_keys($user_identity->getAllFromAddresses(true)))) {
+    if (Horde_Mime_Address::addrArray2String(array_merge($envelope['to'], $envelope['cc']), array('filter' => array_keys($user_identity->getAllFromAddresses(true))))) {
         $items[IMP::composeLink(array(), array('a' => 'ra') + $compose_params)] = _("Reply All");
     }
 
@@ -312,19 +339,31 @@ foreach ($items as $link => $label) {
 }
 
 if (isset($next_link)) {
-    $mset->add(new Horde_Mobile_link(_("Next"), $next_link));
+    $mset->add(new Horde_Mobile_link(_("Next Message"), $next_link));
 }
 if (isset($prev_link)) {
-    $mset->add(new Horde_Mobile_link(_("Prev"), $prev_link));
+    $mset->add(new Horde_Mobile_link(_("Previous Message"), $prev_link));
 }
 
-$mset->add(new Horde_Mobile_link(sprintf(_("To %s"), IMP::getLabel($mailbox_name)), $mailbox_link));
+$mset->add(new Horde_Mobile_link(sprintf(_("To %s"), IMP::getLabel($imp_mbox['mailbox'])), $mailbox_link));
 
-MIMP::addMIMPMenu($mset, 'message');
+if ($conf['spam']['reporting'] &&
+    ($conf['spam']['spamfolder'] ||
+     ($mailbox_name != IMP::folderPref($prefs->getValue('spam_folder'), true)))) {
+    $mset->add(new Horde_Mobile_link(_("Report as Spam"), Horde_Util::addParameter($self_link, array('a' => 'rs', 'mt' => Horde::getRequestToken('imp.message-mimp')))));
+}
+
+if ($conf['notspam']['reporting'] &&
+    (!$conf['notspam']['spamfolder'] ||
+     ($mailbox_name == IMP::folderPref($prefs->getValue('spam_folder'), true)))) {
+    $mset->add(new Horde_Mobile_link(_("Report as Innocent"), Horde_Util::addParameter($self_link, array('a' => 'ri', 'mt' => Horde::getRequestToken('imp.message-mimp')))));
+}
+
+IMP_Mimp::addMIMPMenu($mset, 'message');
 
 $mimp_render->set('title', $display_headers['subject']);
 
-$c = &$mimp_render->add(new Horde_Mobile_card('m', $status . ' ' . $display_headers['subject'] . ' ' . sprintf(_("(%d of %d)"), $msgindex, $msgcount)));
+$c = &$mimp_render->add(new Horde_Mobile_card('m', ($status ? $status . ' | ' : '') . $display_headers['subject'] . ' ' . sprintf(_("(%d of %d)"), $msgindex, $msgcount)));
 $c->softkey('#o', _("Menu"));
 
 $imp_notify->setMobileObject($c);
@@ -333,32 +372,37 @@ $notification->notify(array('listeners' => 'status'));
 $null = null;
 $hb = &$c->add(new Horde_Mobile_block($null));
 
-$allto_param = Util::getFormData('allto');
+$allto_param = Horde_Util::getFormData('allto');
 
 foreach ($display_headers as $head => $val) {
     $all_to = false;
     $hb->add(new Horde_Mobile_text($basic_headers[$head] . ': ', array('b')));
-    if ((String::lower($head) == 'to') &&
+    if ((Horde_String::lower($head) == 'to') &&
         !$allto_param &&
         (($pos = strpos($val, ',')) !== false)) {
-        $val = String::substr($val, 0, strpos($val, ','));
+        $val = Horde_String::substr($val, 0, strpos($val, ','));
         $all_to = true;
     }
     $t = &$hb->add(new Horde_Mobile_text($val . (($all_to) ? ' ' : "\n")));
     if ($all_to) {
-        $hb->add(new Horde_Mobile_link('[' . _("Show All") . ']', Util::addParameter($self_link, array('allto' => 1))));
+        $hb->add(new Horde_Mobile_link('[' . _("Show All") . ']', Horde_Util::addParameter($self_link, array('allto' => 1))));
         $t = &$hb->add(new Horde_Mobile_text("\n"));
     }
     $t->set('linebreaks', true);
 }
 
 foreach ($atc_parts as $key) {
-    $summary = $imp_contents->getSummary($key, IMP_Contents::SUMMARY_SIZE | IMP_Contents::SUMMARY_DESCRIP_NOLINK_NOHTMLSPECCHARS | IMP_Contents::SUMMARY_DOWNLOAD_NOJS);
+    $summary = $imp_contents->getSummary($key, IMP_Contents::SUMMARY_BYTES | IMP_Contents::SUMMARY_SIZE | IMP_Contents::SUMMARY_DESCRIP_NOLINK_NOHTMLSPECCHARS | IMP_Contents::SUMMARY_DOWNLOAD_NOJS);
     $hb->add(new Horde_Mobile_text(_("Attachment") . ': ', array('b')));
     if (empty($summary['download'])) {
         $hb->add(new Horde_Mobile_text($summary['description']));
     } else {
-        $hb->add(new Horde_Mobile_link($summary['description'], $summary['download']));
+        /* Preference: if set, only show download confirmation screen if
+         * attachment over a certain size. */
+        $download_link = ($summary['bytes'] > $prefs->getValue('mimp_download_confirm'))
+            ? Horde_Util::addParameter($self_link, array('a' => 'c', 'atc' => $key))
+            : $summary['download'];
+        $hb->add(new Horde_Mobile_link($summary['description'], $download_link));
     }
     $t = &$hb->add(new Horde_Mobile_text(sprintf(' [%s] %s', $summary['type'], $summary['size']) . "\n"));
     $t->set('linebreaks', true);

@@ -32,7 +32,7 @@ class IMP_UI_Mailbox
      *
      * @param string $mailbox  The current mailbox.
      */
-    function __construct($mailbox = null)
+    public function __construct($mailbox = null)
     {
         $this->_mailbox = $mailbox;
     }
@@ -78,7 +78,7 @@ class IMP_UI_Mailbox
             $ret['from'] = _("Invalid Address");
             $ret['error'] = true;
         } else {
-            $identity = &Identity::singleton(array('imp', 'imp'));
+            $identity = Horde_Prefs_Identity::singleton(array('imp', 'imp'));
             if ($identity->hasAddress($from['inner'])) {
                 /* This message was sent by one of the user's identity
                  * addresses - show To: information instead. */
@@ -148,7 +148,7 @@ class IMP_UI_Mailbox
         }
 
         if (!isset($this->_cache['localeinfo'])) {
-            $this->_cache['localeinfo'] = NLS::getLocaleInfo();
+            $this->_cache['localeinfo'] = Horde_Nls::getLocaleInfo();
         }
 
         $size = $size / 1024;
@@ -159,23 +159,10 @@ class IMP_UI_Mailbox
     }
 
     /**
-     * The list of ALT text to use for mailbox display icons.
-     *
-     * @return array  Type -> ALT text mappings.
-     */
-    public function getAttachmentAltList()
-    {
-        return array(
-            'signed' => _("Message is signed"),
-            'encrypted' => _("Message is encrypted"),
-            'attachment' => _("Message has attachments")
-        );
-    }
-
-    /**
      * Return the icon to use for a given attachment.
      *
-     * @return string  The mailbox display icon type.
+     * @return string  The mailbox display icon type (attach, encrypt,
+     *                 signed).
      */
     public function getAttachmentType($type)
     {
@@ -186,7 +173,7 @@ class IMP_UI_Mailbox
                 return 'signed';
 
             case 'encrypted':
-                return 'encrypted';
+                return 'encrypt';
 
             case 'alternative':
             case 'related':
@@ -194,10 +181,10 @@ class IMP_UI_Mailbox
                 break;
 
             default:
-                return 'attachment';
+                return 'attach';
             }
         } elseif ($type == 'application/pkcs7-mime') {
-             return 'encrypted';
+             return 'encrypt';
         }
 
         return '';
@@ -246,7 +233,7 @@ class IMP_UI_Mailbox
      * Formats the subject header.
      *
      * @param string $subject     The MIME encoded subject header.
-     * @param string $htmlspaces  Run through Text::htmlSpaces()?
+     * @param string $htmlspaces  HTML-ize spaces?
      *
      * @return string  The formatted subject header.
      */
@@ -260,8 +247,7 @@ class IMP_UI_Mailbox
         $new_subject = $subject = IMP::filterText(preg_replace("/\s+/", ' ', $subject));
 
         if ($htmlspaces) {
-            require_once 'Horde/Text.php';
-            $new_subject = Text::htmlSpaces($subject);
+            $new_subject = Horde_Text_Filter::filter($subject, 'space2html', array('charset' => Horde_Nls::getCharset(), 'encode' => true));
             if (empty($new_subject)) {
                 $new_subject = htmlspecialchars($subject);
             }

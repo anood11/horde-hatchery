@@ -9,14 +9,10 @@
  * @package IMP
  */
 
-require_once dirname(__FILE__) . '/lib/base.php';
-require_once 'Horde/Help.php';
-require_once 'Horde/Prefs/UI.php';
-$result = Horde::loadConfiguration('prefs.php', array('prefGroups', '_prefs'), 'imp');
-if (!is_a($result, 'PEAR_Error')) {
-    // @todo Don't use extract()
-    extract($result);
-}
+require_once dirname(__FILE__) . '/lib/Application.php';
+new IMP_Application(array('init' => true));
+
+extract(Horde::loadConfiguration('prefs.php', array('prefGroups', '_prefs'), 'imp'));
 
 /* Are preferences locked? */
 $login_locked = $prefs->isLocked('filter_on_login') || empty($_SESSION['imp']['filteravail']);
@@ -26,37 +22,37 @@ $anymailbox_locked = $prefs->isLocked('filter_any_mailbox') || empty($_SESSION['
 $menuitem_locked = $prefs->isLocked('filter_menuitem');
 
 /* Run through the action handlers. */
-$actionID = Util::getFormData('actionID');
+$actionID = Horde_Util::getFormData('actionID');
 switch ($actionID) {
 case 'update_prefs':
     if (!$login_locked) {
-        $prefs->setValue('filter_on_login', Util::getFormData('filter_login') ? 1 : 0);
+        $prefs->setValue('filter_on_login', Horde_Util::getFormData('filter_login') ? 1 : 0);
     }
     if (!$display_locked) {
-        $prefs->setValue('filter_on_display', Util::getFormData('filter_display') ? 1 : 0);
+        $prefs->setValue('filter_on_display', Horde_Util::getFormData('filter_display') ? 1 : 0);
     }
     if (!$sidebar_locked) {
-        $prefs->setValue('filter_on_sidebar', Util::getFormData('filter_sidebar') ? 1 : 0);
+        $prefs->setValue('filter_on_sidebar', Horde_Util::getFormData('filter_sidebar') ? 1 : 0);
     }
     if (!$anymailbox_locked) {
-        $prefs->setValue('filter_any_mailbox', Util::getFormData('filter_any_mailbox') ? 1 : 0);
+        $prefs->setValue('filter_any_mailbox', Horde_Util::getFormData('filter_any_mailbox') ? 1 : 0);
     }
     if (!$menuitem_locked) {
-        $prefs->setValue('filter_menuitem', Util::getFormData('filter_menuitem') ? 1 : 0);
+        $prefs->setValue('filter_menuitem', Horde_Util::getFormData('filter_menuitem') ? 1 : 0);
     }
     $notification->push(_("Preferences successfully updated."), 'horde.success');
     break;
 }
 
 $app = 'imp';
-$chunk = Util::nonInputVar('chunk');
+$chunk = Horde_Util::nonInputVar('chunk');
 $group = 'filters';
-Prefs_UI::generateHeader(null, $chunk);
+Horde_Prefs_Ui::generateHeader(null, $chunk);
 
-$t = new IMP_Template();
+$t = new Horde_Template();
 $t->setOption('gettext', true);
-$t->set('navcell', Util::bufferOutput(array('Prefs_UI', 'generateNavigationCell'), 'filters'));
-$t->set('prefsurl', IMP::prefsURL(true));
+$t->set('navcell', Horde_Util::bufferOutput(array('Horde_Prefs_Ui', 'generateNavigationCell'), 'filters'));
+$t->set('prefsurl', Horde::getServiceLink('options', 'imp'));
 $t->set('return_text', _("Return to Options"));
 
 /* Get filter links. */
@@ -76,7 +72,7 @@ if (!$blacklist_link && !$whitelist_link && !$filters_link) {
     $t->set('notactive', true);
 } else {
     $t->set('selfurl', Horde::applicationUrl('filterprefs.php'));
-    $t->set('forminput', Util::formInput());
+    $t->set('forminput', Horde_Util::formInput());
     $t->set('group', $group);
     $t->set('app', $app);
 
@@ -91,7 +87,7 @@ if (!$blacklist_link && !$whitelist_link && !$filters_link) {
             $links[] = array(
                 'img' => Horde::img('filters.png', $val['g']),
                 'link' => Horde::link(Horde::url($val['l'])),
-                'help' => Help::link('imp', $val['h']),
+                'help' => Horde_Help::link('imp', $val['h']),
                 'text' => $val['g']
             );
         }
@@ -114,7 +110,7 @@ if (!$blacklist_link && !$whitelist_link && !$filters_link) {
                 'key' => $key,
                 'checked' => $prefs->getValue($val['p']),
                 'label' => Horde::label('filter_' . $key, $val['g']),
-                'help' => isset($val['h']) ? Help::link('imp', $val['h']) : null
+                'help' => isset($val['h']) ? Horde_Help::link('imp', $val['h']) : null
             );
         }
     }

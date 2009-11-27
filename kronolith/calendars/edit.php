@@ -1,7 +1,5 @@
 <?php
 /**
- * $Horde: kronolith/calendars/edit.php,v 1.5 2009/01/06 18:01:00 jan Exp $
- *
  * Copyright 2002-2009 The Horde Project (http://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (GPL). If you
@@ -10,23 +8,22 @@
  * @author Chuck Hagenbuch <chuck@horde.org>
  */
 
-@define('KRONOLITH_BASE', dirname(dirname(__FILE__)));
-require_once KRONOLITH_BASE . '/lib/base.php';
+require_once dirname(__FILE__) . '/../lib/base.php';
 require_once KRONOLITH_BASE . '/lib/Forms/EditCalendar.php';
 
 // Exit if this isn't an authenticated user.
-if (!Auth::getAuth()) {
+if (!Horde_Auth::getAuth()) {
     header('Location: ' . Horde::applicationUrl($prefs->getValue('defaultview') . '.php', true));
     exit;
 }
 
-$vars = Variables::getDefaultVariables();
+$vars = Horde_Variables::getDefaultVariables();
 $calendar = $kronolith_shares->getShare($vars->get('c'));
 if (is_a($calendar, 'PEAR_Error')) {
     $notification->push($calendar, 'horde.error');
     header('Location: ' . Horde::applicationUrl('calendars/', true));
     exit;
-} elseif ($calendar->get('owner') != Auth::getAuth()) {
+} elseif ($calendar->get('owner') != Horde_Auth::getAuth()) {
     $notification->push(_("You are not allowed to change this calendar."), 'horde.error');
     header('Location: ' . Horde::applicationUrl('calendars/', true));
     exit;
@@ -52,9 +49,14 @@ if ($form->validate($vars)) {
 }
 
 $vars->set('name', $calendar->get('name'));
+$vars->set('color', $calendar->get('color'));
 $vars->set('description', $calendar->get('desc'));
+$tagger = Kronolith::getTagger();
+$vars->set('tags', implode(',', array_values($tagger->getTags($calendar->getName(), 'calendar'))));
 $title = $form->getTitle();
 require KRONOLITH_TEMPLATES . '/common-header.inc';
 require KRONOLITH_TEMPLATES . '/menu.inc';
 echo $form->renderActive($form->getRenderer(), $vars, 'edit.php', 'post');
 require $registry->get('templates', 'horde') . '/common-footer.inc';
+$ac = Horde_Ajax_Imple::factory(array('kronolith', 'TagAutoCompleter'), array('triggerId' => 'tags', 'id'));
+$ac->attach();

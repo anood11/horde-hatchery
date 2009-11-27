@@ -18,11 +18,11 @@ echo Horde::link($this->link(1), _("Next week"), 'iconNav', '', 'return ShowView
   <th class="control" width="1%">&nbsp;</th>
   <th class="nowrap <?php echo ($day->isToday() ? 'selected-control' : 'control') ?>" width="<?php echo $colwidth ?>%" colspan="<?php echo $day->_totalspan ?>">
 <?php
-if (Kronolith::getDefaultCalendar(PERMS_EDIT) &&
+if (Kronolith::getDefaultCalendar(Horde_Perms::EDIT) &&
     (!empty($conf['hooks']['permsdenied']) ||
-     Kronolith::hasPermission('max_events') === true ||
-     Kronolith::hasPermission('max_events') > Kronolith::countEvents())) {
-    $addurl = Util::addParameter('new.php',
+     $GLOBALS['perms']->hasAppPermission('max_events') === true ||
+     $GLOBALS['perms']->hasAppPermission('max_events') > Kronolith::countEvents())) {
+    $addurl = Horde_Util::addParameter('new.php',
                                  array('date' => $day->dateString(),
                                        'url' => $this->link(0, true)));
     echo Horde::link(Horde::applicationUrl($addurl), _("Create a New Event"), 'iconAdd')

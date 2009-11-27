@@ -11,26 +11,46 @@
  */
 
 require_once dirname(__FILE__) . '/tabs.php';
-require_once 'Horde/String.php';
 
-// Make sure auth backend allows passwords to be reset.
-$auth = Auth::singleton($conf['auth']['driver']);
-if (!$auth->hasCapability('resetpassword')) {
-    $notification->push(_("Cannot reset password automatically, contact your administrator."), 'horde.error');
-    header('Location: ' . Auth::getLoginScreen('', Util::getFormData('url')));
+/**
+ * Returns a new or the current CAPTCHA string.
+ *
+ * @param boolean $new string
+ */
+function _getCAPTCHA($new = false)
+{
+    if ($new || empty($_SESSION['folks']['CAPTCHA'])) {
+        $_SESSION['folks']['CAPTCHA'] = '';
+        for ($i = 0; $i < 5; $i++) {
+            $_SESSION['folks']['CAPTCHA'] .= chr(rand(65, 90));
+        }
+    }
+    return $_SESSION['folks']['CAPTCHA'];
+}
+
+// We are already logged
+if (Horde_Auth::isAuthenticated()) {
+    header('Location: ' . Folks::getUrlFor('user', Horde_Auth::getAuth()));
     exit;
 }
 
-$vars = Variables::getDefaultVariables();
+// Make sure auth backend allows passwords to be reset.
+$auth = Horde_Auth::singleton($conf['auth']['driver']);
+if (!$auth->hasCapability('resetpassword')) {
+    $notification->push(_("Cannot reset password automatically, contact your administrator."), 'horde.error');
+    Horde_Auth::authenticateFailure('folks');
+}
+
+$vars = Horde_Variables::getDefaultVariables();
 
 $title = _("Reset Your Password");
 $form = new Horde_Form($vars, $title);
 $form->setButtons(_("Continue"));
 
 // Get user security pass
-$user = Util::getFormData('username');
+$user = Horde_Util::getFormData('username');
 if ($user) {
-    $u_prefs = Prefs::singleton($conf['prefs']['driver'], 'horde', Auth::addHook($user), '', null, false);
+    $u_prefs = Horde_Prefs::singleton($conf['prefs']['driver'], 'horde', Horde_Auth::convertUsername($user, true), '', null, false);
     $u_prefs->retrieve();
     $answer = $u_prefs->getValue('security_answer');
     $question = $u_prefs->getValue('security_question');
@@ -47,6 +67,10 @@ if (!empty($answer)) {
         $form->addVariable(_("Please respond to your security question: ") . $question, 'security_question', 'description', true);
     }
     $form->addVariable(_("Security answer"), 'security_answer', 'text', true);
+} else {
+    $desc = _("The picture above is for antispam checking. Please retype the characters from the picture. They are case sensitive.");
+    $form->addVariable(_("Human check"), 'captcha', 'captcha', true, false, $desc,
+                        array(_getCAPTCHA(!$form->isSubmitted()), HORDE_BASE . '/config/couri.ttf'));
 }
 
 /* Validate the form. */
@@ -57,20 +81,18 @@ if ($form->validate()) {
     $email = Folks::getUserEmail($info['username']);
     if ($email instanceof PEAR_Error) {
         $notification->push($email);
-        header('Location: ' . Auth::getLoginScreen('', $info['url']));
-        exit;
+        Horde_Auth::authenticateFailure('folks');
     }
 
     /* Check the given values with the prefs stored ones. */
-    if ((!empty($answer) && String::lower($answer) == String::lower($info['security_answer'])) ||
+    if ((!empty($answer) && Horde_String::lower($answer) == Horde_String::lower($info['security_answer'])) ||
             empty($answer)) {
 
         /* Info matches, so reset the password. */
         $password = $auth->resetPassword($info['username']);
         if ($password instanceof PEAR_Error) {
             $notification->push($password);
-            header('Location: ' . Auth::getLoginScreen('', $info['url']));
-            exit;
+            Horde_Auth::authenticateFailure('folks');
         }
 
         $body = sprintf(_("Your new password for %s is: %s. \n\n It was requested by %s on %s"),
@@ -82,8 +104,7 @@ if ($form->validate()) {
         Folks::sendMail($email, _("Your password has been reset"), $body);
 
         $notification->push(sprintf(_("Your password has been reset, check your email (%s) and log in with your new password."), $email), 'horde.success');
-        header('Location: ' . Auth::getLoginScreen('', $info['url']));
-        exit;
+        Horde_Auth::authenticateFailure('folks');
     } else {
         /* Info submitted does not match what is in prefs, redirect user back
          * to login. */

@@ -1,10 +1,13 @@
 <?php
 /**
- * News Tree Class.
+ * News Category Class.
  *
- * $Id: Categories.php 1163 2009-01-14 17:47:23Z duck $
+ * $Id: Categories.php 1261 2009-02-01 23:20:07Z duck $
  *
- * Copyright Obala d.o.o. (www.obala.si)
+ * Copyright 2009 The Horde Project (http://www.horde.org/)
+ *
+ * See the enclosed file COPYING for license information (GPL). If you
+ * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
  *
  * @author  Duck <duck@obala.net>
  * @package News
@@ -232,19 +235,19 @@ class News_Categories {
      *
      * @return string  The current language.
      */
-    public function getAllowed($perm = PERMS_SHOW)
+    public function getAllowed($perm = Horde_Perms::SHOW)
     {
         $cats = $this->getCategories();
-        if (Auth::isAdmin('news:admin') ||
-            $GLOBALS['perms']->hasPermission('news', Auth::getAuth(), $perm)) {
+        if (Horde_Auth::isAdmin('news:admin') ||
+            $GLOBALS['perms']->hasPermission('news', Horde_Auth::getAuth(), $perm)) {
             return $cats;
         }
 
         foreach ($cats as $key => $value) {
             // user has access?
-            if (!$GLOBALS['perms']->hasPermission('news:categories', Auth::getAuth(), $perm)  && // master
-                !$GLOBALS['perms']->hasPermission('news:categories:' . $key, Auth::getAuth(), $perm) && // child
-                !$GLOBALS['perms']->hasPermission('news:categories:' . $this->_nodes[$key]['category_parentid'], Auth::getAuth(), $perm) // father
+            if (!$GLOBALS['perms']->hasPermission('news:categories', Horde_Auth::getAuth(), $perm)  && // master
+                !$GLOBALS['perms']->hasPermission('news:categories:' . $key, Horde_Auth::getAuth(), $perm) && // child
+                !$GLOBALS['perms']->hasPermission('news:categories:' . $this->_nodes[$key]['category_parentid'], Horde_Auth::getAuth(), $perm) // father
                 ) {
                 unset($cats[$key]);
             }
@@ -344,6 +347,10 @@ class News_Categories {
     private function _insertCategory($data)
     {
         $new_id = $this->_write_db->nextId('news_categories');
+        if ($new_id instanceof PEAR_Error) {
+            Horde::logMessage($new_id, __FILE__, __LINE__, PEAR_LOG_ERR);
+            return $new_id;
+        }
 
         $sql = 'INSERT INTO ' . $this->prefix . '_categories' .
                ' (category_id, category_parentid) VALUES (?, ?)';
@@ -357,11 +364,16 @@ class News_Categories {
 
         $sql = 'INSERT INTO ' . $this->prefix . '_categories_nls VALUES (?, ?, ?, ?)';
         foreach ($GLOBALS['conf']['attributes']['languages'] as $lang) {
+
             $values = array($new_id,
                             $lang,
                             $data['category_name_' . $lang],
                             $data['category_description_' . $lang]);
-            $this->_write_db->query($sql, $values);
+            $result = $this->_write_db->query($sql, $values);
+            if ($result instanceof PEAR_Error) {
+                Horde::logMessage($result, __FILE__, __LINE__, PEAR_LOG_ERR);
+                return $result;
+            }
         }
 
         return $new_id;
@@ -475,14 +487,14 @@ class News_Categories {
         foreach ($cats as $cid => $category) {
 
             if ($click_url !== null) {
-                $name = Horde::link(Util::addParameter($click_url, 'cid', $cid), _("Select Category")) . $category['category_name'] . '</a>';
+                $name = Horde::link(Horde_Util::addParameter($click_url, 'cid', $cid), _("Select Category")) . $category['category_name'] . '</a>';
             } else {
                 $name = $category['category_name'];
             }
 
             $links = array();
             if ($have_add_item) {
-                $links[] = Horde::link(Util::addParameter($add_item, 'cid', $cid), _("Add New Item")) . $add_img . '</a>';
+                $links[] = Horde::link(Horde_Util::addParameter($add_item, 'cid', $cid), _("Add New Item")) . $add_img . '</a>';
             }
 
             $parent_id = $category['category_parentid'] ? $category['category_parentid'] : null;
@@ -523,7 +535,7 @@ class News_Categories {
                                 's' => 'vfs',
                                 'p' => self::VFS_PATH . '/images/categories/',
                                 'c' => 'news');
-            return Util::addParameter(Horde::url('/services/images/view.php'), $img_params);
+            return Horde_Util::addParameter(Horde::url('/services/images/view.php'), $img_params);
         }
     }
 
@@ -535,7 +547,7 @@ class News_Categories {
     public function getCategories($flat = true)
     {
         $lang = News::getLang();
-        $cache_key = 'NewsCategories_' . $lang . '_'. $flat;
+        $cache_key = 'NewsCategories_' . $lang . '_' . (int)$flat;
         $categories = $GLOBALS['cache']->get($cache_key, $GLOBALS['conf']['cache']['default_lifetime']);
         if ($categories) {
             return unserialize($categories);
@@ -586,7 +598,7 @@ class News_Categories {
     /**
      * Attempts to open a persistent connection to the SQL server.
      *
-     * @return boolean  True on success; exits (Horde::fatal()) on error.
+     * @return boolean  True on success.
      */
     private function _connect()
     {

@@ -21,13 +21,10 @@ class Kronolith_FreeBusy_View_Month extends Kronolith_FreeBusy_View {
 
         $end = new Horde_Date($this->_start);
         $end->mday += $this->_days - 1;
-        $end->correct();
         $prev = new Horde_Date($this->_start);
         $prev->month--;
-        $prev->correct();
         $next = new Horde_Date($this->_start);
         $next->month++;
-        $next->correct();
         return Horde::link('#', _("Previous Month"), '', '', 'return switchDate(' . $prev->dateString() . ');')
             . Horde::img('nav/left.png', '<', null, $registry->getImageDir('horde'))
             . '</a>'
@@ -51,12 +48,11 @@ class Kronolith_FreeBusy_View_Month extends Kronolith_FreeBusy_View {
         $t = new Horde_Date($this->_start);
         while ($span_left > 0) {
             $span_left -= $span;
-            $week_label = Horde::link('#', '', '', '', 'return switchDateView(\'week\',' . $t->dateString() . ');') . ("Week") . ' ' . $week . '</a>';
+            $week_label = Horde::link('#', '', '', '', 'return switchDateView(\'Week\',' . $t->dateString() . ');') . ("Week") . ' ' . $week . '</a>';
             $hours_html .= sprintf('<th colspan="%d" width="%s%%">%s</th>',
                                    $span, $dayWidth, $week_label);
             $week++;
             $t->mday += 7;
-            $t->correct();
             $span = min($span_left, 7);
         }
         $hours_html .= '</tr><tr><td width="100" class="label">&nbsp;</td>';
@@ -65,7 +61,7 @@ class Kronolith_FreeBusy_View_Month extends Kronolith_FreeBusy_View {
             $t = new Horde_Date(array('month' => $this->_start->month,
                                       'mday' => $this->_start->mday + $i,
                                       'year' => $this->_start->year));
-            $day_label = Horde::link('#', '', '', '', 'return switchDateView(\'day\',' . $t->dateString() . ');') . sprintf("%s.", $i + 1) . '</a>';
+            $day_label = Horde::link('#', '', '', '', 'return switchDateView(\'Day\',' . $t->dateString() . ');') . sprintf("%s.", $i + 1) . '</a>';
             $hours_html .= sprintf('<th width="%s%%">%s</th>',
                                    $dayWidth, $day_label);
         }
@@ -89,7 +85,7 @@ class Kronolith_FreeBusy_View_Month extends Kronolith_FreeBusy_View {
     {
         $this->_start = new Horde_Date($day);
         $this->_start->mday = 1;
-        $this->_days = Horde_Date::daysInMonth($day->month, $day->year);
+        $this->_days = Horde_Date_Utils::daysInMonth($day->month, $day->year);
         $this->_end = new Horde_Date($this->_start);
         $this->_end->hour = 23;
         $this->_end->min = $this->_end->sec = 59;

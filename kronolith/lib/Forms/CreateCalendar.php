@@ -8,9 +8,6 @@
  * @package Kronolith
  */
 
-/** Variables */
-require_once 'Horde/Variables.php';
-
 /** Horde_Form */
 require_once 'Horde/Form.php';
 
@@ -31,8 +28,9 @@ class Kronolith_CreateCalendarForm extends Horde_Form {
         parent::Horde_Form($vars, _("Create Calendar"));
 
         $this->addVariable(_("Name"), 'name', 'text', true);
+        $this->addVariable(_("Color"), 'color', 'colorpicker', false);
         $this->addVariable(_("Description"), 'description', 'longtext', false, false, null, array(4, 60));
-
+        $this->addVariable(_("Tags"), 'tags', 'text', false);
         $this->setButtons(array(_("Create")));
     }
 
@@ -44,7 +42,11 @@ class Kronolith_CreateCalendarForm extends Horde_Form {
             return $calendar;
         }
         $calendar->set('name', $this->_vars->get('name'));
+        $calendar->set('color', $this->_vars->get('color'));
         $calendar->set('desc', $this->_vars->get('description'));
+        $tagger = Kronolith::getTagger();
+
+        $tagger->tag($calendar->getName(), $this->_vars->get('tags'), 'calendar');
         return $GLOBALS['kronolith_shares']->addShare($calendar);
     }
 

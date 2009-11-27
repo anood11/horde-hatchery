@@ -2,15 +2,12 @@
 /**
  * The Horde_Block_Layout_View class represents the user defined portal layout.
  *
- * $Horde: framework/Block/Block/Layout/View.php,v 1.17 2007/11/22 00:28:06 jan Exp $
- *
  * Copyright 2008-2009 The Horde Project (http://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (LGPL). If you
  * did not receive this file, see http://www.fsf.org/copyleft/lgpl.html.
  *
  * @author  Duck <duck@obala.net>
- * @since   Horde 4
  * @package Horde_Block
  */
 class Horde_Block_Layout_View_Js extends Horde_Block_Layout_View {
@@ -95,9 +92,9 @@ class Horde_Block_Layout_View_Js extends Horde_Block_Layout_View {
             }
         }
 
-        $content = Horde_Serialize::serialize($content, SERIALIZE_JSON, NLS::getCharset());
-        $title = Horde_Serialize::serialize($title, SERIALIZE_JSON, NLS::getCharset());
-        $params = Horde_Serialize::serialize($params, SERIALIZE_JSON, NLS::getCharset());
+        $content = Horde_Serialize::serialize($content, Horde_Serialize::JSON, Horde_Nls::getCharset());
+        $title = Horde_Serialize::serialize($title, Horde_Serialize::JSON, Horde_Nls::getCharset());
+        $params = Horde_Serialize::serialize($params, Horde_Serialize::JSON, Horde_Nls::getCharset());
 
         $js_init .= 'portal.add(new Xilinus.Widget().'
                     . 'setTitle(title_' . $js_id .').'

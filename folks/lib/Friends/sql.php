@@ -3,9 +3,9 @@
  * Folks_Friends:: defines an API for implementing storage backends for
  * Folks.
  *
- * $Id: sql.php 1008 2008-10-24 09:07:35Z duck $
+ * $Id: sql.php 1247 2009-01-30 15:01:34Z duck $
  *
- * Copyright Obala d.o.o. (www.obala.si)
+ * Copyright 2007-2009 The Horde Project (http://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (GPL). If you
  * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
@@ -14,9 +14,6 @@
  * @package Folks
  */
 class Folks_Friends_sql extends Folks_Friends {
-
-    const WHITELIST = 0;
-    const BLACKLIST = 1;
 
     /**
      * Handle for the current database connection.
@@ -34,27 +31,14 @@ class Folks_Friends_sql extends Folks_Friends {
     private $_write_db;
 
     /**
-     * friends list ID
-     *
-     * @var int
-     */
-    private $_friends = 0;
-
-    /**
-     * Black list ID
-     *
-     * @var int
-     */
-    private $_blacklist = 1;
-
-    /**
      * Constructs a new SQL storage object.
      *
      * @param array $params  A hash containing connection parameters.
      */
-    public function __construct($params = array())
+    protected function __construct($params = array())
     {
         parent::__construct($params);
+
         $this->_params = $params;
         $this->_connect();
     }
@@ -66,11 +50,11 @@ class Folks_Friends_sql extends Folks_Friends {
      */
     protected function _getBlacklist()
     {
-        $query = 'SELECT friend_uid FROM ' . $this->_params['friends']
-                . ' WHERE user_uid = ? AND group_id = ? '
+        $query = 'SELECT friend_uid FROM ' . $this->_params['blacklist']
+                . ' WHERE user_uid = ? '
                 . ' ORDER BY friend_uid ASC';
 
-        return $this->_db->getCol($query, 0, array($this->_user, self::BLACKLIST));
+        return $this->_db->getCol($query, 0, array($this->_user));
     }
 
     /**
@@ -80,9 +64,10 @@ class Folks_Friends_sql extends Folks_Friends {
      */
     protected function _addBlacklisted($user)
     {
-        $query = 'INSERT INTO ' . $this->_params['friends']
-                        . ' (user_uid, group_id, friend_uid, friend_ask) VALUES (?, ?, ?, ?)';
-        return $this->_write_db->query($query, array($this->_user, self::BLACKLIST, $user, 0));
+        $query = 'INSERT INTO ' . $this->_params['blacklist']
+                        . ' (user_uid, friend_uid) VALUES (?, ?)';
+
+        return $this->_write_db->query($query, array($this->_user, $user));
     }
 
     /**
@@ -92,22 +77,25 @@ class Folks_Friends_sql extends Folks_Friends {
      */
     protected function _removeBlacklisted($user)
     {
-        $query = 'DELETE FROM ' . $this->_params['friends'] . ' WHERE user_uid = ? AND group_id = ? AND friend_uid = ?';
-        return $this->_write_db->query($query, array($this->_user, self::BLACKLIST, $user));
+        $query = 'DELETE FROM ' . $this->_params['blacklist']
+                    . ' WHERE user_uid = ? AND friend_uid = ?';
+
+        return $this->_write_db->query($query, array($this->_user, $user));
     }
 
     /**
      * Add user to a friend list
      *
      * @param string $friend   Friend's usersame
-     * @param string $group   Group to add friend to
      */
-    protected function _addFriend($friend, $group = null)
+    protected function _addFriend($friend)
     {
         $approve = $this->needsApproval($friend) ? 1 : 0;
+
         $query = 'INSERT INTO ' . $this->_params['friends']
-                . ' (user_uid, group_id, friend_uid, friend_ask) VALUES (?, ?, ?, ?)';
-        return $this->_write_db->query($query, array($this->_user, self::WHITELIST, $friend, $approve));
+                . ' (user_uid, friend_uid, friend_ask) VALUES (?, ?, ?)';
+
+        return $this->_write_db->query($query, array($this->_user, $friend, $approve));
     }
 
     /**
@@ -119,6 +107,7 @@ class Folks_Friends_sql extends Folks_Friends {
     {
         $query = 'UPDATE ' . $this->_params['friends']
                 . ' SET friend_ask = ? WHERE user_uid = ? AND friend_uid = ?';
+
         $result = $this->_write_db->query($query, array(0, $friend, $this->_user));
         if ($result instanceof PEAR_Error) {
             return $result;
@@ -126,36 +115,36 @@ class Folks_Friends_sql extends Folks_Friends {
 
         // Add user even to firend's friend list
         $query = 'REPLACE INTO ' . $this->_params['friends']
-                . ' (user_uid, group_id, friend_uid, friend_ask) VALUES (?, ?, ?, ?)';
-        return $this->_write_db->query($query, array($this->_user, self::WHITELIST, $friend, 0));
+                . ' (user_uid, friend_uid, friend_ask) VALUES (?, ?, ?)';
+
+        return $this->_write_db->query($query, array($this->_user, $friend, 0));
     }
 
     /**
      * Remove user from a fiend list
      *
      * @param string $friend   Friend's usersame
-     * @param string $group   Group to remove friend from
      */
-    protected function _removeFriend($friend, $group = null)
+    protected function _removeFriend($friend)
     {
-        $query = 'DELETE FROM ' . $this->_params['friends'] . ' WHERE user_uid = ? AND group_id = ? AND friend_uid = ?';
-        return $this->_write_db->query($query, array($this->_user, self::WHITELIST, $friend));
+        $query = 'DELETE FROM ' . $this->_params['friends']
+                    . ' WHERE user_uid = ? AND friend_uid = ?';
+
+        return $this->_write_db->query($query, array($this->_user, $friend));
     }
 
     /**
      * Get user friends
      *
-     * @param string $group  Get friens only from this group
-     *
-     * @return array of users (in group)
+     * @return array of user's friends
      */
-    protected function _getFriends($group = null)
+    protected function _getFriends()
     {
         $query = 'SELECT friend_uid FROM ' . $this->_params['friends']
-                . ' WHERE user_uid = ? AND group_id = ?'
+                . ' WHERE user_uid = ? and friend_ask = ?'
                 . ' ORDER BY friend_uid ASC';
 
-        return $this->_db->getCol($query, 0, array($this->_user, self::WHITELIST));
+        return $this->_db->getCol($query, 0, array($this->_user, 0));
     }
 
     /**
@@ -187,38 +176,27 @@ class Folks_Friends_sql extends Folks_Friends {
      *
      * @return array users
      */
-    public function getPossibleFriends()
+    public function friendOf()
     {
         $query = 'SELECT user_uid FROM ' . $this->_params['friends']
-                . ' WHERE friend_uid = ? AND group_id = ? AND friend_ask = ?'
+                . ' WHERE friend_uid = ? AND friend_ask = ?'
                 . ' ORDER BY friend_uid ASC';
 
-        return $this->_db->getCol($query, 0, array($this->_user, self::WHITELIST, 0));
-    }
-
-    /**
-     * Get users friends birthdays
-     *
-     * @return array users
-     */
-    public function getBirthdays()
-    {
-        return false;
+        return $this->_db->getCol($query, 0, array($this->_user, 0));
     }
 
     /**
      * Get user groups
      */
-    public function getGroups()
+    protected function _getGroups()
     {
-        return array(self::WHITELIST => _("Whitelist"),
-                        self::BLACKLIST  => _("Blacklist"));
+        return array(_("Friends"));
     }
 
     /**
      * Attempts to open a persistent connection to the SQL server.
      *
-     * @return boolean  True on success; exits (Horde::fatal()) on error.
+     * @return boolean  True on success.
      */
     protected function _connect()
     {
@@ -233,12 +211,19 @@ class Folks_Friends_sql extends Folks_Friends {
         if (!isset($this->_params['hostspec'])) {
             $this->_params['hostspec'] = '';
         }
+        if (!isset($this->_params['friends'])) {
+            $this->_params['friends'] = 'folks_friends';
+        }
+        if (!isset($this->_params['blacklist'])) {
+            $this->_params['blacklist'] = 'folks_blacklist';
+        }
 
         /* Connect to the SQL server using the supplied parameters. */
+        require_once 'DB.php';
         $this->_write_db = DB::connect($this->_params,
                                         array('persistent' => !empty($this->_params['persistent'])));
         if ($this->_write_db instanceof PEAR_Error) {
-            Horde::fatal($this->_write_db, __FILE__, __LINE__);
+            throw new Horde_Exception($this->_write_db);
         }
 
         // Set DB portability options.
@@ -256,7 +241,7 @@ class Folks_Friends_sql extends Folks_Friends {
             $this->_db = DB::connect($params,
                                       array('persistent' => !empty($params['persistent'])));
             if ($this->_db instanceof PEAR_Error) {
-                Horde::fatal($this->_db, __FILE__, __LINE__);
+                throw new Horde_Exception($this->_db);
             }
 
             // Set DB portability options.

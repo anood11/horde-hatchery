@@ -17,7 +17,7 @@ require_once 'tabs.php';
 
 $title = _("Edit my profile");
 
-$profile = $folks_driver->getRawProfile(Auth::getAuth());
+$profile = $folks_driver->getRawProfile(Horde_Auth::getAuth());
 if ($profile instanceof PEAR_Error) {
     $notification->push($profile);
     header('Location: ' . Folks::getUrlFor('list', 'list'));
@@ -34,16 +34,16 @@ $v->setDefault('SI');
 $form->addVariable(_("Homepage"), 'user_url', 'text', false);
 
 if ($registry->hasMethod('video/listVideos')) {
-    $result = $registry->call('video/listVideos', array(array('author' => Auth::getAuth()), 0, 100));
-    if ($result instanceof PEAR_Error) {
-        $notification->push($result);
-    } else {
+    try {
+        $result = $registry->call('video/listVideos', array(array('author' => Horde_Auth::getAuth()), 0, 100));
         $videos = array();
         foreach ($result as $video_id => $video) {
             $videos[$video_id] = $video['video_title'] . ' - ' . Folks::format_date($video['video_created']);
         }
-        $video_link = '<a href="' .  $registry->get('webroot', 'oscar') . '//videos/edit.php">' . _("Upload a new video") . '</a>';
+        $video_link = '<a href="' .  $registry->link('video/edit') . '">' . _("Upload a new video") . '</a>';
         $form->addVariable(_("Video"), 'user_video', 'enum', false, false, $video_link, array($videos, _("--- Select ---")));
+    } catch (Horde_Exception $e) {
+        $notification->push($e);
     }
 }
 
@@ -52,7 +52,7 @@ $form->addVariable(_("Picture"), 'user_picture', 'image', false);
 $form->setButtons(array(_("Save"), _("Delete picture")));
 
 if ($form->validate()) {
-    switch (Util::getFormData('submitbutton')) {
+    switch (Horde_Util::getFormData('submitbutton')) {
 
     case _("Save"):
         $form->getInfo(null, $info);
@@ -75,7 +75,7 @@ if ($form->validate()) {
     break;
 
     case _("Delete picture"):
-        $result = $folks_driver->deleteImage(Auth::getAuth());;
+        $result = $folks_driver->deleteImage(Horde_Auth::getAuth());;
         if ($result instanceof PEAR_Error) {
             $notification->push($result);
         } else {

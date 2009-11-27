@@ -11,8 +11,8 @@
  * @category Horde
  * @package Horde_Rdo
  */
-abstract class Horde_Rdo_Base implements IteratorAggregate {
-
+abstract class Horde_Rdo_Base implements IteratorAggregate
+{
     /**
      * The Horde_Rdo_Mapper instance associated with this Rdo object. The
      * Mapper takes care of all backend access.
@@ -40,7 +40,7 @@ abstract class Horde_Rdo_Base implements IteratorAggregate {
      */
     public function __construct($fields = array())
     {
-        $this->_fields = $fields;
+        $this->setFields($fields);
     }
 
     /**
@@ -52,7 +52,7 @@ abstract class Horde_Rdo_Base implements IteratorAggregate {
     public function __clone()
     {
         // @TODO Support composite primary keys
-        unset($this->{$this->getMapper()->model->key});
+        unset($this->{$this->getMapper()->primaryKey});
 
         // @TODO What about associated objects?
     }
@@ -89,7 +89,7 @@ abstract class Horde_Rdo_Base implements IteratorAggregate {
             // @TODO Support composite primary keys
             $query = new Horde_Rdo_Query($mapper);
             $query->setFields($field)
-                  ->addTest($mapper->model->key, '=', $this->{$mapper->model->key});
+                  ->addTest($mapper->primaryKey, '=', $this->{$mapper->primaryKey});
             $this->_fields[$field] = $mapper->adapter->queryOne($query);
             return $this->_fields[$field];
         } elseif (isset($mapper->lazyRelationships[$field])) {
@@ -123,18 +123,17 @@ abstract class Horde_Rdo_Base implements IteratorAggregate {
             break;
 
         case Horde_Rdo::ONE_TO_MANY:
-            $this->_fields[$field] = $this->cache($field,
-                $m->find(array($rel['foreignKey'] => $this->{$rel['foreignKey']})));
+            $this->_fields[$field] = $m->find(array($rel['foreignKey'] => $this->{$rel['foreignKey']}));
             break;
 
         case Horde_Rdo::MANY_TO_MANY:
-            $key = $mapper->model->key;
+            $key = $mapper->primaryKey;
             $query = new Horde_Rdo_Query();
-            $on = isset($rel['on']) ? $rel['on'] : $m->model->key;
+            $on = isset($rel['on']) ? $rel['on'] : $m->primaryKey;
             $query->addRelationship($field, array('mapper' => $mapper,
-                                                     'table' => $rel['through'],
-                                                     'type' => Horde_Rdo::MANY_TO_MANY,
-                                                     'query' => array($on => new Horde_Rdo_Query_Literal($on), $key => $this->$key)));
+                                                  'table' => $rel['through'],
+                                                  'type' => Horde_Rdo::MANY_TO_MANY,
+                                                  'query' => array("$m->table.$on" => new Horde_Rdo_Query_Literal($rel['through'] . '.' . $on), $key => $this->$key)));
             $this->_fields[$field] = $m->find($query);
             break;
         }
@@ -171,7 +170,8 @@ abstract class Horde_Rdo_Base implements IteratorAggregate {
     public function __isset($field)
     {
         $m = $this->getMapper();
-        return isset($m->fields[$field])
+        return isset($this->_fields[$field])
+            || isset($m->fields[$field])
             || isset($m->lazyFields[$field])
             || isset($m->relationships[$field])
             || isset($m->lazyRelationships[$field]);
@@ -188,6 +188,18 @@ abstract class Horde_Rdo_Base implements IteratorAggregate {
         // @TODO Should unsetting a MANY_TO_MANY relationship remove
         // the relationship?
         unset($this->_fields[$field]);
+    }
+
+    /**
+     * Set field values for the object
+     *
+     * @param array $fields Initial values for the new object.
+     *
+     * @see Horde_Rdo_Mapper::map()
+     */
+    public function setFields($fields = array())
+    {
+        $this->_fields = $fields;
     }
 
     /**

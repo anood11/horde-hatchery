@@ -1,1 +1,1642 @@
-var ViewPort=Class.create({initialize:function(a){a.content=$(a.content_container);a.empty=a.empty_container?$(a.empty_container):null;a.error=a.error_container?$(a.error_container):null;this.opts=a;this.scroller=new ViewPort_Scroller(this);this.template=new Template(a.template);this.current_req_lookup=$H();this.current_req=$H();this.fetch_hash=$H();this.views=$H();this.showSplitPane(a.show_split_pane);this.isbusy=this.line_height=this.page_size=this.splitbar=this.splitbar_loc=this.uc_run=this.view=this.viewport_init=null;this.request_num=1},loadView:function(b,d,c){var a,f,h,e={},g;this._clearWait();if(this.page_size===null){g=this.getPageSize(this.show_split_pane?"default":"max");if(isNaN(g)){this.loadView.bind(this,b,d,c).defer();return}this.page_size=g}if(this.view){if(!c){this.views.set(this.view,{buffer:this._getBuffer(),offset:this.currentOffset()})}f=this.views.get(b)}else{h=true}if(c){e={background:true,view:b}}else{this.view=b;if(!this.viewport_init){this.viewport_init=1;this._renderViewport()}}if(f){this._updateContent(f.offset,e);if(!c){if(this.opts.onComplete){this.opts.onComplete()}this.opts.ajaxRequest(this.opts.fetch_action,this.addRequestParams({checkcache:1,rownum:this.currentOffset()+1}))}return true}else{if(!h){if(this.opts.onClearRows){this.opts.onClearRows(this.opts.content.childElements())}this.opts.content.update();this.scroller.clear()}}a=this._getBuffer(b,true);this.views.set(b,{buffer:a,offset:0});if(d){e.search=d}else{e.offset=0}this._fetchBuffer(e);return false},deleteView:function(a){this.views.unset(a)},scrollTo:function(a,c){var b=this.scroller;c=c||{};b.noupdate=c.noupdate;switch(this.isVisible(a)){case-1:b.moveScroll(a-1);break;case 0:if(c.top){b.moveScroll(a-1)}break;case 1:b.moveScroll(Math.min(a,this.getMetaData("total_rows")-this.getPageSize()+1));break}b.noupdate=false},isVisible:function(a){var b=this.currentOffset();return(a<b+1)?-1:((a>(b+this.getPageSize("current")))?1:0)},reload:function(a){if(this.isFiltering()){this.filter.filter(null,a)}else{this._fetchBuffer({offset:this.currentOffset(),purge:true,params:a})}},remove:function(f,c){if(this.isbusy){this.remove.bind(this,f,cacheid,view).defer();return}if(!f.size()){return}c=c||{};this.isbusy=true;var a,b=0,e=f.get("div"),d=e.size();this.deselect(f);if(c.cacheid){this._getBuffer(c.view).setMetaData({cacheid:c.cacheid},true)}if(d){a={duration:0.3,to:0.01};e.each(function(g){if(++b==d){a.afterFinish=this._removeids.bind(this,f,c)}Effect.Fade(g,a)},this)}else{this._removeids(f,c)}},_removeids:function(b,a){this._getBuffer(a.view).setMetaData({total_rows:this.getMetaData("total_rows",a.view)-b.size()},true);if(this.opts.onRemoveRows){this.opts.onRemoveRows(b)}this._getBuffer().remove(b.get("rownum"));if(this.opts.onCacheUpdate){this.opts.onCacheUpdate(a.view||this.view)}if(!a.noupdate){this.requestContentRefresh(this.currentOffset())}this.isbusy=false},addFilter:function(a,b){this.filter=new ViewPort_Filter(this,a,b)},runFilter:function(b,a){if(this.filter){this.filter.filter(Object.isUndefined(b)?null:b,a)}},isFiltering:function(){return this.filter?this.filter.isFiltering():false},stopFilter:function(a){if(this.filter){this.filter.clear(a)}},onResize:function(b,a){if(!this.uc_run||!this.opts.content.visible()){return}if(this.resizefunc){clearTimeout(this.resizefunc)}if(a){this._onResize(b)}else{this.resizefunc=this._onResize.bind(this,b).delay(0.1)}},_onResize:function(a){if(this.opts.onBeforeResize){this.opts.onBeforeResize()}this._renderViewport(a);if(this.opts.onAfterResize){this.opts.onAfterResize()}},requestContentRefresh:function(b){if(this._updateContent(b)){var a=this._getBuffer().isNearingLimit(b);if(a){this._fetchBuffer({offset:b,background:true,nearing:a})}return true}return false},_fetchBuffer:function(a){if(this.isbusy){this._fetchBuffer.bind(this,a).defer();return}this.isbusy=true;if(this.opts.onFetch&&!a.background){this.opts.onFetch()}var m=(a.view||this.view),h=this.opts.fetch_action,f,n=this._getBuffer(m),j,d,g=$H(a.params),e,p,q,l,c,k,o,i;if(a.purge){g.set("purge",true)}if(a.search){k="search";o=a.search;d=this._lookbehind(m);g.update({search_before:d,search_after:n.bufferSize()-d})}else{k="rownum";o=a.offset+1;f=n.getAllRows(true);c=a.rowlist?a.rowlist:this._getSliceBounds(o,a.nearing,m);l=$A($R(c.start,c.end)).diff(f);if(!a.purge&&!l.size()){this.isbusy=false;return}g.update({slice:l.first()+":"+l.last()})}g.set(k,Object.toJSON(o));if(this.isFiltering()){h=this.filter.getAction()}p=[m,k,o].toJSON();e=this.fetch_hash.get(p);j=this.current_req.get(m);if(j){if(e&&j.get(e)){if(++j.get(e).count==4){this._displayFetchError();this._removeRequest(m,e);this.isbusy=false;return}}else{if(k=="rownum"){i=$A($R(o,o+this.getPageSize())).diff(f);if(!i.size()){this.isbusy=false;return}q=j.keys().numericSort().find(function(b){var s=j.get(b).rlist;i=i.diff(s);if(!i.size()){return true}l=l.diff(s)});if(q){if(!a.background){this._addRequest(m,q,{background:false,offset:o-1})}this.isbusy=false;return}else{if(!a.background){j.keys().each(function(b){this._addRequest(m,b,{background:true})},this)}}}}}if(!e){e=this.fetch_hash.set(p,this.request_num++)}g.set("request_id",e);this._addRequest(m,e,{background:a.background,offset:o-1,rlist:l});this.opts.ajaxRequest(h,this.addRequestParams(g,{noslice:true,view:m}));this._handleWait();this.isbusy=false},_getSliceBounds:function(c,d,a){var e=this._getBuffer(a).bufferSize(),b={};switch(d){case"bottom":b.start=c+this.getPageSize();b.end=b.start+e;break;case"top":b.start=Math.max(c-e,1);b.end=c;break;default:b.start=Math.max(c-this._lookbehind(a),1);b.end=b.start+e;break}return b},_lookbehind:function(a){return parseInt(0.4*this._getBuffer(a).bufferSize(),10)},addRequestParams:function(a,c){c=c||{};var f=this.getMetaData("cacheid",c.view),b,d,e;if(this.isFiltering()){d=this.filter.addFilterParams().merge({view:this.isFiltering()})}else{d=this.opts.additionalParams?this.opts.additionalParams(c.view||this.view):$H();d.update({view:c.view||this.view})}if(f){d.update({cacheid:f})}if(!c.noslice){e=this._getSliceBounds(this.currentOffset(),null,c.view);d.update({slice:e.start+":"+e.end})}if(this.opts.onCachedList){b=this.opts.onCachedList(c.view||this.view)}else{b=this._getBuffer(c.view).getAllUIDs();b=b.size()?b.toJSON():""}if(b.length){d.update({cached:b})}return d.merge(a)},ajaxResponse:function(d){if(this.isbusy){this.ajaxResponse.bind(this,d).defer();return}this.isbusy=true;this._clearWait();var a,b,e=(d.request_id)?this.current_req_lookup.get(d.request_id):d.id,c=this.current_req.get(e);if(c&&d.request_id){b=c.get(d.request_id)}if(this.viewport_init){this.viewport_init=2}a=this._getBuffer(e);a.update(Object.isArray(d.data)?{}:d.data,Object.isArray(d.rowlist)?{}:d.rowlist,d.metadata||{},{partial:d.partial,reset:d.reset,resetmd:d.resetmd,update:d.update});if(!d.partial){a.setMetaData({cacheid:d.cacheid,label:d.label,total_rows:d.totalrows},true)}if(this.opts.onCacheUpdate){this.opts.onCacheUpdate(e)}if(d.request_id){this._removeRequest(e,d.request_id)}this.isbusy=false;if(d.partial){this.select(this.getViewportSelection(e))}else{if(!(this.view==e||d.search)||(b&&b.background)||!this._updateContent((b&&b.offset)?b.offset:(d.rownum?parseInt(d.rownum)-1:this.currentOffset()))){return}if(this.opts.onComplete){this.opts.onComplete()}}if(this.opts.onEndFetch){this.opts.onEndFetch()}},_addRequest:function(a,b,e){var d=this.current_req.get(a),c;if(!d){d=this.current_req.set(a,$H())}c=d.get(b);if(!c){c=d.set(b,{count:1})}["background","offset","rlist"].each(function(f){if(!Object.isUndefined(e[f])){c[f]=e[f]}});this.current_req_lookup.set(b,a)},_removeRequest:function(a,b){var c=this.current_req.get(a);if(c){c.unset(b);if(!c.size()){this.current_req.unset(a)}}this.current_req_lookup.unset(b)},_updateContent:function(g,d){d=d||{};if(!this._getBuffer(d.view).sliceLoaded(g)){this._fetchBuffer($H(d).merge({offset:g}).toObject());return false}if(!this.uc_run){this.uc_run=true;if(this.opts.onFirstContent){this.opts.onFirstContent()}}var h=this.opts.content,a=[],b=this.getPageSize(),f,e=this.getSelected();if(this.opts.onClearRows){this.opts.onClearRows(h.childElements())}this.scroller.updateSize();this.scrollTo(g+1,{noupdate:true,top:true});g=this.currentOffset();f=this.createSelection("rownum",$A($R(g+1,g+b)));if(f.size()){f.get("dataob").each(function(i){var c=Object.clone(i);if(c.bg){c.bg=i.bg.clone();if(e.contains("uid",c.vp_id)){c.bg.push(this.opts.selected_class)}c.bg_string=c.bg.join(" ")}a.push(this.template.evaluate(c))},this);h.update(a.join(""));if(this.opts.onUpdateClass){f.get("div").each(function(c){this.opts.onUpdateClass(c)},this)}}else{h.update((this.opts.empty&&this.viewport_init!=1)?this.opts.empty.innerHTML:"")}if(this.opts.onContent){this.opts.onContent(f)}return true},_displayFetchError:function(){if(this.opts.onFail){this.opts.onFail()}if(this.opts.error){this.opts.content.update(this.opts.error.innerHTML)}},_handleWait:function(a){this._clearWait();if(a&&this.opts.onWait){this.opts.onWait()}if(this.opts.viewport_wait){this.waitHandler=this._handleWait.bind(this,true).delay(this.opts.viewport_wait)}},_clearWait:function(){if(this.waitHandler){clearTimeout(this.waitHandler);this.waitHandler=null}},visibleRows:function(){return this.opts.content.childElements()},getMetaData:function(b,a){return this._getBuffer(a).getMetaData(b)},setMetaData:function(b,a){this._getBuffer(a).setMetaData(b,false)},_getBuffer:function(c,d){c=c||this.view;if(!d){var a=this.views.get(c);if(a){return a.buffer}}return new ViewPort_Buffer(this,this.opts.buffer_pages,this.opts.limit_factor,c)},currentOffset:function(){return this.scroller.currentOffset()},updateFlag:function(c,a,b){this._updateFlag(c,a,b,this.isFiltering());this._updateClass(c,a,b)},_updateFlag:function(d,a,c,b){d.get("dataob").each(function(e){if(c){e.bg.push(a)}else{e.bg.splice(e.bg.indexOf(a),1)}if(b){this._updateFlag(this.createSelection("uid",e.vp_id,e.view),a,c)}},this)},_updateClass:function(c,a,b){c.get("div").each(function(e){if(b){e.addClassName(a)}else{e.removeClassName(a)}if(this.opts.onUpdateClass){this.opts.onUpdateClass(e)}},this)},_getLineHeight:function(){if(this.line_height){return this.line_height}var a=new Element("DIV",{className:this.opts.content_class}).insert(new Element("DIV",{className:this.opts.row_class})).hide();$(document.body).insert(a);this.line_height=a.getHeight();a.remove();return this.line_height},getPageSize:function(a){switch(a){case"current":return Math.min(this.page_size,this.getMetaData("total_rows"));case"default":return Math.max(parseInt(this.getPageSize("max")*0.45),5);case"max":return parseInt(this._getMaxHeight()/this._getLineHeight());default:return this.page_size}},_getMaxHeight:function(){return document.viewport.getHeight()-this.opts.content.viewportOffset()[1]},showSplitPane:function(a){this.show_split_pane=a;this.onResize(false,true)},_renderViewport:function(e){if(!this.viewport_init){return}if(!this.opts.content.offsetHeight){return this._renderViewport.bind(this,e).defer()}var f,b,j,d,i=$(this.opts.content),g=document.documentElement,a=this._getLineHeight();if(this.opts.split_pane){j=$(this.opts.split_pane);if(this.show_split_pane){if(!j.visible()){this._initSplitBar();this.page_size=(this.splitbar_loc)?this.splitbar_loc:this.getPageSize("default")}d=true}else{if(j.visible()){this.splitbar_loc=this.page_size;$(j,this.splitbar).invoke("hide")}}}if(!d){this.page_size=this.getPageSize("max")}b=a*this.page_size;i.setStyle({height:b+"px"});if(d){j.setStyle({height:(this._getMaxHeight()-b-a)+"px"}).show();this.splitbar.show()}else{if(f=g.scrollHeight-g.clientHeight){i.setStyle({height:(a*(this.page_size-1))+"px"})}}if(!e){this.scroller.onResize()}},_initSplitBar:function(){if(this.splitbar){return}this.splitbar=$(this.opts.splitbar);new Drag(this.splitbar,{constraint:"vertical",ghosting:true,onStart:function(){var a=this._getLineHeight();this.sp={lh:a,pos:$(this.opts.content).positionedOffset()[1],max:parseInt((this._getMaxHeight()-100)/a),lines:this.page_size}}.bind(this),snap:function(a,d,c){var b=parseInt((d-this.sp.pos)/this.sp.lh);if(b<1){b=1}else{if(b>this.sp.max){b=this.sp.max}}this.sp.lines=b;return[a,this.sp.pos+(b*this.sp.lh)]}.bind(this),onEnd:function(){this.page_size=this.sp.lines;this._renderViewport()}.bind(this)});this.splitbar.observe("dblclick",function(){this.page_size=this.getPageSize("default");this._renderViewport()}.bind(this))},createSelection:function(d,c,b){var a=this._getBuffer(b);return a?new ViewPort_Selection(a,d,c):new ViewPort_Selection(this._getBuffer(this.view))},getViewportSelection:function(b,c){var a=this._getBuffer(b);return this.createSelection("uid",a?a.getAllUIDs(c):[],b)},select:function(f,c){c=c||{};var a=this._getBuffer(),d,e;if(c.range){e=this.createSelection("rownum",f);if(f.size()!=e.size()){this._fetchBuffer({offset:this.currentOffset(),params:{rangeslice:1},rowlist:{start:f.min(),end:f.size()}});return}f=e}if(!c.add){d=this.getSelected();a.deselect(d,true);this._updateClass(d,this.opts.selected_class,false)}a.select(f);this._updateClass(f,this.opts.selected_class,true);if(this.opts.selectCallback){this.opts.selectCallback(f,c)}},deselect:function(b,a){a=a||{};if(!b.size()){return}if(this._getBuffer().deselect(b,a&&a.clearall)){this._updateClass(b,this.opts.selected_class,false);if(this.opts.deselectCallback){this.opts.deselectCallback(b,a)}}},getSelected:function(){return Object.clone(this._getBuffer().getSelected())}}),ViewPort_Scroller=Class.create({initialize:function(a){this.vp=a},_createScrollBar:function(){if(this.scrollDiv){return false}var a=this.vp.opts.content;this.scrollDiv=new Element("DIV",{className:"sbdiv",style:"height:"+a.getHeight()+"px;"}).hide();a.insert({after:this.scrollDiv}).setStyle({marginRight:"-"+this.scrollDiv.getWidth()+"px"});this.scrollbar=new DimpSlider(this.scrollDiv,{buttonclass:{up:"sbup",down:"sbdown"},cursorclass:"sbcursor",onChange:this._onScroll.bind(this),onSlide:this.vp.opts.onSlide?this.vp.opts.onSlide:null,pagesize:this.vp.getPageSize(),totalsize:this.vp.getMetaData("total_rows")});a.observe(Prototype.Browser.Gecko?"DOMMouseScroll":"mousewheel",function(c){if(Prototype.Browser.Gecko&&c.eventPhase==2){return}var b=this.vp.getPageSize();b=(b>3)?3:b;this.moveScroll(this.currentOffset()+((c.wheelDelta>=0||c.detail<0)?(-1*b):b))}.bindAsEventListener(this));return true},onResize:function(){if(!this.scrollDiv){return}this.scrollsize=this.vp.opts.content.getHeight();this.scrollDiv.setStyle({height:this.scrollsize+"px"});this.updateSize();this.vp.requestContentRefresh(this.currentOffset())},updateSize:function(){if(!this._createScrollBar()){this.scrollbar.updateHandleLength(this.vp.getPageSize(),this.vp.getMetaData("total_rows"))}},clear:function(){if(this.scrollDiv){this.scrollbar.updateHandleLength(0,0)}},moveScroll:function(a){this._createScrollBar();this.scrollbar.setScrollPosition(a)},_onScroll:function(){if(!this.noupdate){if(this.vp.opts.onScroll){this.vp.opts.onScroll()}this.vp.requestContentRefresh(this.currentOffset());if(this.vp.opts.onScrollIdle){this.vp.opts.onScrollIdle()}}},currentOffset:function(){return this.scrollbar?this.scrollbar.getValue():0}}),ViewPort_Buffer=Class.create({initialize:function(c,d,b,a){this.bufferPages=d;this.limitFactor=b;this.vp=c;this.view=a;this.clear()},getView:function(){return this.view},_limitTolerance:function(){return Math.round(this.bufferSize()*(this.limitFactor/100))},bufferSize:function(){return Math.round(Math.max(this.vp.getPageSize("max")+1,this.bufferPages*this.vp.getPageSize()))},update:function(f,a,c,b){var e;f=$H(f);a=$H(a);b=b||{};if(!b.reset&&this.data.size()){this.data.update(f);if(b.partial||this.partial.size()){f.keys().each(function(d){if(b.partial){this.partial.set(d,true)}else{this.partial.unset(d)}},this)}}else{this.data=f}if(b.update||b.reset){this.uidlist=a;this.rowlist=$H()}else{this.uidlist=this.uidlist.size()?this.uidlist.merge(a):a}a.each(function(d){this.rowlist.set(d.value,d.key)},this);if(b.resetmd){this.usermdata=$H(c)}else{$H(c).each(function(d){if(Object.isString(d.value)||Object.isNumber(d.value)){this.usermdata.set(d.key,d.value)}else{e=this.usermdata.get(d.key);if(e){this.usermdata.get(d.key).update($H(d.value))}else{this.usermdata.set(d.key,$H(d.value))}}},this)}},sliceLoaded:function(a){return!this._rangeCheck($A($R(a+1,Math.min(a+this.vp.getPageSize()-1,this.getMetaData("total_rows")))))},isNearingLimit:function(a){if(this.uidlist.size()!=this.getMetaData("total_rows")){if(a!=0&&this._rangeCheck($A($R(Math.max(a+1-this._limitTolerance(),1),a)))){return"top"}else{if(this._rangeCheck($A($R(a+1,Math.min(a+this._limitTolerance()+this.vp.getPageSize()-1,this.getMetaData("total_rows")))).reverse())){return"bottom"}}}return false},_rangeCheck:function(a){var b=this.partial.size();return a.any(function(d){var c=this.rowlist.get(d);return(Object.isUndefined(c)||(b&&this.partial.get(c)))},this)},getData:function(a){return a.collect(function(b){var c=this.data.get(b);if(!Object.isUndefined(c)){c.domid="vp_row"+b;c.rownum=this.uidlist.get(b);c.vp_id=b;return c}},this).compact()},getAllUIDs:function(b){var a=this.uidlist.keys();return b?a.diff(this.partial.keys()):a},getAllRows:function(b){var a=this.rowlist.keys();return b?this.rowsToUIDs(a,true):a},rowsToUIDs:function(b,a){return b.collect(function(d){var c=this.rowlist.get(d);return a?((this.partial.get(c))?null:c):c},this).compact()},select:function(a){this.selected.add("uid",a.get("uid"))},deselect:function(c,b){var a=this.selected.size();if(b){this.selected.clear()}else{this.selected.remove("uid",c.get("uid"))}return a!=this.selected.size()},getSelected:function(){return this.selected},remove:function(b){var c=b.min(),d,e=this.rowlist.size(),a=0;d=e-b.size();return this.rowlist.keys().each(function(h){if(h>=c){var g=this.rowlist.get(h),f;if(b.include(h)){this.data.unset(g);this.uidlist.unset(g);a++}else{if(a){f=h-a;this.rowlist.set(f,g);this.uidlist.set(g,f)}}if(h>d){this.rowlist.unset(h)}}},this)},clear:function(){this.data=$H();this.partial=$H();this.mdata=$H({total_rows:0});this.usermdata=$H();this.rowlist=$H();this.selected=new ViewPort_Selection(this);this.uidlist=$H()},getMetaData:function(a){return this.mdata.get(a)||this.usermdata.get(a)},setMetaData:function(b,a){if(a){this.mdata.update(b)}else{this.usermdata.update(b)}}}),ViewPort_Filter=Class.create({initialize:function(a,b,c){this.vp=a;this.action=b;this.callback=c;this.filtering=this.last_filter=this.last_folder=null},filter:function(d,b){b=b||{};if(d===null){d=this.last_filter}else{d=d.toLowerCase();if(d==this.last_filter){return}}if(!d){this.clear();return}this.last_filter=d;if(this.filtering){this.vp._fetchBuffer({offset:0,params:b});return}this.filtering=true;this.last_folder=this.vp.view;var e=this.vp.opts.content,a;a=e.childElements().findAll(function(c){return c.collectTextNodes().toLowerCase().indexOf(d)==-1});if(this.vp.opts.onClearRows){this.vp.opts.onClearRows(a)}a.invoke("remove");this.vp.scroller.clear();if(this.vp.opts.empty&&!e.childElements().size()){e.update(this.vp.opts.empty.innerHTML)}this.vp.loadView("%%filter%%")},isFiltering:function(){return this.filtering?this.last_folder:false},getAction:function(){return this.action},addFilterParams:function(){if(!this.filtering){return $H()}var a=$H({filter:this.last_filter});if(this.callback){a.update(this.callback())}return a},clear:function(a){if(this.filtering){this.filtering=null;if(!a){this.vp.loadView(this.last_folder)}this.vp.deleteView("%%filter%%");this.last_filter=this.last_folder=null}}}),ViewPort_Selection=Class.create({initialize:function(a,c,b){this.buffer=a;this.clear();if(!Object.isUndefined(c)){this.add(c,b)}this.viewport_selection=true},add:function(a,b){var e=this._convert(a,b);this.data=(this.data.size())?this.data.concat(e).uniq():e},remove:function(a,b){this.data=this.data.diff(this._convert(a,b))},_convert:function(a,b){b=Object.isArray(b)?b:[b];switch(a){case"dataob":return b.pluck("vp_id");case"div":return b.pluck("id").invoke("substring",6);case"domid":return b.invoke("substring",6);case"rownum":return this.buffer.rowsToUIDs(b);case"uid":return b}},clear:function(){this.data=[]},get:function(a){a=Object.isUndefined(a)?"uid":a;if(a=="uid"){return this.data}var b=this.buffer.getData(this.data);switch(a){case"dataob":return b;case"div":return b.pluck("domid").collect(function(c){return $(c)}).compact();case"domid":return b.pluck("domid");case"rownum":return b.pluck("rownum")}},contains:function(a,b){return this.data.include(this._convert(a,b).first())},search:function(a){return new ViewPort_Selection(this.buffer,"uid",this.get("dataob").findAll(function(b){return $H(a).all(function(c){return $H(c.value).all(function(d){switch(d.key){case"equal":case"not":var e=b[c.key]&&d.value.include(b[c.key]);return(d.key=="equal")?e:!e;case"regex":return b[c.key].match(d.value)}})})}).pluck("vp_id"))},size:function(){return this.data.size()},set:function(a){this.get("dataob").each(function(b){$H(a).each(function(c){b[c.key]=c.value})})},getBuffer:function(){return this.buffer}});Object.extend(Array.prototype,{diff:function(a){return this.select(function(b){return!a.include(b)})},numericSort:function(){return this.collect(Number).sort(function(d,c){return(d>c)?1:((d<c)?-1:0)})}});
+/**
+ * ViewPort.js - Code to create a viewport window, with optional split pane
+ * functionality.
+ *
+ * Usage:
+ * ======
+ * var viewport = new ViewPort({ options });
+ *
+ * Required options:
+ * -----------------
+ * ajax_url: (string) The URL to send the viewport requests to.
+ *           This URL should return its response in an object named
+ *           'ViewPort' (other information can be returned in the response and
+ *           will be ignored by the viewport object).
+ * container: (Element/string) A DOM element/ID of the container that holds
+ *            the viewport. This element should be empty and have no children.
+ * onContent: (function) A function that takes 2 arguments - the data object
+ *            for the row and a string indicating the current pane_mode.
+ *
+ *            This function MUST return the HTML representation of the row.
+ *
+ *            This representation MUST include both the DOM ID (stored in
+ *            the domid field) and the CSS class name (stored as an array in
+ *            the bg field) in the outermost element.
+ *
+ *            Selected rows will contain the classname 'vpRowSelected'.
+ *
+ *
+ * Optional options:
+ * -----------------
+ * ajax_opts: (object) Any additional options to pass to the Ajax.Request
+ *            object when sending an AJAX message.
+ * buffer_pages: (integer) The number of viewable pages to send to the browser
+ *               per server access when listing rows.
+ * empty_msg: (string) A string to display when the view is empty. Inserted in
+ *            a SPAN element with class 'vpEmpty'.
+ * limit_factor: (integer) When browsing through a list, if a user comes
+ *               within this percentage of the end of the current cached
+ *               viewport, send a background request to the server to retrieve
+ *               the next slice.
+ * list_class: (string) The CSS class to use for the list container.
+ * lookbehind: (integer) What percentage of the received buffer should be
+ *             used to download rows before the given row number?
+ * page_size: (integer) Default page size to view on load. Only used if
+ *            pane_mode is 'horiz'.
+ * pane_data: (Element/string) A DOM element/ID of the container to hold
+ *            the split pane data. This element will be moved inside of the
+ *            container element.
+ * pane_mode: (string) The split pane mode to show on load? Either empty,
+ *            'horiz', or 'vert'.
+ * pane_width: (integer) The default pane width to use on load. Only used if
+ *             pane_mode is 'vert'.
+ * split_bar_class: (object) The CSS class(es) to use for the split bar.
+ *                  Takes two properties: 'horiz' and 'vert'.
+ * wait: (integer) How long, in seconds, to wait before displaying an
+ *       informational message to users that the list is still being
+ *       built.
+ *
+ *
+ * Callbacks:
+ * ----------
+ * onAjaxRequest
+ * onAjaxResponse
+ * onCachedList
+ * onCacheUpdate
+ * onClear
+ * onContent
+ * onContentComplete
+ * onDeselect
+ * onEndFetch
+ * onFetch
+ * onSelect
+ * onSlide
+ *
+ * onSplitBarChange
+ * onSplitBarEnd
+ * onSplitBarStart
+ *   + Passed the current pane mode (either 'horiz' or 'vert').
+ *
+ * onWait
+ *
+ *
+ * Outgoing AJAX request has the following params:
+ * -----------------------------------------------
+ * For ALL requests:
+ *   cache: (string) The list of uids cached on the browser.
+ *   cacheid: (string) A unique string that changes whenever the viewport
+ *            list changes.
+ *   initial: (integer) TODO
+ *   requestid: (integer) A unique identifier for this AJAX request.
+ *   view: (string) The view of the request.
+ *
+ * For a row request:
+ *   slice: (string) The list of rows to retrieve from the server.
+ *          In the format: [first_row]:[last_row]
+ *
+ * For a search request:
+ *   after: (integer) The number of rows to return after the selected row.
+ *   before: (integer) The number of rows to return before the selected row.
+ *   search: (JSON object) The search query.
+ *
+ * For a rangeslice request:
+ *   rangeslice: (integer) If present, indicates that slice is a rangeslice
+ *               request.
+ *   slice: (string) The list of rows to retrieve from the server.
+ *          In the format: [first_row]:[last_row]
+ *
+ *
+ * Incoming AJAX response has the following params:
+ * ------------------------------------------------
+ * cacheid: (string) A unique string that changes whenever the viewport
+ *          list changes.
+ * data: (object) TODO
+ * label: (string) The label to use for the current view.
+ * metadata [optional]: (object) TODO
+ * rangelist: TODO
+ * requestid: (string) The request ID sent in the outgoing AJAX request.
+ * reset [optional]: (integer) If set, purges all cached data.
+ * resetmd [optional]: (integer) If set, purges all user metadata.
+ * rowlist: TODO
+ * rownum [optional]: (integer) The row number to position screen on.
+ * totalrows: (integer) Total number of rows in the view.
+ * update [optional]: (integer) If set, update the rowlist instead of
+ *                    overwriting it.
+ * view: (string) The view ID of the request.
+ *
+ *
+ * Scroll bars use ars styled using these CSS class names:
+ * -------------------------------------------------------
+ * vpScroll - The scroll bar container.
+ * vpScrollUp - The UP arrow.
+ * vpScrollCursor - The cursor used to slide within the bounds.
+ * vpScrollDown - The DOWN arrow.
+ *
+ *
+ * Requires prototypejs 1.6+, DimpSlider.js, scriptaculous 1.8+ (effects.js
+ * only), and Horde's dragdrop2.js.
+ *
+ * Copyright 2005-2009 The Horde Project (http://www.horde.org/)
+ *
+ * See the enclosed file COPYING for license information (GPL). If you
+ * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
+ */
+
+/**
+ * ViewPort
+ */
+var ViewPort = Class.create({
+
+    initialize: function(opts)
+    {
+        this.opts = Object.extend({
+            buffer_pages: 10,
+            limit_factor: 35,
+            lookbehind: 40,
+            split_bar_class: {}
+        }, opts);
+
+        this.opts.container = $(opts.container);
+        this.opts.pane_data = $(opts.pane_data);
+
+        this.opts.content = new Element('DIV', { className: opts.list_class }).setStyle({ overflow: 'hidden' });
+        this.opts.container.insert(this.opts.content);
+
+        this.scroller = new ViewPort_Scroller(this);
+
+        this.split_pane = {
+            curr: null,
+            horiz: {
+                loc: opts.page_size
+            },
+            vert: {
+                width: opts.pane_width
+            }
+        };
+        this.views = {};
+
+        this.pane_mode = opts.pane_mode;
+
+        this.isbusy = this.page_size = null;
+        this.request_num = 1;
+
+        // Init empty string now.
+        this.empty_msg = new Element('SPAN', { className: 'vpEmpty' }).insert(opts.empty_msg);
+
+        // Set up AJAX response function.
+        this.ajax_response = this.opts.onAjaxResponse || this._ajaxRequestComplete.bind(this);
+
+        Event.observe(window, 'resize', this.onResize.bind(this));
+    },
+
+    // view = (string) ID of view.
+    // search = (object) Search parameters
+    // background = (boolean) Load view in background?
+    loadView: function(view, search, background)
+    {
+        var buffer, curr, init = true, opts = {}, ps;
+
+        this._clearWait();
+
+        // Need a page size before we can continue - this is what determines
+        // the slice size to request from the server.
+        if (this.page_size === null) {
+            ps = this.getPageSize(this.pane_mode ? 'default' : 'max');
+            if (isNaN(ps)) {
+                return this.loadView.bind(this, view, search, background).defer();
+            }
+            this.page_size = ps;
+        }
+
+        if (this.view) {
+            if (!background) {
+                // Need to store current buffer to save current offset
+                buffer = this._getBuffer();
+                buffer.setMetaData({ offset: this.currentOffset() }, true);
+                this.views[this.view] = buffer;
+            }
+            init = false;
+        }
+
+        if (background) {
+            opts = { background: true, view: view };
+        } else {
+            if (!this.view) {
+                this.onResize(true);
+            } else if (this.view != view) {
+                this.active_req = null;
+            }
+            this.view = view;
+        }
+
+        if (curr = this.views[view]) {
+            this._updateContent(curr.getMetaData('offset') || 0, opts);
+            if (!background) {
+                this._ajaxRequest({ checkcache: 1 });
+            }
+            return;
+        }
+
+        if (!init) {
+            if (this.opts.onClear) {
+                this.opts.onClear(this.visibleRows());
+            }
+            this.opts.content.update();
+            this.scroller.clear();
+        }
+
+        this.views[view] = buffer = this._getBuffer(view, true);
+
+        if (search) {
+            opts.search = search;
+        } else {
+            opts.offset = 0;
+        }
+
+        opts.initial = 1;
+
+        this._fetchBuffer(opts);
+    },
+
+    // view = ID of view
+    deleteView: function(view)
+    {
+        delete this.views[view];
+    },
+
+    // rownum = (integer) Row number
+    // opts = (Object) [noupdate, top] TODO
+    scrollTo: function(rownum, opts)
+    {
+        var s = this.scroller;
+        opts = opts || {};
+
+        s.noupdate = opts.noupdate;
+
+        switch (this.isVisible(rownum)) {
+        case -1:
+            s.moveScroll(rownum - 1);
+            break;
+
+        case 0:
+            if (opts.top) {
+                s.moveScroll(rownum - 1);
+            }
+            break;
+
+        case 1:
+            s.moveScroll(Math.min(rownum - 1, this.getMetaData('total_rows') - this.getPageSize()));
+            break;
+        }
+
+        s.noupdate = false;
+    },
+
+    // rownum = Row number
+    isVisible: function(rownum)
+    {
+        var offset = this.currentOffset();
+        return (rownum < offset + 1)
+            ? -1
+            : ((rownum > (offset + this.getPageSize('current'))) ? 1 : 0);
+    },
+
+    // params = TODO
+    reload: function(params)
+    {
+        this._fetchBuffer({
+            offset: this.currentOffset(),
+            params: $H(params),
+            purge: true
+        });
+    },
+
+    // vs = (Viewport_Selection) A Viewport_Selection object.
+    // opts = (object) TODO [cacheid, noupdate, view]
+    remove: function(vs, opts)
+    {
+        if (!vs.size()) {
+            return;
+        }
+
+        if (this.isbusy) {
+            this.remove.bind(this, vs, opts).defer();
+            return;
+        }
+
+        this.isbusy = true;
+        opts = opts || {};
+
+        var args,
+            i = 0,
+            visible = vs.get('div'),
+            vsize = visible.size();
+
+        this.deselect(vs);
+
+        if (opts.cacheid) {
+            this._getBuffer(opts.view).setMetaData({ cacheid: opts.cacheid }, true);
+        }
+
+        // If we have visible elements to remove, only call refresh after
+        // the last effect has finished.
+        if (vsize) {
+            // Set 'to' to a value slightly above 0 to prevent fade()
+            // from auto hiding.  Hiding is unnecessary, since we will be
+            // removing from the document shortly.
+            args = { duration: 0.25, to: 0.01 };
+            visible.each(function(v) {
+                if (++i == vsize) {
+                    args.afterFinish = this._removeids.bind(this, vs, opts);
+                }
+                v.fade(args);
+            }, this);
+        } else {
+            this._removeids(vs, opts);
+        }
+    },
+
+    // vs = (Viewport_Selection) A Viewport_Selection object.
+    // opts = (object) TODO [noupdate, view]
+    _removeids: function(vs, opts)
+    {
+        this._getBuffer(opts.view).setMetaData({ total_rows: this.getMetaData('total_rows', opts.view) - vs.size() }, true);
+
+        if (this.opts.onClear) {
+            this.opts.onClear(vs.get('div').compact());
+        }
+
+        this._getBuffer().remove(vs.get('rownum'));
+
+        if (this.opts.onCacheUpdate) {
+            this.opts.onCacheUpdate(opts.view || this.view);
+        }
+
+        if (!opts.noupdate) {
+            this.requestContentRefresh(this.currentOffset());
+        }
+
+        this.isbusy = false;
+    },
+
+    // nowait = (boolean) If true, don't delay before resizing.
+    // size = (integer) The page size to use instead of auto-determining.
+    onResize: function(nowait, size)
+    {
+        if (!this.opts.content.visible()) {
+            return;
+        }
+
+        if (this.resizefunc) {
+            clearTimeout(this.resizefunc);
+        }
+
+        if (nowait) {
+            this._onResize(size);
+        } else {
+            this.resizefunc = this._onResize.bind(this, size).delay(0.1);
+        }
+    },
+
+    // size = (integer) The page size to use instead of auto-determining.
+    _onResize: function(size)
+    {
+        var h,
+            c = this.opts.content,
+            lh = this._getLineHeight(),
+            sp = this.split_pane;
+
+        if (size) {
+            this.page_size = size;
+        }
+
+        // Get split pane dimensions
+        switch (this.pane_mode) {
+        case 'horiz':
+            this._initSplitBar();
+
+            if (!size) {
+                this.page_size = (sp.horiz.loc && sp.horiz.loc > 0)
+                    ? Math.min(sp.horiz.loc, this.getPageSize('splitmax'))
+                    : this.getPageSize('default');
+            }
+            sp.horiz.loc = this.page_size;
+
+            h = lh * this.page_size;
+            c.setStyle({ float: 'left', height: h + 'px', width: '100%' });
+            sp.currbar.show();
+            this.opts.pane_data.setStyle({ height: (this._getMaxHeight() - h - lh) + 'px' }).show();
+            break;
+
+        case 'vert':
+            this._initSplitBar();
+
+            if (!size) {
+                this.page_size = this.getPageSize('max');
+            }
+
+            if (!sp.vert.width) {
+                sp.vert.width = parseInt(this.opts.container.clientWidth * 0.35, 10);
+            }
+
+            h = lh * this.page_size;
+            c.setStyle({ float: 'left', height: h + 'px', width: sp.vert.width + 'px' });
+            sp.currbar.setStyle({ height: h + 'px' }).show();
+            this.opts.pane_data.setStyle({ height: h + 'px' }).show();
+            break;
+
+        default:
+            if (sp.curr) {
+                if (this.pane_mode == 'horiz') {
+                    sp.horiz.loc = this.page_size;
+                }
+                [ this.opts.pane_data, sp.currbar ].invoke('hide');
+                sp.curr = sp.currbar = null;
+            }
+
+            if (!size) {
+                this.page_size = this.getPageSize('max');
+            }
+
+            c.setStyle({ float: 'none', height: (lh * this.page_size) + 'px', width: '100%' });
+            break;
+        }
+
+        if (this.view) {
+            this.requestContentRefresh(this.currentOffset());
+        }
+    },
+
+    // offset = (integer) TODO
+    requestContentRefresh: function(offset)
+    {
+        if (!this._updateContent(offset)) {
+            return false;
+        }
+
+        var limit = this._getBuffer().isNearingLimit(offset);
+        if (limit) {
+            this._fetchBuffer({
+                background: true,
+                nearing: limit,
+                offset: offset
+            });
+        }
+
+        return true;
+    },
+
+    // opts = (object) The following parameters:
+    // One of the following is REQUIRED:
+    //   offset: (integer) Value of offset
+    //   search: (object) List of search keys/values
+    //
+    // OPTIONAL:
+    //   background: (boolean) Do fetch in background
+    //   initial: (boolean) Is this the initial access to this view?
+    //   nearing: (string) TODO [only used w/offset]
+    //   params: (object) Parameters to add to outgoing URL
+    //   purge: (boolean) If true, purge the current rowlist and rebuild.
+    //          Attempts to reuse the current data cache.
+    //   view: (string) The view to retrieve. Defaults to current view.
+    _fetchBuffer: function(opts)
+    {
+        if (this.isbusy) {
+            return this._fetchBuffer.bind(this, opts).defer();
+        }
+
+        this.isbusy = true;
+
+        // Only call onFetch() if we are loading in foreground.
+        if (!opts.background && this.opts.onFetch) {
+            this.opts.onFetch();
+        }
+
+        var llist, lrows, rlist, tmp, type, value,
+            view = (opts.view || this.view),
+            b = this._getBuffer(view),
+            params = $H(opts.params),
+            r_id = this.request_num++;
+
+        params.update({ requestid: r_id });
+
+        // Determine if we are querying via offset or a search query
+        if (opts.search || opts.initial || opts.purge) {
+            /* If this is an initial request, 'type' will be set correctly
+             * further down in the code. */
+            if (opts.search) {
+                type = 'search';
+                value = opts.search;
+                params.set('search', Object.toJSON(value));
+            } else if (opts.initial) {
+                params.set('initial', 1);
+            } else {
+                b.resetRowlist();
+            }
+
+            tmp = this._lookbehind();
+
+            params.update({
+                after: this.bufferSize() - tmp,
+                before: tmp
+            });
+        }
+
+        if (!opts.search) {
+            type = 'rownum';
+            value = opts.offset + 1;
+
+            // llist: keys - request_ids; vals - loading rownums
+            llist = b.getMetaData('llist') || $H();
+            lrows = llist.values().flatten();
+
+            b.setMetaData({ req_offset: opts.offset }, true);
+
+            /* If the current offset is part of a pending request, update
+             * the offset. */
+            if (lrows.size() &&
+                b.sliceLoaded(value, lrows)) {
+                /* One more hurdle. If we are loading in background, and now
+                 * we are in foreground, we need to search for the request
+                 * that contains the current rownum. For now, just use the
+                 * last request. */
+                if (!this.active_req && !opts.background) {
+                    this.active_req = llist.keys().numericSort().last();
+                }
+                this.isbusy = false;
+                return;
+            }
+
+            /* This gets the list of rows needed which do not already appear
+             * in the buffer. */
+            tmp = this._getSliceBounds(value, opts.nearing, view);
+            rlist = $A($R(tmp.start, tmp.end)).diff(b.getAllRows());
+
+            if (!rlist.size()) {
+                this.isbusy = false;
+                return;
+            }
+
+            /* Add rows to the loading list for the view. */
+            rlist = rlist.diff(lrows).numericSort();
+            llist.set(r_id, rlist);
+            b.setMetaData({ llist: llist }, true);
+
+            params.update({ slice: rlist.first() + ':' + rlist.last() });
+        }
+
+        if (!opts.background) {
+            this.active_req = r_id;
+            this._handleWait();
+        }
+
+        this._ajaxRequest(params, { noslice: true, view: view });
+
+        this.isbusy = false;
+    },
+
+    // rownum = (integer) Row number
+    // nearing = (string) 'bottom', 'top', null
+    // view = (string) ID of view.
+    _getSliceBounds: function(rownum, nearing, view)
+    {
+        var b_size = this.bufferSize(),
+            ob = {}, trows;
+
+        switch (nearing) {
+        case 'bottom':
+            ob.start = rownum + this.getPageSize();
+            ob.end = ob.start + b_size;
+            break;
+
+        case 'top':
+            ob.start = Math.max(rownum - b_size, 1);
+            ob.end = rownum;
+            break;
+
+        default:
+            ob.start = rownum - this._lookbehind();
+
+            /* Adjust slice if it runs past edge of available rows. In this
+             * case, fetching a tiny buffer isn't as useful as switching
+             * the unused buffer space to the other endpoint. Always allow
+             * searching past the value of total_rows, since the size of the
+             * dataset may have increased. */
+            trows = this.getMetaData('total_rows', view);
+            if (trows) {
+                ob.end = ob.start + b_size;
+
+                if (ob.end > trows) {
+                    ob.start -= ob.end - trows;
+                }
+
+                if (ob.start < 1) {
+                    ob.end += 1 - ob.start;
+                    ob.start = 1;
+                }
+            } else {
+                ob.start = Math.max(ob.start, 1);
+                ob.end = ob.start + b_size;
+            }
+            break;
+        }
+
+        return ob;
+    },
+
+    _lookbehind: function()
+    {
+        return parseInt((this.opts.lookbehind * 0.01) * this.bufferSize(), 10);
+    },
+
+    // args = (object) The list of parameters.
+    // opts = (object) [noslice, view]
+    // Returns a Hash object
+    addRequestParams: function(args, opts)
+    {
+        opts = opts || {};
+        var cid = this.getMetaData('cacheid', opts.view),
+            cached, params, rowlist;
+
+        params = this.opts.onAjaxRequest
+            ? this.opts.onAjaxRequest(opts.view || this.view)
+            : $H();
+
+        params.update({ view: opts.view || this.view });
+
+        if (cid) {
+            params.update({ cacheid: cid });
+        }
+
+        if (!opts.noslice) {
+            rowlist = this._getSliceBounds(this.currentOffset(), null, opts.view);
+            params.update({ slice: rowlist.start + ':' + rowlist.end });
+        }
+
+        if (this.opts.onCachedList) {
+            cached = this.opts.onCachedList(opts.view || this.view);
+        } else {
+            cached = this._getBuffer(opts.view).getAllUIDs();
+            cached = cached.size()
+                ? cached.toJSON()
+                : '';
+        }
+
+        if (cached.length) {
+            params.update({ cache: cached });
+        }
+
+        return params.merge(args);
+    },
+
+    // params - (object) A list of parameters to send to server
+    // opts - (object) Args to pass to addRequestParams().
+    _ajaxRequest: function(params, other)
+    {
+        new Ajax.Request(this.opts.ajax_url, Object.extend(this.opts.ajax_opts || {}, {
+            evalJS: false,
+            evalJSON: true,
+            onComplete: this.ajax_response,
+            parameters: this.addRequestParams(params, other)
+        }));
+    },
+
+    _ajaxRequestComplete: function(r)
+    {
+        if (r.responseJSON) {
+            this.parseJSONResponse(r.responseJSON);
+        }
+    },
+
+    // r - (object) responseJSON returned from the server.
+    parseJSONResponse: function(r)
+    {
+        if (!r.ViewPort) {
+            return;
+        }
+
+        r = r.ViewPort;
+
+        if (r.rangelist) {
+            this.select(this.createSelection('uid', r.rangelist, r.view));
+            if (this.opts.onEndFetch) {
+                this.opts.onEndFetch();
+            }
+        }
+
+        if (!Object.isUndefined(r.cacheid)) {
+            this._ajaxResponse(r);
+        }
+    },
+
+    // r = (Object) viewport response object
+    _ajaxResponse: function(r)
+    {
+        if (this.isbusy) {
+            this._ajaxResponse.bind(this, r).defer();
+            return;
+        }
+
+        this.isbusy = true;
+        this._clearWait();
+
+        var offset,
+            buffer = this._getBuffer(r.view),
+            llist = buffer.getMetaData('llist') || $H();
+
+        buffer.update(Object.isArray(r.data) ? {} : r.data, Object.isArray(r.rowlist) ? {} : r.rowlist, r.metadata || {}, { reset: r.reset, resetmd: r.resetmd, update: r.update });
+
+        llist.unset(r.requestid);
+
+        buffer.setMetaData({
+            cacheid: r.cacheid,
+            label: r.label,
+            llist: llist,
+            total_rows: r.totalrows
+        }, true);
+
+        if (this.opts.onCacheUpdate) {
+            this.opts.onCacheUpdate(r.view);
+        }
+
+        if (r.requestid &&
+            r.requestid == this.active_req) {
+            this.active_req = null;
+            offset = buffer.getMetaData('req_offset');
+            buffer.setMetaData({ req_offset: undefined });
+
+            if (this.opts.onEndFetch) {
+                this.opts.onEndFetch();
+            }
+        }
+
+        // TODO: Flag for no _fetchBuffer()?
+        if (this.view == r.view) {
+            this._updateContent(Object.isUndefined(r.rownum) ? (Object.isUndefined(offset) ? this.currentOffset() : offset) : Number(r.rownum) - 1);
+        } else if (r.rownum) {
+            // We loaded in the background. If rownumber information was
+            // provided, we need to save this or else we will position the
+            // viewport incorrectly.
+            buffer.setMetaData({ offset: Number(r.rownum) - 1 }, true);
+        }
+
+        this.isbusy = false;
+    },
+
+    // offset = (integer) TODO
+    // opts = (object) TODO [background, view]
+    _updateContent: function(offset, opts)
+    {
+        opts = opts || {};
+
+        if (!this._getBuffer(opts.view).sliceLoaded(offset)) {
+            opts.offset = offset;
+            this._fetchBuffer(opts);
+            return false;
+        }
+
+        var c = this.opts.content,
+            c_nodes = [],
+            page_size = this.getPageSize(),
+            rows;
+
+        if (this.opts.onClear) {
+            this.opts.onClear(this.visibleRows());
+        }
+
+        this.scroller.setSize(page_size, this.getMetaData('total_rows'));
+        this.scrollTo(offset + 1, { noupdate: true, top: true });
+
+        offset = this.currentOffset();
+        rows = this.createSelection('rownum', $A($R(offset + 1, offset + page_size)));
+
+        if (rows.size()) {
+            c_nodes = rows.get('dataob');
+            c.update(c_nodes.collect(this.prepareRow.bind(this)).join(''));
+        } else {
+            c.update(this.empty_msg);
+        }
+
+        this.scroller.updateDisplay();
+
+        if (this.opts.onContentComplete) {
+            this.opts.onContentComplete(c_nodes);
+        }
+
+        return true;
+    },
+
+    prepareRow: function(row)
+    {
+        var r = Object.clone(row);
+
+        r.bg = r.bg
+            ? row.bg.clone()
+            : [];
+
+        if (this.getSelected().contains('uid', r.vp_id)) {
+            r.bg.push('vpRowSelected');
+        }
+
+        return this.opts.onContent(r, this.pane_mode);
+    },
+
+    updateRow: function(row)
+    {
+        var d = $(row.domid);
+        if (d) {
+            if (this.opts.onClear) {
+                this.opts.onClear([ d ]);
+            }
+
+            d.replace(this.prepareRow(row));
+
+            if (this.opts.onContentComplete) {
+                this.opts.onContentComplete([ row ]);
+            }
+        }
+
+    },
+
+    _handleWait: function(call)
+    {
+        this._clearWait();
+
+        // Server did not respond in defined amount of time.  Alert the
+        // callback function and set the next timeout.
+        if (call && this.opts.onWait) {
+            this.opts.onWait();
+        }
+
+        // Call wait handler every x seconds
+        if (this.opts.viewport_wait) {
+            this.waitHandler = this._handleWait.bind(this, true).delay(this.opts.viewport_wait);
+        }
+    },
+
+    _clearWait: function()
+    {
+        if (this.waitHandler) {
+            clearTimeout(this.waitHandler);
+            this.waitHandler = null;
+        }
+    },
+
+    visibleRows: function()
+    {
+        return this.opts.content.childElements();
+    },
+
+    getMetaData: function(id, view)
+    {
+        return this._getBuffer(view).getMetaData(id);
+    },
+
+    setMetaData: function(vals, view)
+    {
+        this._getBuffer(view).setMetaData(vals, false);
+    },
+
+    _getBuffer: function(view, create)
+    {
+        view = view || this.view;
+
+        return (!create && this.views[view])
+            ? this.views[view]
+            : new ViewPort_Buffer(this, view);
+    },
+
+    currentOffset: function()
+    {
+        return this.scroller.currentOffset();
+    },
+
+    // return: (object) The current viewable range of the viewport.
+    //         first: Top-most row offset
+    //         last: Bottom-most row offset
+    currentViewableRange: function()
+    {
+        var offset = this.currentOffset();
+        return {
+            first: offset + 1,
+            last: Math.min(offset + this.getPageSize(), this.getMetaData('total_rows'))
+        };
+    },
+
+    _getLineHeight: function()
+    {
+        var mode = this.pane_mode || 'horiz';
+
+        if (!this.split_pane[mode].lh) {
+            // To avoid hardcoding the line height, create a temporary row to
+            // figure out what the CSS says.
+            var d = new Element('DIV', { className: this.opts.list_class }).insert(this.prepareRow({ domid: null }, mode)).hide();
+            $(document.body).insert(d);
+            this.split_pane[mode].lh = d.getHeight();
+            d.remove();
+        }
+
+        return this.split_pane[mode].lh;
+    },
+
+    // (type) = (string) [null (DEFAULT), 'current', 'default', 'max']
+    // return: (integer) Number of rows in current view.
+    getPageSize: function(type)
+    {
+        switch (type) {
+        case 'current':
+            return Math.min(this.page_size, this.getMetaData('total_rows'));
+
+        case 'default':
+            return (this.pane_mode == 'vert')
+                ? this.getPageSize('max')
+                : Math.max(parseInt(this.getPageSize('max') * 0.45), 5);
+
+        case 'max':
+        case 'splitmax':
+            return parseInt(this._getMaxHeight() / this._getLineHeight()) - (type == 'max' ? 0 : 1);
+
+        default:
+            return this.page_size;
+        }
+    },
+
+    _getMaxHeight: function()
+    {
+        return document.viewport.getHeight() - this.opts.content.viewportOffset()[1];
+    },
+
+    bufferSize: function()
+    {
+        // Buffer size must be at least the maximum page size.
+        return Math.round(Math.max(this.getPageSize('max') + 1, this.opts.buffer_pages * this.getPageSize()));
+    },
+
+    limitTolerance: function()
+    {
+        return Math.round(this.bufferSize() * (this.opts.limit_factor / 100));
+    },
+
+    // mode = (string) Either 'horiz', 'vert', or empty.
+    showSplitPane: function(mode)
+    {
+        this.pane_mode = mode;
+        this.onResize(true);
+    },
+
+    _initSplitBar: function()
+    {
+        var sp = this.split_pane;
+
+        if (sp.currbar) {
+            sp.currbar.hide();
+        }
+
+        sp.curr = this.pane_mode;
+
+        if (sp[this.pane_mode].bar) {
+            sp.currbar = sp[this.pane_mode].bar.show();
+            return;
+        }
+
+        sp.currbar = sp[this.pane_mode].bar = new Element('DIV', { className: this.opts.split_bar_class[this.pane_mode] });
+
+        if (!this.opts.pane_data.descendantOf(this.opts.container)) {
+            this.opts.container.insert(this.opts.pane_data.remove());
+        }
+
+        this.opts.pane_data.insert({ before: sp.currbar });
+
+        switch (this.pane_mode) {
+        case 'horiz':
+            new Drag(sp.currbar.setStyle({ clear: 'left' }), {
+                constraint: 'vertical',
+                ghosting: true,
+                nodrop: true,
+                onStart: function() {
+                    // Cache these values since we will be using them multiple
+                    // times in snap().
+                    this.sp = {
+                        lh: this._getLineHeight(),
+                        lines: this.page_size,
+                        max: this.getPageSize('splitmax'),
+                        orig: this.page_size,
+                        pos: this.opts.content.positionedOffset()[1]
+                    };
+                    if (this.opts.onSplitBarStart) {
+                        this.opts.onSplitBarStart('horiz');
+                    }
+                }.bind(this),
+                snap: function(x, y, elt) {
+                    var l = parseInt((y - this.sp.pos) / this.sp.lh);
+                    if (l < 1) {
+                        l = 1;
+                    } else if (l > this.sp.max) {
+                        l = this.sp.max;
+                    }
+                    this.sp.lines = l;
+                    return [ x, this.sp.pos + (l * this.sp.lh) ];
+                }.bind(this),
+                onEnd: function() {
+                    this.onResize(true, this.sp.lines);
+                    if (this.opts.onSplitBarChange &&
+                        this.sp.orig != this.sp.lines) {
+                        this.opts.onSplitBarChange('horiz');
+                    }
+                    if (this.opts.onSplitBarEnd) {
+                        this.opts.onSplitBarEnd('horiz');
+                    }
+                }.bind(this)
+            });
+
+            sp.currbar.observe('dblclick', function() {
+                var old_size = this.page_size;
+                this.onResize(true, this.getPageSize('default'));
+                if (this.opts.onSplitBarChange &&
+                    old_size != this.page_size) {
+                    this.opts.onSplitBarChange('horiz');
+                }
+            }.bind(this));
+            break;
+
+        case 'vert':
+            new Drag(sp.currbar.setStyle({ float: 'left' }), {
+                constraint: 'horizontal',
+                ghosting: true,
+                nodrop: true,
+                snapToParent: true,
+                onStart: function(drag) {
+                    if (this.opts.onSplitBarStart) {
+                        this.opts.onSplitBarStart('vert');
+                    }
+                }.bind(this),
+                onEnd: function(drag) {
+                    sp.vert.width = drag.lastCoord[0];
+                    this.opts.content.setStyle({ width: sp.vert.width + 'px' });
+                    if (this.opts.onSplitBarChange && drag.wasDragged) {
+                        this.opts.onSplitBarChange('vert');
+                    }
+                    if (this.opts.onSplitBarEnd) {
+                        this.opts.onSplitBarEnd('vert');
+                    }
+                }.bind(this)
+            });
+            break;
+        }
+    },
+
+    createSelection: function(format, data, view)
+    {
+        var buffer = this._getBuffer(view);
+        return buffer ? new ViewPort_Selection(buffer, format, data) : new ViewPort_Selection(this._getBuffer(this.view));
+    },
+
+    getSelection: function(view)
+    {
+        var buffer = this._getBuffer(view);
+        return this.createSelection('uid', buffer ? buffer.getAllUIDs() : [], view);
+    },
+
+    // vs = (Viewport_Selection | array) A Viewport_Selection object -or-, if
+    //       opts.range is set, an array of row numbers.
+    // opts = (object) TODO [add, range]
+    select: function(vs, opts)
+    {
+        opts = opts || {};
+
+        var b = this._getBuffer(),
+            sel, slice;
+
+        if (opts.range) {
+            slice = this.createSelection('rownum', vs);
+            if (vs.size() != slice.size()) {
+                if (this.opts.onFetch) {
+                    this.opts.onFetch();
+                }
+
+                this._ajaxRequest({ rangeslice: 1, slice: vs.min() + ':' + vs.size() });
+                return;
+            }
+            vs = slice;
+        }
+
+        if (!opts.add) {
+            sel = this.getSelected();
+            b.deselect(sel, true);
+            sel.get('div').invoke('removeClassName', 'vpRowSelected');
+        }
+        b.select(vs);
+        vs.get('div').invoke('addClassName', 'vpRowSelected');
+        if (this.opts.onSelect) {
+            this.opts.onSelect(vs, opts);
+        }
+    },
+
+    // vs = (Viewport_Selection) A Viewport_Selection object.
+    // opts = (object) TODO [clearall]
+    deselect: function(vs, opts)
+    {
+        opts = opts || {};
+
+        if (vs.size() &&
+            this._getBuffer().deselect(vs, opts && opts.clearall)) {
+            vs.get('div').invoke('removeClassName', 'vpRowSelected');
+            if (this.opts.onDeselect) {
+                this.opts.onDeselect(vs, opts)
+            }
+        }
+    },
+
+    getSelected: function()
+    {
+        return Object.clone(this._getBuffer().getSelected());
+    }
+
+}),
+
+/**
+ * ViewPort_Scroller
+ */
+ViewPort_Scroller = Class.create({
+    // Variables initialized to undefined:
+    //   noupdate, scrollDiv, scrollbar, vertscroll, vp
+
+    initialize: function(vp)
+    {
+        this.vp = vp;
+    },
+
+    _createScrollBar: function()
+    {
+        if (this.scrollDiv) {
+            return;
+        }
+
+        var c = this.vp.opts.content;
+
+        // Create the outer div.
+        this.scrollDiv = new Element('DIV', { className: 'vpScroll' }).setStyle({ overflow: 'hidden' }).hide();
+        c.insert({ after: this.scrollDiv });
+
+        // Create scrollbar object.
+        this.scrollbar = new DimpSlider(this.scrollDiv, {
+            buttonclass: { up: 'vpScrollUp', down: 'vpScrollDown' },
+            cursorclass: 'vpScrollCursor',
+            onChange: this._onScroll.bind(this),
+            onSlide: this.vp.opts.onSlide ? this.vp.opts.onSlide : null,
+            pagesize: this.vp.getPageSize(),
+            totalsize: this.vp.getMetaData('total_rows')
+       });
+
+        // Mouse wheel handler.
+        c.observe(Prototype.Browser.Gecko ? 'DOMMouseScroll' : 'mousewheel', function(e) {
+            var move_num = Math.min(this.vp.getPageSize(), 3);
+            this.moveScroll(this.currentOffset() + ((e.wheelDelta >= 0 || e.detail < 0) ? (-1 * move_num) : move_num));
+        }.bindAsEventListener(this));
+    },
+
+    setSize: function(viewsize, totalsize)
+    {
+        this._createScrollBar();
+        this.scrollbar.setHandleLength(viewsize, totalsize);
+    },
+
+    updateDisplay: function()
+    {
+        var c = this.vp.opts.content,
+            vs = false;
+
+        if (this.scrollbar.needScroll()) {
+            switch (this.vp.pane_mode) {
+            case 'horiz':
+                this.scrollDiv.setStyle({ float: 'left', position: 'static' }).setStyle({ marginLeft: '-' + this.scrollDiv.getWidth() + 'px' });
+                break;
+
+            case 'vert':
+                this.scrollDiv.setStyle({ float: 'left', marginLeft: 0, position: 'static' });
+                if (!this.vertscroll) {
+                    c.setStyle({ width: (c.clientWidth - this.scrollDiv.getWidth()) + 'px' });
+                }
+                vs = true;
+                break;
+
+            default:
+                this.scrollDiv.setStyle({ float: 'none', position: 'absolute', right: 0, top: 0 }).setStyle({ marginLeft: '-' + this.scrollDiv.getWidth() + 'px' });
+                break;
+            }
+
+            this.scrollDiv.setStyle({ height: c.clientHeight + 'px' });
+        } else if ((this.vp.pane_mode =='vert') && this.vertscroll) {
+            c.setStyle({ width: (c.clientWidth + this.scrollDiv.getWidth()) + 'px' });
+        }
+
+        this.vertscroll = vs;
+        this.scrollbar.updateHandleLength();
+    },
+
+    clear: function()
+    {
+        this.setSize(0, 0);
+        this.scrollbar.updateHandleLength();
+    },
+
+    // offset = (integer) Offset to move the scrollbar to
+    moveScroll: function(offset)
+    {
+        this._createScrollBar();
+        this.scrollbar.setScrollPosition(offset);
+    },
+
+    _onScroll: function()
+    {
+        if (!this.noupdate) {
+            this.vp.requestContentRefresh(this.currentOffset());
+        }
+    },
+
+    currentOffset: function()
+    {
+        return this.scrollbar ? this.scrollbar.getValue() : 0;
+    }
+
+}),
+
+/**
+ * ViewPort_Buffer
+ *
+ * Note: recognize the difference between offset (current location in the
+ * viewport - starts at 0) with start parameters (the row numbers - starts
+ * at 1).
+ */
+ViewPort_Buffer = Class.create({
+
+    initialize: function(vp, view)
+    {
+        this.vp = vp;
+        this.view = view;
+        this.clear();
+    },
+
+    getView: function()
+    {
+        return this.view;
+    },
+
+    // d = (object) Data
+    // l = (object) Rowlist
+    // md = (object) User defined metadata
+    // opts = (object) TODO [reset, resetmd, update]
+    update: function(d, l, md, opts)
+    {
+        d = $H(d);
+        l = $H(l);
+        opts = opts || {};
+
+        if (!opts.reset && this.data.size()) {
+            this.data.update(d);
+        } else {
+            this.data = d;
+        }
+
+        if (opts.update || opts.reset) {
+            this.uidlist = l;
+            this.rowlist = $H();
+        } else {
+            this.uidlist = this.uidlist.size() ? this.uidlist.merge(l) : l;
+        }
+
+        l.each(function(o) {
+            this.rowlist.set(o.value, o.key);
+        }, this);
+
+        if (opts.resetmd) {
+            this.usermdata = $H(md);
+        } else {
+            $H(md).each(function(pair) {
+                if (Object.isString(pair.value) || Object.isNumber(pair.value)) {
+                    this.usermdata.set(pair.key, pair.value);
+                } else {
+                    var val = this.usermdata.get(pair.key);
+                    if (val) {
+                        this.usermdata.get(pair.key).update($H(pair.value));
+                    } else {
+                        this.usermdata.set(pair.key, $H(pair.value));
+                    }
+                }
+            }, this);
+        }
+    },
+
+    // offset = (integer) Offset of the beginning of the slice.
+    // rows = (array) Additional rows to include in the search.
+    sliceLoaded: function(offset, rows)
+    {
+        var range, tr = this.getMetaData('total_rows');
+
+        // Undefined here indicates we have never sent a previous buffer
+        // request.
+        if (Object.isUndefined(tr)) {
+            return false;
+        }
+
+        range = $A($R(offset + 1, Math.min(offset + this.vp.getPageSize() - 1, tr)));
+
+        return rows
+            ? (range.diff(this.rowlist.keys().concat(rows)).size() == 0)
+            : !this._rangeCheck(range);
+    },
+
+    isNearingLimit: function(offset)
+    {
+        if (this.uidlist.size() != this.getMetaData('total_rows')) {
+            if (offset != 0 &&
+                this._rangeCheck($A($R(Math.max(offset + 1 - this.vp.limitTolerance(), 1), offset)))) {
+                return 'top';
+            } else if (this._rangeCheck($A($R(offset + 1, Math.min(offset + this.vp.limitTolerance() + this.vp.getPageSize() - 1, this.getMetaData('total_rows')))).reverse())) {
+                // Search for missing rows in reverse order since in normal
+                // usage (sequential scrolling through the row list) rows are
+                // more likely to be missing at furthest from the current
+                // view.
+                return 'bottom';
+            }
+        }
+
+        return false;
+    },
+
+    _rangeCheck: function(range)
+    {
+        return !range.all(this.rowlist.get.bind(this.rowlist));
+    },
+
+    getData: function(uids)
+    {
+        return uids.collect(function(u) {
+            var e = this.data.get(u);
+            if (!Object.isUndefined(e)) {
+                // We can directly write the rownum to the original object
+                // since we will always rewrite when creating rows.
+                e.domid = 'vp_row' + u;
+                e.rownum = this.uidlist.get(u);
+                e.vp_id = u;
+                return e;
+            }
+        }, this).compact();
+    },
+
+    getAllUIDs: function()
+    {
+        return this.uidlist.keys();
+    },
+
+    getAllRows: function()
+    {
+        return this.rowlist.keys();
+    },
+
+    rowsToUIDs: function(rows)
+    {
+        return rows.collect(this.rowlist.get.bind(this.rowlist)).compact();
+    },
+
+    // vs = (Viewport_Selection) TODO
+    select: function(vs)
+    {
+        this.selected.add('uid', vs.get('uid'));
+    },
+
+    // vs = (Viewport_Selection) TODO
+    // clearall = (boolean) Clear all entries?
+    deselect: function(vs, clearall)
+    {
+        var size = this.selected.size();
+
+        if (clearall) {
+            this.selected.clear();
+        } else {
+            this.selected.remove('uid', vs.get('uid'));
+        }
+        return size != this.selected.size();
+    },
+
+    getSelected: function()
+    {
+        return this.selected;
+    },
+
+    // rownums = (array) Array of row numbers to remove.
+    remove: function(rownums)
+    {
+        var minrow = rownums.min(),
+            rowsize = this.rowlist.size(),
+            rowsubtract = 0,
+            newsize = rowsize - rownums.size();
+
+        return this.rowlist.keys().each(function(n) {
+            if (n >= minrow) {
+                var id = this.rowlist.get(n), r;
+                if (rownums.include(n)) {
+                    this.data.unset(id);
+                    this.uidlist.unset(id);
+                    rowsubtract++;
+                } else if (rowsubtract) {
+                    r = n - rowsubtract;
+                    this.rowlist.set(r, id);
+                    this.uidlist.set(id, r);
+                }
+                if (n > newsize) {
+                    this.rowlist.unset(n);
+                }
+            }
+        }, this);
+    },
+
+    resetRowlist: function()
+    {
+        this.rowlist = $H();
+    },
+
+    clear: function()
+    {
+        this.data = $H();
+        this.mdata = $H({ total_rows: 0 });
+        this.rowlist = $H();
+        this.selected = new ViewPort_Selection(this);
+        this.uidlist = $H();
+        this.usermdata = $H();
+    },
+
+    getMetaData: function(id)
+    {
+        var data = this.mdata.get(id);
+
+        return Object.isUndefined(data)
+            ? this.usermdata.get(id)
+            : data;
+    },
+
+    setMetaData: function(vals, priv)
+    {
+        if (priv) {
+            this.mdata.update(vals);
+        } else {
+            this.usermdata.update(vals);
+        }
+    }
+
+}),
+
+/**
+ * ViewPort_Selection
+ */
+ViewPort_Selection = Class.create({
+
+    // Define property to aid in object detection
+    viewport_selection: true,
+
+    // Formats:
+    //     'dataob' = Data objects
+    //     'div' = DOM DIVs
+    //     'domid' = DOM IDs
+    //     'rownum' = Row numbers
+    //     'uid' = Unique IDs
+    initialize: function(buffer, format, data)
+    {
+        this.buffer = buffer;
+        this.clear();
+        if (!Object.isUndefined(format)) {
+            this.add(format, data);
+        }
+    },
+
+    add: function(format, d)
+    {
+        var c = this._convert(format, d);
+        this.data = this.data.size() ? this.data.concat(c).uniq() : c;
+    },
+
+    remove: function(format, d)
+    {
+        this.data = this.data.diff(this._convert(format, d));
+    },
+
+    _convert: function(format, d)
+    {
+        d = Object.isArray(d) ? d : [ d ];
+
+        switch (format) {
+        case 'dataob':
+            return d.pluck('vp_id');
+
+        case 'div':
+            return d.pluck('id').invoke('substring', 6);
+
+        case 'domid':
+            return d.invoke('substring', 6);
+
+        case 'rownum':
+            return this.buffer.rowsToUIDs(d);
+
+        case 'uid':
+            return d;
+        }
+    },
+
+    clear: function()
+    {
+        this.data = [];
+    },
+
+    get: function(format)
+    {
+        format = Object.isUndefined(format) ? 'uid' : format;
+        if (format == 'uid') {
+            return this.data;
+        }
+        var d = this.buffer.getData(this.data);
+
+        switch (format) {
+        case 'dataob':
+            return d;
+
+        case 'div':
+            return d.pluck('domid').collect(function(e) { return $(e); }).compact();
+
+        case 'domid':
+            return d.pluck('domid');
+
+        case 'rownum':
+            return d.pluck('rownum');
+        }
+    },
+
+    contains: function(format, d)
+    {
+        return this.data.include(this._convert(format, d).first());
+    },
+
+    // params = (Object) Key is search key, value is object -> key of object
+    // must be the following:
+    //   equal - Matches any value contained in the query array.
+    //   not - Matches any value not contained in the query array.
+    //   regex - Matches the RegExp contained in the query.
+    search: function(params)
+    {
+        return new ViewPort_Selection(this.buffer, 'uid', this.get('dataob').findAll(function(i) {
+            // i = data object
+            return $H(params).all(function(k) {
+                // k.key = search key; k.value = search criteria
+                return $H(k.value).all(function(s) {
+                    // s.key = search type; s.value = search query
+                    switch (s.key) {
+                    case 'equal':
+                    case 'not':
+                        var r = i[k.key] && s.value.include(i[k.key]);
+                        return (s.key == 'equal') ? r : !r;
+
+                    case 'regex':
+                        return i[k.key].match(s.value);
+                    }
+                });
+            });
+        }).pluck('vp_id'));
+    },
+
+    size: function()
+    {
+        return this.data.size();
+    },
+
+    set: function(vals)
+    {
+        this.get('dataob').each(function(d) {
+            $H(vals).each(function(v) {
+                d[v.key] = v.value;
+            });
+        });
+    },
+
+    getBuffer: function()
+    {
+        return this.buffer;
+    }
+
+});
+
+/** Utility Functions **/
+Object.extend(Array.prototype, {
+    // Need our own diff() function because prototypejs's without() function
+    // does not handle array input.
+    diff: function(values)
+    {
+        return this.select(function(value) {
+            return !values.include(value);
+        });
+    },
+    numericSort: function()
+    {
+        return this.collect(Number).sort(function(a, b) {
+            return (a > b) ? 1 : ((a < b) ? -1 : 0);
+        });
+    }
+});

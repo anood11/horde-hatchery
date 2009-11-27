@@ -3,7 +3,7 @@
  * Folks_Friends:: defines an API for implementing storage backends for
  * Friends.
  *
- * $Id: Friends.php 910 2008-09-24 19:02:50Z duck $
+ * $Id: Friends.php 1248 2009-01-30 15:04:49Z duck $
  *
  * Copyright Obala d.o.o. (www.obala.si)
  *
@@ -17,8 +17,9 @@
 class Folks_Friends {
 
     /**
+     * Friends instances
      */
-    static private $instance;
+    static private $instances = array();
 
     /**
      * Hash containing connection parameters.
@@ -35,6 +36,13 @@ class Folks_Friends {
     protected $_user;
 
     /**
+     * String cache reference
+     *
+     * @var Horde_Cache
+     */
+    protected $_cache;
+
+    /**
      * Attempts to return a concrete Folks_Friends instance based on $friends.
      *
      * @param string $friends  The type of the concrete Folks_Friends subclass
@@ -48,10 +56,14 @@ class Folks_Friends {
      * @return Folks_Friends  The newly created concrete Folks_Friends
      *                          instance, or false on an error.
      */
-    public function factory($driver = null, $params = null)
+    private static function factory($driver = null, $params = null)
     {
         if ($driver === null) {
-            $driver = $GLOBALS['conf']['friends'];
+            $driver = $GLOBALS['conf']['friends']['driver'];
+        }
+
+        if ($params === null && isset($GLOBALS['conf']['friends']['params'])) {
+            $params = $GLOBALS['conf']['friends']['params'];
         }
 
         $driver = basename($driver);
@@ -78,13 +90,18 @@ class Folks_Friends {
      * @param array $params   A hash containing any additional configuration
      *                        or connection parameters a subclass might need.
      */
-    static function singleton($driver = null, $params = null)
+    static public function singleton($driver = null, $params = null)
     {
-        if (!self::$instance) {
-            self::$instance = Folks_Friends::factory($driver, $params);
+        if (empty($params['user'])) {
+            $params['user'] = Horde_Auth::getAuth();
         }
 
-        return self::$instance;
+        $signature = $driver . ':' . $params['user'];
+        if (!array_key_exists($signature, self::$instances)) {
+            self::$instances[$signature] = self::factory($driver, $params);
+        }
+
+        return self::$instances[$signature];
     }
 
     /**
@@ -93,9 +110,25 @@ class Folks_Friends {
      * @param array $params   A hash containing any additional configuration
      *                        or connection parameters a subclass might need.
      */
-    public function __construct($params)
+    protected function __construct($params)
     {
-        $this->_user = empty($params['user']) ? Auth::getAuth() : $params['user'];
+        $this->_user = empty($params['user']) ? Horde_Auth::getAuth() : $params['user'];
+
+        $this->_cache = Horde_Cache::singleton($GLOBALS['conf']['cache']['driver'],
+                                            Horde::getDriverConfig('cache', $GLOBALS['conf']['cache']['driver']));
+    }
+
+    /**
+     * Queries the current object to find out if it supports the given
+     * capability.
+     *
+     * @param string $capability  The capability to test for.
+     *
+     * @return boolean  Whether or not the capability is supported.
+     */
+    public function hasCapability($capability)
+    {
+        return !empty($this->_capabilities[$capability]);
     }
 
     /**
@@ -111,7 +144,7 @@ class Folks_Friends {
             return (boolean)$GLOBALS['prefs']->getValue('friends_approval');
         }
 
-        $prefs = Prefs::singleton($GLOBALS['conf']['prefs']['driver'], 'folks', Auth::addHook($user), '', null, false);
+        $prefs = Horde_Prefs::singleton($GLOBALS['conf']['prefs']['driver'], 'folks', Horde_Auth::convertUsername($user, true), '', null, false);
         $prefs->retrieve();
 
         return (boolean)$prefs->getValue('friends_approval');
@@ -155,7 +188,13 @@ class Folks_Friends {
      */
     public function getBlacklist()
     {
-        $blacklist = $GLOBALS['cache']->get('folksBlacklist' . $this->_user, $GLOBALS['conf']['cache']['default_lifetime']);
+        static $blacklist;
+
+        if (is_array($blacklist)) {
+            return $blacklist;
+        }
+
+        $blacklist = $this->_cache->get('folksBlacklist' . $this->_user, $GLOBALS['conf']['cache']['default_lifetime']);
         if ($blacklist) {
             return unserialize($blacklist);
         } else {
@@ -163,7 +202,7 @@ class Folks_Friends {
             if ($blacklist instanceof PEAR_Error) {
                 return $blacklist;
             }
-            $GLOBALS['cache']->set('folksBlacklist' . $this->_user, serialize($blacklist));
+            $this->_cache->set('folksBlacklist' . $this->_user, serialize($blacklist));
             return $blacklist;
         }
     }
@@ -180,7 +219,7 @@ class Folks_Friends {
         }
 
         // Check if users exits
-        $auth = Auth::singleton($GLOBALS['conf']['auth']['driver']);
+        $auth = Horde_Auth::singleton($GLOBALS['conf']['auth']['driver']);
         if (!$auth->exists($user)) {
             return PEAR::raiseError(sprintf(_("User \"%s\" does not exits"), $user));
         }
@@ -195,7 +234,7 @@ class Folks_Friends {
             return $result;
         }
 
-        $GLOBALS['cache']->expire('folksBlacklist' . $this->_user);
+        $this->_cache->expire('folksBlacklist' . $this->_user);
 
         return true;
     }
@@ -212,7 +251,7 @@ class Folks_Friends {
             return $result;
         }
 
-        $GLOBALS['cache']->expire('folksBlacklist' . $this->_user);
+        $this->_cache->expire('folksBlacklist' . $this->_user);
 
         return true;
     }
@@ -238,7 +277,7 @@ class Folks_Friends {
      * Add user to a friend list
      *
      * @param string $friend   Friend's usersame
-     * @param string $group   Group to add friend to
+     * @param string $group    Group to add friend to
      */
     public function addFriend($friend, $group = null)
     {
@@ -249,7 +288,7 @@ class Folks_Friends {
         }
 
         // Check if users exits
-        $auth = Auth::singleton($GLOBALS['conf']['auth']['driver']);
+        $auth = Horde_Auth::singleton($GLOBALS['conf']['auth']['driver']);
         if (!$auth->exists($friend)) {
             return PEAR::raiseError(sprintf(_("User \"%s\" does not exits"), $friend));
         }
@@ -272,13 +311,13 @@ class Folks_Friends {
 
         // Add friend to backend
         $result = $this->_addFriend($friend, $group);
-        if ($friends instanceof PEAR_Error) {
-            return $friends;
+        if ($result instanceof PEAR_Error) {
+            return $result;
         }
 
         // If we do not need an approval just expire cache
         if (!$this->needsApproval($friend)) {
-            $GLOBALS['cache']->expire('folksFriends' . $this->_user . $group);
+            $this->_cache->expire('folksFriends' . $this->_user . $group);
         }
 
         return true;
@@ -292,7 +331,7 @@ class Folks_Friends {
      */
     public function removeFriend($friend, $group = null)
     {
-        $GLOBALS['cache']->expire('folksFriends' . $this->_user . $group);
+        $this->_cache->expire('folksFriends' . $this->_user . $group);
 
         return $this->_removeFriend($friend, $group);
     }
@@ -307,7 +346,13 @@ class Folks_Friends {
      */
     public function getFriends($group = null)
     {
-        $friends = $GLOBALS['cache']->get('folksFriends' . $this->_user . $group, $GLOBALS['conf']['cache']['default_lifetime']);
+        static $friends;
+
+        if (is_array($friends)) {
+            return $friends;
+        }
+
+        $friends = $this->_cache->get('folksFriends' . $this->_user . $group, $GLOBALS['conf']['cache']['default_lifetime']);
         if ($friends) {
             return unserialize($friends);
         } else {
@@ -315,7 +360,7 @@ class Folks_Friends {
             if ($friends instanceof PEAR_Error) {
                 return $friends;
             }
-            $GLOBALS['cache']->set('folksFriends' . $this->_user . $group, serialize($friends));
+            $this->_cache->set('folksFriends' . $this->_user . $group, serialize($friends));
             return $friends;
         }
     }
@@ -348,8 +393,8 @@ class Folks_Friends {
             return $result;
         }
 
-        $GLOBALS['cache']->expire('folksFriends' . $friend);
-        $GLOBALS['cache']->expire('folksFriends' . $this->_user);
+        $this->_cache->expire('folksFriends' . $friend);
+        $this->_cache->expire('folksFriends' . $this->_user);
 
         return true;
     }
@@ -373,6 +418,10 @@ class Folks_Friends {
      */
     public function isFriend($user)
     {
+        if ($user == $this->_user) {
+            return true;
+        }
+
         $friends = $this->getFriends();
         if ($friends instanceof PEAR_Error) {
             return $friends;
@@ -382,13 +431,70 @@ class Folks_Friends {
     }
 
     /**
-     * Get users who have you on friendlist
+     * Return all friends of out frends
+     * and make a top list of common users
+     *
+     * @param int $limit Users
      *
      * @return array users
      */
-    public function getPossibleFriends()
+    public function getPossibleFriends($limit = 0)
+    {
+        $possibilities = array();
+
+        $my_list = $this->getFriends();
+        if ($my_list instanceof PEAR_Error) {
+            return $my_list;
+        }
+
+        foreach ($my_list as $friend) {
+            $friends = Folks_Friends::singleton(null, array('user' => $friend));
+            $friend_friends = $friends->getFriends();
+            if ($friend_friends instanceof PEAR_Error) {
+                continue;
+            }
+            foreach ($friend_friends as $friend_friend) {
+                if ($friend_friend == $this->_user ||
+                    in_array($friend_friend, $my_list)) {
+                    continue;
+                } elseif (isset($possibilities[$friend_friend])) {
+                    $possibilities[$friend_friend] += 1;
+                } else {
+                    $possibilities[$friend_friend] = 0;
+                }
+            }
+        }
+
+        arsort($possibilities);
+
+        if ($limit) {
+            $possibilities = array_slice($possibilities, 0, $limit, true);
+            $possibilities = array_keys($possibilities);
+        }
+
+        return $possibilities;
+    }
+
+    /**
+     * Get users who have us on their friendlist
+     *
+     * @return array users
+     */
+    public function friendOf()
     {
         return false;
+    }
+
+    /**
+     * Get user owning group
+     *
+     * @param integer Get group ID
+     *
+     * @param string Owner
+     */
+    public function getGroupOwner($group)
+    {
+        return $this->_user;
     }
 
     /**
@@ -396,27 +502,17 @@ class Folks_Friends {
      */
     public function getGroups()
     {
-        return array();
-    }
-
-    /**
-     * Delete user friend group
-     *
-     * @param string $group   Group to delete
-     */
-    public function removeGroup($group)
-    {
-        return false;
-    }
-
-    /**
-     * Add group
-     *
-     * @param string $group   Group name
-     */
-    public function addGroup($name)
-    {
-        return false;
+        $groups = $this->_cache->get('folksGroups' . $this->_user, $GLOBALS['conf']['cache']['default_lifetime']);
+        if ($groups) {
+            return unserialize($groups);
+        } else {
+            $groups = $this->_getGroups();
+            if ($groups instanceof PEAR_Error) {
+                return $groups;
+            }
+            $this->_cache->set('folksGroups' . $this->_user, serialize($groups));
+            return $groups;
+        }
     }
 
     /**

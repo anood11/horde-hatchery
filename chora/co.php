@@ -13,22 +13,22 @@ require_once dirname(__FILE__) . '/lib/base.php';
 
 /* If we know we're at a directory, just go to browse.php. */
 if ($atdir) {
-    require CHORA_BASE . '/browse.php';
+    require CHORA_BASE . '/browsedir.php';
     exit;
 }
 
 /* Should we pretty-print this output or not? */
-$plain = Util::getFormData('p', 0);
+$plain = Horde_Util::getFormData('p', 0);
 
 /* Create the VC_File object and populate it. */
 try {
-    $file = $VC->getFileObject($where, array('cache' => $cache));
+    $file = $VC->getFileObject($where);
 } catch (Horde_Vcs_Exception $e) {
     Chora::fatal($e);
 }
 
 /* Get the revision number. */
-$r = Util::getFormData('r');
+$r = Horde_Util::getFormData('r');
 
 /* If no revision is specified, default to HEAD.  If a revision is
  * specified, it's safe to cache for a long time. */
@@ -46,7 +46,7 @@ if (!$VC->isValidRevision($r)) {
 
 /* Retrieve the actual checkout. */
 try {
-    $checkOut = $VC->checkout($file, $r);
+    $checkOut = $VC->checkout($file->queryPath(), $r);
 } catch (Horde_Vcs_Exception $e) {
     Chora::fatal($e);
 }
@@ -62,15 +62,22 @@ if (!$plain) {
     $pretty = Chora::pretty($mime_type, $checkOut);
 
     /* Get this revision's attributes in printable form. */
-    $log = $file->logs[$r];
+    $log = $file->queryLogs($r);
 
     $title = sprintf(_("%s Revision %s (%s ago)"),
                      basename($fullname),
                      $r,
-                     Chora::readableTime($log->date, true));
-    $extraLink = sprintf('<a href="%s">%s</a> | <a href="%s">%s</a>',
-                         Chora::url('annotate', $where, array('rev' => $r)), _("Annotate"),
-                         Chora::url('co', $where, array('r' => $r, 'p' => 1)), _("Download"));
+                     Chora::readableTime($log->queryDate(), true));
+
+    $views = array(
+        Horde::widget(Chora::url('annotate', $where, array('rev' => $r)), _("Annotate"), 'widget', '', '', _("_Annotate")),
+        Horde::widget(Chora::url('co', $where, array('r' => $r, 'p' => 1)), _("Download"), 'widget', '', '', _("_Download"))
+    );
+    if ($VC->hasFeature('snapshots')) {
+        $snapdir = dirname($file->queryPath());
+        $views[] = Horde::widget(Chora::url('browsedir', $snapdir == '.' ? '' : $snapdir . '/', array('onb' => $r)), _("Snapshot"), 'widget', '', '', _("_Snapshot"));
+    }
+    $extraLink = _("View:") . ' ' . implode(' | ', $views);
 
     $tags = Chora::getTags($log, $where);
     $branch_info = $log->queryBranch();
@@ -78,8 +85,7 @@ if (!$plain) {
     $log_print = Chora::formatLogMessage($log->queryLog());
     $author = Chora::showAuthorName($log->queryAuthor(), true);
 
-    Horde::addScriptFile('prototype.js', 'horde', true);
-    Horde::addScriptFile('stripe.js', 'horde', true);
+    Horde::addScriptFile('stripe.js', 'horde');
     require CHORA_TEMPLATES . '/common-header.inc';
     require CHORA_TEMPLATES . '/menu.inc';
     require CHORA_TEMPLATES . '/headerbar.inc';

@@ -14,6 +14,13 @@
 class IMP_Quota
 {
     /**
+     * Singleton instances.
+     *
+     * @var array
+     */
+    static protected $_instances = array();
+
+    /**
      * Hash containing connection parameters.
      *
      * @var array
@@ -27,24 +34,25 @@ class IMP_Quota
      * It will only create a new instance if no instance with the same
      * parameters currently exists.
      *
-     * This method must be invoked as: $var = &IMP_Quota::singleton()
+     * This method must be invoked as: $var = IMP_Quota::singleton()
      *
      * @param string $driver  The type of concrete subclass to return.
      * @param array $params   A hash containing any additional configuration
      *                        or connection parameters a subclass might need.
      *
-     * @return mixed  The created concrete instance, or false on error.
+     * @return IMP_Quota  The concrete instance.
+     * @throws Horde_Exception
      */
-    static public function &singleton($driver, $params = array())
+    static public function singleton($driver, $params = array())
     {
-        static $instances = array();
+        ksort($params);
+        $sig = hash('md5', serialize(array($driver, $params)));
 
-        $signature = serialize(array($driver, $params));
-        if (!isset($instances[$signature])) {
-            $instances[$signature] = IMP_Quota::factory($driver, $params);
+        if (!isset(self::$_instances[$sig])) {
+            self::$_instances[$sig] = self::factory($driver, $params);
         }
 
-        return $instances[$signature];
+        return self::$_instances[$sig];
     }
 
     /**
@@ -54,17 +62,19 @@ class IMP_Quota
      * @param array $params   A hash containing any additional configuration or
      *                        connection parameters a subclass might need.
      *
-     * @return mixed  The newly created concrete instance, or false on error.
+     * @return IMP_Quota  The concrete instance.
+     * @throws Horde_Exception
      */
     static public function factory($driver, $params = array())
     {
         $driver = basename($driver);
-        require_once dirname(__FILE__) . '/Quota/' . $driver . '.php';
-        $class = 'IMP_Quota_' . $driver;
+        $class = 'IMP_Quota_' . ucfirst($driver);
 
-        return class_exists($class)
-            ? new $class($params)
-            : false;
+        if (class_exists($class)) {
+            return new $class($params);
+        }
+
+        throw new Horde_Exception('Could not create IMP_Quota instance: ' . $driver, 'horde.error');
     }
 
     /**
@@ -72,24 +82,24 @@ class IMP_Quota
      *
      * @param array $params  Hash containing connection parameters.
      */
-    public function __construct($params = array())
+    protected function __construct($params = array())
     {
         $this->_params = $params;
 
         /* If 'password' exists in params, it has been encrypted in the
          * session so we need to decrypt. */
         if (isset($this->_params['password'])) {
-            $this->_params['password'] = Horde_Secret::read(IMP::getAuthKey(), $this->_params['password']);
+            $this->_params['password'] = Horde_Secret::read(Horde_Secret::getKey('imp'), $this->_params['password']);
         }
     }
 
     /**
      * Get quota information (used/allocated), in bytes.
      *
-     * @return mixed  Returns PEAR_Error on failure. Otherwise, returns an
-     *                array with the following keys:
+     * @return array  An array with the following keys:
      *                'limit' = Maximum quota allowed
      *                'usage' = Currently used portion of quota (in bytes)
+     * @throws Horde_Exception
      */
     public function getQuota()
     {
@@ -116,7 +126,7 @@ class IMP_Quota
             'nolimit_short' => isset($this->_params['format']['nolimit_short'])
                 ? $this->_params['format']['nolimit_short']
                 : _("%.0f %s")
-       );
+        );
     }
 
     /**
@@ -146,4 +156,5 @@ class IMP_Quota
 
         return array($calc, $unit);
     }
+
 }

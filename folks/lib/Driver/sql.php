@@ -20,7 +20,7 @@
  * The table structure can be created by the scripts/sql/folks_foo.sql
  * script.
  *
- * $Id: sql.php 1074 2008-11-29 09:04:26Z duck $
+ * $Id: sql.php 1234 2009-01-28 18:44:02Z duck $
  *
  * Copyright 2008-2009 The Horde Project (http://www.horde.org/)
  *
@@ -77,7 +77,7 @@ class Folks_Driver_sql extends Folks_Driver {
     {
         $sql = 'SELECT user_uid FROM ' . $this->_params['online']
             . ' WHERE user_uid <> "" AND user_uid <> "0" '
-            . '  ORDER BY time_last_click DESC LIMIT 0, ' . (int)$limit;
+            . ' ORDER BY time_last_click DESC LIMIT 0, ' . (int)$limit;
 
         return $this->_db->getCol($sql);
     }
@@ -109,7 +109,7 @@ class Folks_Driver_sql extends Folks_Driver {
     protected function _updateOnlineStatus()
     {
         $query = 'REPLACE INTO ' . $this->_params['online'] . ' (user_uid, ip_address, time_last_click) VALUES (?, ?, ?)';
-        return $this->_write_db->query($query, array(Auth::getAuth(), $_SERVER['REMOTE_ADDR'], $_SERVER['REQUEST_TIME']));
+        return $this->_write_db->query($query, array(Horde_Auth::getAuth(), $_SERVER['REMOTE_ADDR'], $_SERVER['REQUEST_TIME']));
     }
 
     /**
@@ -375,7 +375,7 @@ class Folks_Driver_sql extends Folks_Driver {
     protected function _logView($id)
     {
         $query = 'REPLACE INTO ' . $this->_params['views'] . ' (view_uid, user_uid, view_time) VALUES (?, ?, ?)';
-        return $this->_write_db->query($query, array($id, Auth::getAuth(), $_SERVER['REQUEST_TIME']));
+        return $this->_write_db->query($query, array($id, Horde_Auth::getAuth(), $_SERVER['REQUEST_TIME']));
     }
 
     /**
@@ -386,7 +386,7 @@ class Folks_Driver_sql extends Folks_Driver {
     public function getViews()
     {
         $query = 'SELECT user_uid FROM ' . $this->_params['views'] . ' WHERE view_uid = ?';
-        return $this->_db->getCol($query, 0, array(Auth::getAuth()));
+        return $this->_db->getCol($query, 0, array(Horde_Auth::getAuth()));
     }
 
    /**
@@ -408,15 +408,20 @@ class Folks_Driver_sql extends Folks_Driver {
     }
 
     /**
-     * Add dummy user data
+     * Adds a set of authentication credentials.
+     *
+     * @param string $userId  The userId to add.
+     * @param array $credentials  The credentials to use.
+     *
+     * @return boolean true|PEAR_Error
      */
-    public function addUser($user)
+    public function addUser($user, $credentials)
     {
         // password and mail will be added later with the addextra hook
         $query = 'INSERT INTO ' . $this->_params['table']
                     . ' (user_uid, user_status, user_password, user_email, signup_at, signup_by) '
                     . ' VALUES (?, ?, ?, ?, NOW(), ?)';
-        $params = array($user, 'inactive', rand(),
+        $params = array($user, 'inactive', $credentials['password'],
                         rand() . '@' . $_SERVER['REMOTE_ADDR'],
                         $_SERVER['REMOTE_ADDR']);
 
@@ -461,7 +466,7 @@ class Folks_Driver_sql extends Folks_Driver {
     {
         $query = 'INSERT INTO ' . $this->_params['search'] . ' (user_uid, search_name, search_criteria) VALUES (?, ?, ?)';
 
-        return $this->_write_db->query($query, array(Auth::getAuth(), $name, $criteria));
+        return $this->_write_db->query($query, array(Horde_Auth::getAuth(), $name, $criteria));
     }
 
    /**
@@ -473,7 +478,7 @@ class Folks_Driver_sql extends Folks_Driver {
     {
         $query = 'SELECT search_name FROM ' . $this->_params['search'] . ' WHERE user_uid = ?';
 
-        return $this->_db->getCol($query, 'search_name', Auth::getAuth());
+        return $this->_db->getCol($query, 'search_name', Horde_Auth::getAuth());
     }
 
    /**
@@ -487,7 +492,7 @@ class Folks_Driver_sql extends Folks_Driver {
     {
         $query = 'SELECT search_criteria FROM ' . $this->_params['search'] . ' WHERE user_uid = ? AND search_name = ?';
 
-        return $this->_db->getOne($query, array(Auth::getAuth(), $name));
+        return $this->_db->getOne($query, array(Horde_Auth::getAuth(), $name));
     }
 
    /**
@@ -499,7 +504,7 @@ class Folks_Driver_sql extends Folks_Driver {
     {
         $query = 'DELETE FROM ' . $this->_params['search'] . ' WHERE user_uid = ? AND search_name = ?';
 
-        return $this->_write_db->query($query, array(Auth::getAuth(), $name));
+        return $this->_write_db->query($query, array(Horde_Auth::getAuth(), $name));
     }
 
    /**
@@ -529,7 +534,7 @@ class Folks_Driver_sql extends Folks_Driver {
     */
     protected function _getActivity($user, $limit)
     {
-        $query = 'SELECT activity_message, activity_scope, activity_date FROM '
+        $query = 'SELECT activity_message, activity_scope, activity_date, user_uid FROM '
                 . $this->_params['activity'] . ' WHERE user_uid = ? '
                 . 'ORDER BY activity_date DESC';
         $query = $this->_db->modifyLimitQuery($query, 0, $limit);
@@ -557,7 +562,7 @@ class Folks_Driver_sql extends Folks_Driver {
     /**
      * Attempts to open a persistent connection to the SQL server.
      *
-     * @return boolean  True on success; exits (Horde::fatal()) on error.
+     * @return boolean  True on success.
      */
     private function _connect()
     {
@@ -579,7 +584,7 @@ class Folks_Driver_sql extends Folks_Driver {
         $this->_write_db = DB::connect($this->_params,
                                         array('persistent' => !empty($this->_params['persistent'])));
         if ($this->_write_db instanceof PEAR_Error) {
-            Horde::fatal($this->_write_db, __FILE__, __LINE__);
+            throw new Horde_Exception($this->_write_db);
         }
 
         // Set DB portability options.
@@ -597,7 +602,7 @@ class Folks_Driver_sql extends Folks_Driver {
             $this->_db = DB::connect($params,
                                       array('persistent' => !empty($params['persistent'])));
             if ($this->_db instanceof PEAR_Error) {
-                Horde::fatal($this->_db, __FILE__, __LINE__);
+                throw new Horde_Exception($this->_db);
             }
 
             // Set DB portability options.

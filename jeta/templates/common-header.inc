@@ -1,6 +1,6 @@
 <?php
 if (isset($language)) {
-    header('Content-type: text/html; charset=' . NLS::getCharset());
+    header('Content-type: text/html; charset=' . Horde_Nls::getCharset());
     header('Vary: Accept-Language');
 }
 ?>
@@ -9,7 +9,7 @@ if (isset($language)) {
 <head>
 <title><?php echo htmlspecialchars($registry->get('name')) ?></title>
 <link href="<?php echo $GLOBALS['registry']->getImageDir()?>/favicon.ico" rel="SHORTCUT ICON" />
-<?php echo Horde::stylesheetLink('horde') ?>
+<?php Horde::includeStylesheetFiles() ?>
 </head>
 
 <body>

@@ -7,24 +7,18 @@
 //
 
 #import <Cocoa/Cocoa.h>
+#import <Quartz/Quartz.h>
 #import "ExportPluginProtocol.h"
 
 @class TURAnsel, TURAnselGallery;
 @class FBProgressController;
 @class TURNewGalleryController;
 
-// User defaults keys
-extern NSString * const TURAnselServersKey;
-extern NSString * const TURAnselExportSize;
-
-// Server property keys
-extern NSString * const TURAnselServerNickKey;
-extern NSString * const TURAnselServerEndpointKey;
-extern NSString * const TURAnselServerUsernameKey;
-extern NSString * const TURAnselServerPasswordKey;
-
+#if MAC_OS_X_VERSION_10_6
+@interface AnselExportController : NSObject <ExportPluginProtocol, NSComboBoxDelegate> {
+#else
 @interface AnselExportController : NSObject <ExportPluginProtocol> {
-
+#endif
     // Export manager passed in from iPhoto
     id <ExportImageProtocol> mExportMgr;
     
@@ -35,19 +29,31 @@ extern NSString * const TURAnselServerPasswordKey;
     //Outlets   
     IBOutlet NSPopUpButton *mSizePopUp;
     IBOutlet NSComboBox *galleryCombo;
-    IBOutlet NSComboBox *mServers; 
     IBOutlet NSTextField *statusLabel;
     IBOutlet NSProgressIndicator *spinner;
     IBOutlet NSImageView *defaultImageView;
-    IBOutlet NSButton *newGalleryButton;
+    IBOutlet NSButton *mNewGalleryButton;
     IBOutlet NSPopUpButton *mServersPopUp;
+    IBOutlet NSTextField *mImageCountLabel;
+    
+    // Gallery View
+    IBOutlet NSButton *viewGallery;
+    IBOutlet NSWindow *mviewGallerySheet;
+    IBOutlet NSButton *closeGalleryView;
+    IBOutlet IKImageBrowserView *browserView;
+    NSMutableArray *browserData;
     
     // New Server sheet
     IBOutlet NSWindow *newServerSheet;
-    IBOutlet NSTextField *anselHostURL;
-    IBOutlet NSTextField *username;    
-    IBOutlet NSSecureTextField *password;
-    IBOutlet NSTextField *serverNickName;
+    IBOutlet NSTextField *mServerSheetHostURL;
+    IBOutlet NSTextField *mServerSheetUsername;    
+    IBOutlet NSSecureTextField *mServerSheetPassword;
+    IBOutlet NSTextField *mServerSheetServerNickName;
+    IBOutlet NSButton *mMakeNewServerDefault;
+    
+    // Server list
+    IBOutlet NSPanel *serverListPanel;
+    IBOutlet NSTableView *serverTable;
     
     // Progress struct (This one is part of the protocol, but we don't use it)
     ExportPluginProgress progress;
@@ -79,9 +85,17 @@ extern NSString * const TURAnselServerPasswordKey;
 - (IBAction) doAddServer: (id)sender;
 - (IBAction) doCancelAddServer: (id)sender;
 - (IBAction) clickServer: (id)sender;
+- (void)     doSwapImage: (id)theImage;
+- (IBAction) clickViewGallery: (id)sender;
+- (IBAction) closeGalleryView: (id)sender;
+
+// Server List
+- (IBAction) closeServerList: (id)sender;
+- (IBAction) removeServer: (id)sender;
 
 // overrides
 - (void)awakeFromNib;
 - (void)dealloc;
+
 
 @end

@@ -1,1 +1,374 @@
-var ContextSensitive=Class.create({initialize:function(){this.current=this.lasttarget=this.target=null;this.elements=$H();document.observe("contextmenu",this.rightClickHandler.bindAsEventListener(this));document.observe("click",this.leftClickHandler.bindAsEventListener(this));document.observe(Prototype.Browser.Gecko?"DOMMouseScroll":"mousescroll",this.close.bind(this))},addElement:function(d,c,a){var b=Boolean(a.left);if(d&&!this.validElement(d,b)){this.elements.set(d+Number(b),new ContextSensitive.Element(d,c,a))}},removeElement:function(a){this.elements.unset(a+"0");this.elements.unset(a+"1")},close:function(a){if(this.current){if(a){this.current.hide()}else{Effect.Fade(this.current,{duration:0.2})}this.current=this.target=null}},element:function(a){return a?this.target:this.lasttarget},currentmenu:function(){if(this.current&&this.current.visible()){return this.current}},validElement:function(b,a){return this.elements.get(b+Number(Boolean(a)))},disable:function(d,c,a){var b=this.validElement(d,c);if(b){b.disable=a}},leftClickHandler:function(a){if(a.isRightClick()){return}this.rightClickHandler(a,true)},rightClickHandler:function(b,a){if(this.trigger(b.element(),a,b.pointerX(),b.pointerY())){b.stop()}},trigger:function(f,e,h,g){var j,b,d,c,k,i,a;[f].concat(f.ancestors()).find(function(l){j=this.validElement(l.id,e);return j},this);if(!j||j.disable){this.close();return false}b=$(j.ctx);if(!b){this.close();return false}else{if(e&&b==this.current){return false}}this.current=b;this.lasttarget=this.target=$(j.id);d=j.opts.offset;if(!d&&(Object.isUndefined(h)||Object.isUndefined(g))){d=f.id}d=$(d);if(d){c=d.viewportOffset();a=document.viewport.getScrollOffsets();h=c[0]+a.left;g=c[1]+d.getHeight()+a.top}i=document.viewport.getDimensions();k=b.getDimensions();if((g+k.height)>i.height){g=i.height-k.height-10}if((h+k.width)>i.width){h=i.width-k.width-10}if(j.opts.onShow){j.opts.onShow(j)}Effect.Appear(b.setStyle({left:h+"px",top:g+"px"}),{duration:0.2});return true}});ContextSensitive.Element=Class.create({initialize:function(c,b,a){this.id=c;this.ctx=b;this.opts=a;this.opts.left=Boolean(a.left);this.disable=false}});
+/**
+ * ContextSensitive: a library for generating context-sensitive content on
+ * HTML elements. It will take over the click/oncontextmenu functions for the
+ * document, and works only where these are possible to override.  It allows
+ * contextmenus to be created via both a left and right mouse click.
+ *
+ * On Opera, the context menu is triggered by a left click + SHIFT + CTRL
+ * combination.
+ *
+ * Requires prototypejs 1.6+ and scriptaculous 1.8+ (effects.js only).
+ *
+ * Original code by Havard Eide (http://eide.org/) released under the MIT
+ * license.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ *
+ * @author Chuck Hagenbuch <chuck@horde.org>
+ * @author Michael Slusarz <slusarz@horde.org>
+ */
+
+var ContextSensitive = Class.create({
+
+    initialize: function(opts)
+    {
+        this.baseelt = null;
+        this.current = [];
+        this.elements = $H();
+        this.opts = opts || {};
+        this.submenus = $H();
+        this.triggers = [];
+
+        if (!Prototype.Browser.Opera) {
+            document.observe('contextmenu', this._rightClickHandler.bindAsEventListener(this));
+        }
+        document.observe('click', this._leftClickHandler.bindAsEventListener(this));
+        document.observe(Prototype.Browser.Gecko ? 'DOMMouseScroll' : 'mousescroll', this.close.bind(this));
+    },
+
+    /**
+     * Elements are of type ContextSensitive.Element.
+     */
+    addElement: function(id, target, opts)
+    {
+        var left = Boolean(opts.left);
+        if (id && !this.validElement(id, left)) {
+            this.elements.set(id + Number(left), new ContextSensitive.Element(id, target, opts));
+        }
+    },
+
+    /**
+     * Remove a registered element.
+     */
+    removeElement: function(id)
+    {
+        this.elements.unset(id + '0');
+        this.elements.unset(id + '1');
+    },
+
+    /**
+     * Hide the currently displayed element(s).
+     */
+    close: function()
+    {
+        this._closeMenu(0, true);
+    },
+
+    /**
+     * Close all menus below a specified level.
+     */
+    _closeMenu: function(idx, immediate)
+    {
+        if (this.current.size()) {
+            this.current.splice(idx, this.current.size() - idx).each(function(s) {
+                // Fade-out on final display.
+                if (!immediate && idx == 0) {
+                    s.fade({ duration: 0.15 });
+                } else {
+                    $(s).hide();
+                }
+            });
+
+            this.triggers.splice(idx, this.triggers.size() - idx).each(function(s) {
+                $(s).removeClassName('contextHover');
+            });
+
+            if (idx == 0) {
+                this.baseelt = null;
+            }
+        }
+    },
+
+    /**
+     * Returns the current displayed menu element ID, if any. If more than one
+     * submenu is open, returns the last ID opened.
+     */
+    currentmenu: function()
+    {
+        return this.current.last();
+    },
+
+    /**
+     * Get a valid element (the ones that can be right-clicked) based
+     * on a element ID.
+     */
+    validElement: function(id, left)
+    {
+        return this.elements.get(id + Number(Boolean(left)));
+    },
+
+    /**
+     * Set the disabled flag of an event.
+     */
+    disable: function(id, left, disable)
+    {
+        var e = this.validElement(id, left);
+        if (e) {
+            e.disable = disable;
+        }
+    },
+
+    /**
+     * Called when a left click event occurs. Will return before the
+     * element is closed if we click on an element inside of it.
+     */
+    _leftClickHandler: function(e)
+    {
+        var base, elt, elt_up, trigger;
+
+        if (this.operaCheck(e)) {
+            this._rightClickHandler(e, false);
+            e.stop();
+            return;
+        }
+
+        // Check for a right click. FF on Linux triggers an onclick event even
+        // w/a right click, so disregard.
+        if (e.isRightClick()) {
+            return;
+        }
+
+        // Check for click in open contextmenu.
+        if (this.current.size()) {
+            elt = e.element();
+            if (!elt.match('A')) {
+                elt = elt.up('A');
+                if (!elt) {
+                    this._rightClickHandler(e, true);
+                    return;
+                }
+            }
+            elt_up = elt.up('.contextMenu');
+
+            if (elt_up) {
+                e.stop();
+
+                if (elt.hasClassName('contextSubmenu') &&
+                    elt_up.readAttribute('id') != this.currentmenu()) {
+                    this._closeMenu(this.current.indexOf(elt.readAttribute('id')));
+                } else {
+                    base = this.baseelt;
+                    trigger = this.triggers.last();
+                    this.close();
+                    if (this.opts.onClick) {
+                        this.opts.onClick(elt, base, trigger);
+                    }
+                }
+                return;
+            }
+        }
+
+        // Check if the mouseclick is registered to an element now.
+        this._rightClickHandler(e, true);
+    },
+
+    /**
+     * Checks if the Opera right-click emulation is present.
+     */
+    operaCheck: function(e)
+    {
+        return Prototype.Browser.Opera && e.shiftKey && e.ctrlKey;
+    },
+
+    /**
+     * Called when a right click event occurs.
+     */
+    _rightClickHandler: function(e, left)
+    {
+        if (this.trigger(e.element(), left, e.pointerX(), e.pointerY())) {
+            e.stop();
+        };
+    },
+
+    /**
+     * Display context menu if valid element has been activated.
+     */
+    trigger: function(target, leftclick, x, y)
+    {
+        var ctx, el, el_id, offset, offsets, voffsets;
+
+        [ target ].concat(target.ancestors()).find(function(n) {
+            ctx = this.validElement(n.id, leftclick);
+            return ctx;
+        }, this);
+
+        // Return if event not found or event is disabled.
+        if (!ctx || ctx.disable) {
+            this.close();
+            return false;
+        }
+
+        // Try to retrieve the context-sensitive element we want to
+        // display. If we can't find it we just return.
+        el = $(ctx.ctx);
+        if (!el) {
+            this.close();
+            return false;
+        }
+
+        el_id = el.readAttribute('id');
+        if (leftclick && el_id == this.currentmenu()) {
+            return false;
+        }
+
+        this.close();
+
+        // Register the element that was clicked on.
+        this.baseelt = target;
+
+        offset = ctx.opts.offset;
+        if (!offset && (Object.isUndefined(x) || Object.isUndefined(y))) {
+            offset = target.readAttribute('id');
+        }
+        offset = $(offset);
+
+        if (offset) {
+            offsets = offset.viewportOffset();
+            voffsets = document.viewport.getScrollOffsets();
+            x = offsets[0] + voffsets.left;
+            y = offsets[1] + offset.getHeight() + voffsets.top;
+        }
+
+        this._displayMenu(el, x, y);
+        this.triggers.push(el_id);
+
+        return true;
+    },
+
+    /**
+     * Display the [sub]menu on the screen.
+     */
+    _displayMenu: function(elt, x, y)
+    {
+        // Get window/element dimensions
+        var id = elt.readAttribute('id'),
+            size = elt.getDimensions(),
+            v = document.viewport.getDimensions();
+
+        // Make sure context window is entirely on screen
+        if ((y + size.height) > v.height) {
+            y = v.height - size.height - 10;
+        }
+        if ((x + size.width) > v.width) {
+            x = this.current.size()
+                ? ($(this.current.last()).viewportOffset()[0] - size.width)
+                : (v.width - size.width - 10);
+        }
+
+        if (this.opts.onShow) {
+            this.opts.onShow(id, this.baseelt);
+        }
+
+        elt.setStyle({ left: x + 'px', top: y + 'px' })
+
+        if (this.current.size()) {
+            elt.show();
+        } else {
+            // Fade-in on initial display.
+            elt.appear({ duration: 0.15 });
+        }
+
+        this.current.push(id);
+    },
+
+    /**
+     * Add a submenu to an existing menu.
+     */
+    addSubMenu: function(id, submenu)
+    {
+        if (!this.submenus.get(id)) {
+            if (!this.submenus.size()) {
+                document.observe('mouseover', this._mouseoverHandler.bindAsEventListener(this));
+            }
+            this.submenus.set(id, submenu);
+            $(submenu).addClassName('contextMenu');
+            $(id).addClassName('contextSubmenu');
+        }
+    },
+
+    /**
+     * Mouseover DOM Event handler.
+     */
+    _mouseoverHandler: function(e)
+    {
+        if (!this.current.size()) {
+            return;
+        }
+
+        var cm = this.currentmenu(),
+            elt = e.element(),
+            elt_up = elt.up('.contextMenu'),
+            id = elt.readAttribute('id'),
+            id_div, offsets, sub, voffsets, x, y;
+
+        if (!elt_up) {
+            return;
+        }
+
+        id_div = elt_up.readAttribute('id');
+
+        if (elt.hasClassName('contextSubmenu')) {
+            sub = this.submenus.get(id);
+            if (sub != cm || this.currentmenu() != id) {
+                if (id_div != cm) {
+                    this._closeMenu(this.current.indexOf(id_div) + 1);
+                }
+
+                offsets = elt.viewportOffset();
+                voffsets = document.viewport.getScrollOffsets();
+                x = offsets[0] + voffsets.left + elt.getWidth();
+                y = offsets[1] + voffsets.top;
+                this._displayMenu($(sub), x, y, id);
+                this.triggers.push(id);
+                elt.addClassName('contextHover');
+            }
+        } else if ((this.current.size() > 1) &&
+                   id_div != cm) {
+            this._closeMenu(this.current.indexOf(id));
+        }
+    }
+
+});
+
+ContextSensitive.Element = Class.create({
+
+    // opts: 'left' -> monitor left click; 'offset' -> id of element used to
+    //       determine offset placement
+    initialize: function(id, target, opts)
+    {
+        this.id = id;
+        this.ctx = target;
+        this.opts = opts;
+        this.opts.left = Boolean(opts.left);
+        this.disable = false;
+
+        target = $(target);
+        if (target) {
+            target.addClassName('contextMenu');
+        }
+    }
+
+});

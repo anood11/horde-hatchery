@@ -29,9 +29,9 @@ $delete_url = Horde::applicationUrl('admin/categories/delete.php');
 $delete_img = Horde::img('delete.png', _("Delete"), '', $registry->getImageDir('horde'));
 
 foreach ($categories as $category_id => $category) {
-    $categories[$category_id]['actions'][] = Horde::link(Util::addParameter($delete_url, 'category_id', $category_id), _("Delete")) .
+    $categories[$category_id]['actions'][] = Horde::link(Horde_Util::addParameter($delete_url, 'category_id', $category_id), _("Delete")) .
                                     $delete_img . '</a>';
-    $categories[$category_id]['actions'][] = Horde::link(Util::addParameter($edit_url, 'category_id', $category_id), _("Edit")) .
+    $categories[$category_id]['actions'][] = Horde::link(Horde_Util::addParameter($edit_url, 'category_id', $category_id), _("Edit")) .
                                      $edit_img . '</a>';
 }
 
@@ -39,7 +39,7 @@ $view = new News_View();
 $view->categories = $categories;
 $view->add_url = Horde::link($edit_url, _("Add New")) . _("Add New") . '</a>';
 
-Horde::addScriptFile('tables.js', 'horde', true);
+Horde::addScriptFile('tables.js', 'horde');
 require NEWS_BASE . '/templates/common-header.inc';
 require NEWS_BASE . '/templates/menu.inc';
 echo $tabs->render('cetegories');

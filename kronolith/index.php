@@ -6,17 +6,7 @@
  * not receive such a file, see also http://www.fsf.org/copyleft/gpl.html.
  */
 
-@define('KRONOLITH_BASE', dirname(__FILE__));
-$kronolith_configured = (is_readable(KRONOLITH_BASE . '/config/conf.php') &&
-                         is_readable(KRONOLITH_BASE . '/config/prefs.php'));
-
-if (!$kronolith_configured) {
-    require KRONOLITH_BASE . '/../lib/Test.php';
-    Horde_Test::configFilesMissing('Kronolith', KRONOLITH_BASE,
-        array('conf.php', 'prefs.php'));
-}
-
-require_once KRONOLITH_BASE . '/lib/base.php';
+require_once dirname(__FILE__) . '/lib/base.php';
 
 /* Load traditional interface? */
 if (!$prefs->getValue('dynamic_view') || !$browser->hasFeature('xmlhttpreq')) {
@@ -25,38 +15,23 @@ if (!$prefs->getValue('dynamic_view') || !$browser->hasFeature('xmlhttpreq')) {
 }
 
 /* Load Ajax interface. */
-require_once 'Horde/Identity.php';
-$identity = Identity::factory();
 $logout_link = Horde::getServiceLink('logout', 'kronolith');
 if ($logout_link) {
     $logout_link = Horde::widget($logout_link, _("_Logout"), 'logout');
 }
 $help_link = Horde::getServiceLink('help', 'kronolith');
 if ($help_link) {
-    $help_link = Horde::widget($help_link, _("Help"), 'helplink', 'help', 'popup(this.href); return false;');
+    $help_link = Horde::widget($help_link, _("Help"), 'helplink', 'help', Horde::popupJs($help_link, array('urlencode' => true)) . 'return false;');
 }
 $today = Kronolith::currentDate();
-$remote_calendars = @unserialize($prefs->getValue('remote_cals'));
-$current_user = Auth::getAuth();
-$my_calendars = array();
-$shared_calendars = array();
-foreach (Kronolith::listCalendars() as $id => $cal) {
-    if ($cal->get('owner') == $current_user) {
-        $my_calendars[$id] = $cal;
-    } else {
-        $shared_calendars[$id] = $cal;
-    }
-}
+$_SESSION['horde_prefs']['nomenu'] = true;
 
-$scripts = array(
-    array('ContextSensitive.js', 'kronolith', true),
-    array('dhtmlHistory.js', 'horde', true),
-    array('redbox.js', 'horde', true),
-);
-Kronolith::header('', $scripts);
+Kronolith::header();
 echo "<body class=\"kronolithAjax\">\n";
 require KRONOLITH_TEMPLATES . '/index/index.inc';
-Kronolith::includeScriptFiles();
-Kronolith::outputInlineScript();
+Horde::includeScriptFiles();
+Horde::outputInlineScript();
 $notification->notify(array('listeners' => array('javascript')));
+$tac = Horde_Ajax_Imple::factory(array('kronolith', 'TagAutoCompleter'), array('triggerId' => 'kronolithEventTags', 'box' => 'kronolithEventACBox', 'pretty' => true));
+$tac->attach();
 echo "</body>\n</html>";

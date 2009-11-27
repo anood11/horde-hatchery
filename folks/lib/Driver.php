@@ -3,7 +3,7 @@
  * Folks_Driver:: defines an API for implementing storage backends for
  * Folks.
  *
- * $Id: Driver.php 991 2008-10-10 10:27:58Z duck $
+ * $Id: Driver.php 1247 2009-01-30 15:01:34Z duck $
  *
  * Copyright Obala d.o.o. (www.obala.si)
  *
@@ -62,13 +62,12 @@ class Folks_Driver {
 
     /**
      * Load VFS Backend
+     *
+     * @throws Horde_Exception
      */
     protected function _loadVFS()
     {
         $v_params = Horde::getVFSConfig('images');
-        if ($v_params instanceof PEAR_Error) {
-            return $v_params;
-        }
 
         return VFS::singleton($v_params['type'], $v_params['params']);
     }
@@ -91,15 +90,19 @@ class Folks_Driver {
         $p = hash('md5', $user);
         $vfspath = Folks::VFS_PATH . '/' . substr(str_pad($p, 2, 0, STR_PAD_LEFT), -2) . '/';
         $vfs_name = $p . '.' . $conf['images']['image_type'];
-
-        $img = Horde_Image::factory('gd', array('type' => $conf['images']['image_type'],
-                                                'temp' => Horde::getTempDir()));
-
-        $result = $img->loadFile($file);
-        if ($result instanceof PEAR_Error) {
-            return $result;
+        $driver = empty($conf['image']['convert']) ? 'Gd' : 'Im';
+        $context = array('tmpdir' => Horde::getTempDir());
+        if (!empty($conf['image']['convert'])) {
+            $context['convert'] = $conf['image']['convert'];
         }
-
+        $img = Horde_Image::factory($driver,
+                                    array('type' => $conf['images']['image_type'],
+                                          'context' => $context));
+        try {
+            $result = $img->loadFile($file);
+        } catch (Horde_Image_Exception $e) {
+            throw new Horde_Exception($e);
+        }
         $dimensions = $img->getDimensions();
         if ($dimensions instanceof PEAR_Error) {
             return $dimensions;
@@ -152,55 +155,6 @@ class Folks_Driver {
         $GLOBALS['cache']->expire('folksProfile' . $user);
 
         return $this->_deleteImage($user);
-    }
-
-    /**
-     * Check if user is on blacklist
-     *
-     * @param string $user User owner
-     * @param string $chcek User to check
-     *
-     * @return boolean
-     */
-    public function isBlacklisted($user, $check)
-    {
-        require_once FOLKS_BASE . '/lib/Friends.php';
-        $friends = Folks_Friends::singleton($GLOBALS['conf']['friends'], array('user' => $user));
-        return $friends->isBlacklisted($check);
-    }
-
-    /**
-     * Check if user is on blacklist
-     *
-     * @param string $user User owner
-     * @param string $chcek User to check
-     *
-     * @return boolean
-     */
-    public function isFriend($user, $check)
-    {
-        if ($user == $check) {
-            return true;
-        }
-
-        require_once FOLKS_BASE . '/lib/Friends.php';
-        $friends = Folks_Friends::singleton($GLOBALS['conf']['friends'], array('user' => $user));
-        return $friends->isFriend($check);
-    }
-
-    /**
-     * Check if user is on blacklist
-     *
-     * @param string $user User owner
-     *
-     * @return array firends usernames
-     */
-    public function getFriends($user)
-    {
-        require_once FOLKS_BASE . '/lib/Friends.php';
-        $friends = Folks_Friends::singleton($GLOBALS['conf']['friends'], array('user' => $user));
-
-        return $friends->getFriends();
     }
 
     /**
@@ -275,7 +229,7 @@ class Folks_Driver {
             $new = unserialize($new);
         } else {
             $new = $this->getUsers(array('sort_by' => 'signup_at',
-                                        'sort_dir' => 1), 0, $limit);
+                                        'sort_dir' => 0), 0, $limit);
             if ($new instanceof PEAR_Error) {
                 return $new;
             }
@@ -339,8 +293,8 @@ class Folks_Driver {
             $this->_updateOnlineStatus();
 
             // Update profile
-            if (Auth::isAuthenticated()) {
-                $this->_saveProfile(array('last_online_on' => $_SERVER['REQUEST_TIME']), Auth::getAuth());
+            if (Horde_Auth::isAuthenticated()) {
+                $this->_saveProfile(array('last_online_on' => $_SERVER['REQUEST_TIME']), Horde_Auth::getAuth());
             }
         }
 
@@ -369,7 +323,7 @@ class Folks_Driver {
         static $profiles;
 
         if ($user == null) {
-            $user = Auth::getAuth();
+            $user = Horde_Auth::getAuth();
         }
 
         if (empty($user)) {
@@ -381,7 +335,7 @@ class Folks_Driver {
         }
 
         $profile = $GLOBALS['cache']->get('folksProfile' . $user, $GLOBALS['conf']['cache']['default_lifetime']);
-        if ($profile || (Auth::isAdmin() && Util::getGet('debug'))) {
+        if ($profile || (Horde_Auth::isAdmin() && Horde_Util::getGet('debug'))) {
 
             $profile = unserialize($profile);
 
@@ -394,19 +348,18 @@ class Folks_Driver {
             }
 
             // Filter description
-            require_once 'Horde/Text/Filter.php';
             $filters = array('text2html', 'bbcode', 'highlightquotes', 'emoticons');
-            $filters_params = array(array('parselevel' => TEXT_HTML_MICRO),
+            $filters_params = array(array('parselevel' => Horde_Text_Filter_Text2html::MICRO),
                                     array(),
                                     array(),
                                     array());
 
             if (($hasBBcode = strpos($profile['user_description'], '[')) !== false &&
                     strpos($profile['user_description'], '[/', $hasBBcode) !== false) {
-                $filters_params[0]['parselevel'] = TEXT_HTML_NOHTML;
+                $filters_params[0]['parselevel'] = Horde_Text_Filter_Text2html::NOHTML;
             }
 
-            $profile['user_description'] = Text_Filter::filter(trim($profile['user_description']), $filters, $filters_params);
+            $profile['user_description'] = Horde_Text_Filter::filter(trim($profile['user_description']), $filters, $filters_params);
 
             // Get user last external data
             foreach ($profile as $key => $value) {
@@ -419,17 +372,17 @@ class Folks_Driver {
                         continue;
                     }
                 } else {
-                    $profile['count_' . $service] = Horde::callHook('_folks_hook_countService', array($service, $user), 'folks');
-                    if ($profile['count_' . $service] instanceof PEAR_Error) {
-                        return $profile['count_' . $service];
-                    } elseif (empty($profile['count_' . $service])) {
+                    try {
+                        $profile['count_' . $service] = Horde::callHook('countService', array($service, $user), 'folks');
+                    } catch (Horde_Exception_HookNotSet $e) {}
+                    if (empty($profile['count_' . $service])) {
                         continue;
                     }
                 }
-                $profile['count_' . $service . '_list'] = Horde::callHook('_folks_hook_getService', array($service, $user), 'folks');
-                if ($profile['count_' . $service . '_list'] instanceof PEAR_Error) {
-                    return PEAR::raiseError($profile['count_' . $service . '_list']);
-                } elseif (empty($profile['count_' . $service . '_list'])) {
+                try {
+                    $profile['count_' . $service . '_list'] = Horde::callHook('getService', array($service, $user), 'folks');
+                } catch (Horde_Exception_HookNotSet $e) {}
+                if (empty($profile['count_' . $service . '_list'])) {
                     $profile['count_' . $service] = 0;
                 }
             }
@@ -454,7 +407,7 @@ class Folks_Driver {
     public function changePassword($password, $user = null)
     {
         if ($user == null) {
-            $user = Auth::getAuth();
+            $user = Horde_Auth::getAuth();
         }
 
         $password = hash('md5', $password);
@@ -471,7 +424,7 @@ class Folks_Driver {
     public function saveProfile($data, $user = null)
     {
         if ($user == null) {
-            $user = Auth::getAuth();
+            $user = Horde_Auth::getAuth();
         }
 
         $GLOBALS['cache']->expire('folksProfile' . $user);
@@ -488,7 +441,7 @@ class Folks_Driver {
      */
     function logView($id)
     {
-        if (!Auth::isAuthenticated() || Auth::getAUth() == $id) {
+        if (!Horde_Auth::isAuthenticated() || Horde_Auth::getAUth() == $id) {
             return false;
         }
 
@@ -520,7 +473,7 @@ class Folks_Driver {
     */
     public function deleteUser($user)
     {
-        if  (!Auth::isAdmin()) {
+        if  (!Horde_Auth::isAdmin()) {
             return false;
         }
 
@@ -533,7 +486,7 @@ class Folks_Driver {
         // Delete groups
         if ($GLOBALS['conf']['friends']) {
             $shares = Horde_Share::singleton('folks');
-            $groups = $shares->listShares(Auth::getAuth(), PERMS_SHOW, true);
+            $groups = $shares->listShares(Horde_Auth::getAuth(), Horde_Perms::SHOW, true);
             foreach ($groups as $share) {
                 $result = $shares->removeShare($share);
                 if ($result instanceof PEAR_Error) {
@@ -544,10 +497,7 @@ class Folks_Driver {
 
         // Delete comments
         if ($registry->hasMethod('forums/deleteForum')) {
-            $comments = $registry->call('forums/deleteForum', array('folks', $user));
-            if ($comments instanceof PEAR_Error) {
-                return $comments;
-            }
+            $registry->call('forums/deleteForum', array('folks', $user));
         }
 
         // Delete user
@@ -571,7 +521,7 @@ class Folks_Driver {
     public function getAttributes($user = null, $group = null)
     {
         if ($user == null) {
-            $user = Auth::getAuth();
+            $user = Horde_Auth::getAuth();
         }
 
         $attributes = $GLOBALS['cache']->get('folksUserAttributes' . $user, $GLOBALS['conf']['cache']['default_lifetime']);
@@ -598,7 +548,7 @@ class Folks_Driver {
     public function saveAttributes($data, $group, $user = null)
     {
         if ($user == null) {
-            $user = Auth::getAuth();
+            $user = Horde_Auth::getAuth();
         }
 
         $GLOBALS['cache']->expire('folksAttributes' . $user);
@@ -673,7 +623,7 @@ class Folks_Driver {
     */
     public function saveSearch($criteria, $name)
     {
-        $GLOBALS['cache']->expire('folksearch' . Auth::getAuth());
+        $GLOBALS['cache']->expire('folksearch' . Horde_Auth::getAuth());
 
         return $this->_saveSearch($criteria, $name);
     }
@@ -685,7 +635,7 @@ class Folks_Driver {
     */
     public function getSavedSearch()
     {
-        $search = $GLOBALS['cache']->get('folksearch' . Auth::getAuth(), $GLOBALS['conf']['cache']['default_lifetime']);
+        $search = $GLOBALS['cache']->get('folksearch' . Horde_Auth::getAuth(), $GLOBALS['conf']['cache']['default_lifetime']);
         if ($search) {
             return unserialize($search);
         }
@@ -695,7 +645,7 @@ class Folks_Driver {
             return $search;
         }
 
-        $GLOBALS['cache']->set('folksearch' . Auth::getAuth(), serialize($search));
+        $GLOBALS['cache']->set('folksearch' . Horde_Auth::getAuth(), serialize($search));
 
         return $search;
     }
@@ -724,7 +674,7 @@ class Folks_Driver {
     */
     public function deleteSavedSearch($name)
     {
-        $GLOBALS['cache']->expire('folksearch' . Auth::getAuth());
+        $GLOBALS['cache']->expire('folksearch' . Horde_Auth::getAuth());
 
         return $this->_deleteSavedSearch($name);
     }
@@ -741,7 +691,7 @@ class Folks_Driver {
     public function logActivity($message, $scope = 'folks', $user = null)
     {
         if ($user == null) {
-            $user = Auth::getAuth();
+            $user = Horde_Auth::getAuth();
         }
 
         if (empty($message)) {
@@ -809,9 +759,8 @@ class Folks_Driver {
     */
     public function deleteActivity($scope, $date)
     {
-        $user = Auth::getAuth();
+        $user = Horde_Auth::getAuth();
         $GLOBALS['cache']->expire($user . '_activity');
         return $this->_deleteActivity($scope, $date, $user);
     }
-
 }

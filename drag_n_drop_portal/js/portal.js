@@ -1,1 +1,366 @@
-if(typeof Draggable=="undefined"){throw("widget.js requires including script.aculo.us' dragdrop.js library")}if(typeof Builder=="undefined"){throw("widget.js requires including script.aculo.us' builder.js library")}if(typeof Xilinus=="undefined"){Xilinus={}}Builder.dump();Xilinus.Widget=Class.create();Xilinus.Widget.lastId=0;Xilinus.Widget.remove=function(B,A){if(A&&A.afterFinish){A.afterFinish.call()}};Object.extend(Xilinus.Widget.prototype,{initialize:function(D,E){D=D||"widget";this._id=E||("widget_"+Xilinus.Widget.lastId++);this._titleDiv=DIV({className:"header",id:this._getId("header")},"");this._contentDiv=DIV({className:"headerbox",id:this._getId("content")},"");this._footerDiv=DIV({className:D+"_statusbar",id:this._getId("footer")},"");var C=DIV({className:"header"},this._titleDiv);var B=DIV({className:"headerbox"},this._contentDiv);var A=DIV({className:D+"_sw"},this._footerDiv);this._div=DIV({className:D+(D!="widget"?" widget":""),id:this._getId()},[C,B,A]);this._div.widget=this;return this},destroy:function(){this._div.remove()},getElement:function(){return $(this._getId())||$(this._div)},setTitle:function(A){$(this._titleDiv).update(A);return this},getTitle:function(A){return $(this._titleDiv)},setFooter:function(A){$(this._footerDiv).update(A);return this},getFooter:function(A){return $(this._footerDiv)},setContent:function(A){$(this._contentDiv).update(A);return this},getContent:function(A){return $(this._contentDiv)},updateHeight:function(){$(this._contentDiv).setStyle({height:null});var A=$(this._contentDiv).getHeight();$(this._contentDiv).setStyle({height:A+"px"})},_getId:function(A){return(A?A+"_":"")+this._id}});Xilinus.Portal=Class.create();Object.extend(Xilinus.Portal.prototype,{lastEvent:null,widgets:null,columns:null,initialize:function(B,A){this.options=Object.extend({url:null,onOverWidget:null,onOutWidget:null,onChange:null,onUpdate:null,removeEffect:Xilinus.Widget.remove},A);this._columns=(typeof B=="string")?$$(B):B;this._widgets=new Array();this._columns.each(function(C){Droppables.add(C,{onHover:this.onHover.bind(this),overlap:"vertical",accept:this.options.accept})}.bind(this));this._outTimer=null;this._columns.invoke("undoPositioned");this._currentOverWidget=null;this._widgetMouseOver=this.widgetMouseOver.bindAsEventListener(this);this._widgetMouseOut=this.widgetMouseOut.bindAsEventListener(this);Draggables.addObserver({onEnd:this.endDrag.bind(this),onStart:this.startDrag.bind(this)})},add:function(C,B,A){A=typeof A=="undefined"?true:A;this._widgets.push(C);if(this.options.accept){C.getElement().addClassName(this.options.accept)}this._columns[B].appendChild(C.getElement());C.updateHeight();if(A){C.draggable=new Draggable(C.getElement(),{handle:C._titleDiv,revert:false});C.getTitle().addClassName("widget_draggable")}this._updateColumnsHeight();if(this.options.onOverWidget){C.getElement().immediateDescendants().invoke("observe","mouseover",this._widgetMouseOver)}if(this.options.onOutWidget){C.getElement().immediateDescendants().invoke("observe","mouseout",this._widgetMouseOut)}},remove:function(A){this._widgets.reject(function(B){return B==A});if(this.options.onOverWidget){A.getElement().immediateDescendants().invoke("stopObserving","mouseover",this._widgetMouseOver)}if(this.options.onOutWidget){A.getElement().immediateDescendants().invoke("stopObserving","mouseout",this._widgetMouseOut)}if(A.draggable){A.draggable.destroy()}this.options.removeEffect(A.getElement(),{afterFinish:function(){A.destroy()}});this._updateColumnsHeight()},serialize:function(){parameters="";this._columns.each(function(A){var B=A.immediateDescendants().collect(function(C){return A.id+"[]="+C.id}).join("&");parameters+=B+"&"});return parameters},addWidgetControls:function(A){$(A).observe("mouseover",this._widgetMouseOver);$(A).observe("mouseout",this._widgetMouseOut)},widgetMouseOver:function(B){this._clearTimer();var A=Event.element(B).up(".widget");if(this._currentOverWidget==null||this._currentOverWidget!=A){if(this._currentOverWidget&&this._currentOverWidget!=A){this.options.onOutWidget(this,this._currentOverWidget.widget)}this._currentOverWidget=A;this.options.onOverWidget(this,A.widget)}},widgetMouseOut:function(B){this._clearTimer();var A=Event.element(B).up(".widget");this._outTimer=setTimeout(this._doWidgetMouseOut.bind(this,A),100)},_doWidgetMouseOut:function(A){this._currentOverWidget=null;this.options.onOutWidget(this,A.widget)},startDrag:function(B,A){var D=A.element;if(!this._widgets.find(function(F){return F==D.widget})){return}var C=D.parentNode;var E=DIV({className:"widget_ghost"},"");$(E).setStyle({height:D.getHeight()+"px"});C.insertBefore(E,D);D.setStyle({width:D.getWidth()+"px"});Position.absolutize(D);document.body.appendChild(D);A.element.ghost=E;this._savePosition=this.serialize()},endDrag:function(B,A){var D=A.element;if(!this._widgets.find(function(E){return E==D.widget})){return}var C=D.ghost.parentNode;C.insertBefore(A.element,D.ghost);D.ghost.remove();if(Prototype.Browser.Opera){D.setStyle({top:0,left:0,width:"100%",height:D._originalHeight,zIndex:null,opacity:null,position:"relative"})}else{D.setStyle({top:null,left:null,width:null,height:D._originalHeight,zIndex:null,opacity:null,position:"relative"})}D.ghost=null;D.widget.updateHeight();this._updateColumnsHeight();if(this._savePosition!=this.serialize()){if(this.options.url){new Ajax.Request(this.options.url,{parameters:this.serialize()})}if(this.options.onUpdate){this.options.onUpdate(this)}}},onHover:function(D,H,I){var A=Position.cumulativeOffset(H);var J=A[0]+10;var F=A[1]+(1-I)*H.getHeight();if(Position.within(D.ghost,J,F)){return}var M=false;var G=false;for(var C=0,B=this._widgets.length;C<B;++C){var K=this._widgets[C].getElement();if(K==D||K.parentNode!=H){continue}if(Position.within(K,J,F)){var I=Position.overlap("vertical",K);if(I<0.5){if(K.next()!=D.ghost){K.parentNode.insertBefore(D.ghost,K.next());G=true}}else{if(K.previous()!=D.ghost){K.parentNode.insertBefore(D.ghost,K);G=true}}M=true;break}}if(!M){if(D.ghost.parentNode!=H){var L=H.immediateDescendants().last();var E=L?Position.cumulativeOffset(L)[1]+L.getHeight():0;if(F>E&&L!=D.ghost){H.appendChild(D.ghost);G=true}}}if(G&&this.options.onChange){this.options.onChange(this)}this._updateColumnsHeight()},_updateColumnsHeight:function(){var A=0;this._columns.each(function(B){A=Math.max(A,B.immediateDescendants().inject(0,function(D,C){return D+C.getHeight()}))});this._columns.invoke("setStyle",{height:A+"px"})},_clearTimer:function(){if(this._outTimer){clearTimeout(this._outTimer);this._outTimer=null}}});
+// Copyright 2006 Sébastien Gruhier (http://xilinus.com, http://itseb.com)
+// 
+// Permission is hereby granted, free of charge, to any person obtaining
+// a copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to
+// permit persons to whom the Software is furnished to do so, subject to
+// the following conditions:
+// 
+// The above copyright notice and this permission notice shall be
+// included in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+// LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+// OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+// WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//
+// VERSION 1.1-trunk
+
+if(typeof Draggable == 'undefined')
+  throw("widget.js requires including script.aculo.us' dragdrop.js library");
+
+if(typeof Builder == 'undefined')
+  throw("widget.js requires including script.aculo.us' builder.js library");
+
+// Xilinus namespace
+if(typeof Xilinus == 'undefined')
+  Xilinus = {}
+  
+Builder.dump();
+
+
+Xilinus.Widget = Class.create();  
+Xilinus.Widget.lastId = 0;
+Xilinus.Widget.remove = function(element, options) {    
+  if (options && options.afterFinish)
+    options.afterFinish.call();
+} 
+
+Object.extend(Xilinus.Widget.prototype, {
+  initialize: function(className, id) {
+    className = className || "widget";  
+    this._id   = id || ("widget_" + Xilinus.Widget.lastId++);
+    
+    this._titleDiv   = DIV({className: 'header',     id: this._getId("header")},  "");  
+    this._contentDiv = DIV({className: 'headerbox',   id: this._getId("content")}, "");
+    this._footerDiv  = DIV({className: className + '_statusbar', id: this._getId("footer")},  "");
+    
+    var divHeader  = DIV({className: 'header' }, this._titleDiv);
+    var divContent = DIV({className: 'headerbox' },  this._contentDiv); 
+    var divFooter  = DIV({className: className + '_sw' }, this._footerDiv);  
+    
+    this._div = DIV({className: className + (className != "widget" ? " widget" : ""), id: this._getId()}, [divHeader, divContent, divFooter]);     
+    this._div.widget = this;
+        
+    return this;
+  },    
+  
+  destroy: function() {
+    this._div.remove();
+  },
+  
+  getElement: function() {
+    return $(this._getId()) || $(this._div);
+  },
+  
+  setTitle: function(title) {
+    $(this._titleDiv).update(title);
+    return this;
+  },
+
+  getTitle: function(title) {
+    return $(this._titleDiv)
+  },
+  
+  setFooter: function(title) {
+    $(this._footerDiv).update(title);
+    return this;
+  },
+  
+  getFooter: function(title) {
+    return $(this._footerDiv)
+  },
+  
+  setContent: function(title) {
+    $(this._contentDiv).update(title);  
+    return this;
+  },
+   
+  getContent: function(title) {
+    return $(this._contentDiv)
+  },
+  
+  updateHeight: function() {       
+    $(this._contentDiv).setStyle({height: null})
+      
+    var h = $(this._contentDiv).getHeight();
+    $(this._contentDiv).setStyle({height: h + "px"})
+  },
+  
+  // PRIVATE FUNCTIONS
+  _getId: function(prefix) { 
+      return (prefix ? prefix + "_" : "") + this._id;
+  }
+});
+
+
+Xilinus.Portal = Class.create()
+Object.extend(Xilinus.Portal.prototype, {
+  lastEvent: null,   
+  widgets:   null,
+  columns:   null, 
+  
+  initialize: function(columns, options) {   
+    this.options = Object.extend({                  
+                     url:          null,                 // Url called by Ajax.Request after a drop
+                     onOverWidget: null,                 // Called when the mouse goes over a widget
+                     onOutWidget:  null,                 // Called when the mouse goes out of a widget                                           
+                     onChange:     null,                 // Called a widget has been move during drag and drop 
+                     onUpdate:     null,                 // Called a widget has been move after drag and drop
+                     removeEffect: Xilinus.Widget.remove // Remove effect (by default no effect), you can set it to Effect.SwitchOff for example
+                   }, options)
+    this._columns = (typeof columns == "string") ? $$(columns) : columns;
+    this._widgets = new Array();          
+    this._columns.each(function(element) {Droppables.add(element, {onHover: this.onHover.bind(this), 
+                                                                   overlap: "vertical", 
+                                                                   accept: this.options.accept})}.bind(this));  
+    this._outTimer  = null;
+    
+    // Draggable calls makePositioned for IE fix (??), I had to remove it for all browsers fix :) to handle properly zIndex
+    this._columns.invoke("undoPositioned");    
+    
+    this._currentOverWidget = null; 
+    this._widgetMouseOver = this.widgetMouseOver.bindAsEventListener(this);
+    this._widgetMouseOut  = this.widgetMouseOut.bindAsEventListener(this);
+    
+    Draggables.addObserver({ onEnd: this.endDrag.bind(this), onStart: this.startDrag.bind(this) }); 
+  },
+  
+  add: function(widget, columnIndex, draggable) {   
+    draggable = typeof draggable == "undefined" ? true : draggable
+    // Add to widgets list
+    this._widgets.push(widget);
+    if (this.options.accept)
+      widget.getElement().addClassName(this.options.accept)
+    // Add element to column
+    this._columns[columnIndex].appendChild(widget.getElement());
+    widget.updateHeight();
+    
+    // Make header draggable   
+    if (draggable) {
+      widget.draggable = new Draggable(widget.getElement(),{ handle: widget._titleDiv, revert: false});     
+      widget.getTitle().addClassName("widget_draggable");   
+    }
+    
+    // Update columns heights
+    this._updateColumnsHeight();  
+
+    // Add mouse observers  
+    if (this.options.onOverWidget)
+      widget.getElement().immediateDescendants().invoke("observe", "mouseover", this._widgetMouseOver);
+    if (this.options.onOutWidget)
+      widget.getElement().immediateDescendants().invoke("observe", "mouseout",  this._widgetMouseOut);
+  },  
+                
+  remove: function(widget) {
+    // Remove from the list
+    this._widgets.reject(function(w) { return w == widget});
+
+    // Remove observers
+    if (this.options.onOverWidget)
+      widget.getElement().immediateDescendants().invoke("stopObserving", "mouseover", this._widgetMouseOver);
+    if (this.options.onOutWidget)
+      widget.getElement().immediateDescendants().invoke("stopObserving", "mouseout",  this._widgetMouseOut);
+
+    // Remove draggable
+    if (widget.draggable)
+      widget.draggable.destroy();
+      
+    // Remove from the dom
+    this.options.removeEffect(widget.getElement(), {afterFinish: function() {widget.destroy();}});
+    
+    // Update columns heights
+    this._updateColumnsHeight();  
+  },
+    
+  serialize: function() {
+    parameters = ""
+    this._columns.each(function(column) {   
+      var p = column.immediateDescendants().collect(function(element) {
+        return column.id + "[]=" + element.id
+      }).join("&") 
+      parameters += p + "&"
+    });               
+    
+    return parameters;                      
+  },     
+  
+  addWidgetControls: function(element) {
+    $(element).observe("mouseover", this._widgetMouseOver); 
+    $(element).observe("mouseout", this._widgetMouseOut); 
+  },
+  
+  // EVENTS CALLBACKS
+  widgetMouseOver: function(event) {   
+    this._clearTimer();
+      
+    var element =  Event.element(event).up(".widget");
+    if (this._currentOverWidget == null || this._currentOverWidget != element) {
+      if (this._currentOverWidget && this._currentOverWidget != element)
+        this.options.onOutWidget(this, this._currentOverWidget.widget)    
+        
+      this._currentOverWidget = element;
+      this.options.onOverWidget(this, element.widget)
+    }
+  },
+
+  widgetMouseOut: function(event) {    
+    this._clearTimer();
+    var element =  Event.element(event).up(".widget"); 
+    this._outTimer = setTimeout(this._doWidgetMouseOut.bind(this, element), 100);
+  },
+  
+  _doWidgetMouseOut: function(element) {
+    this._currentOverWidget = null;
+    this.options.onOutWidget(this, element.widget)    
+  },                                               
+  
+  // DRAGGABLE OBSERVER CALLBACKS
+  startDrag: function(eventName, draggable) { 
+    var widget = draggable.element;
+    
+    if (!this._widgets.find(function(w) {return w == widget.widget}))
+      return;
+
+    var column = widget.parentNode;
+    
+    // Create and insert ghost widget
+    var ghost = DIV({className: 'widget_ghost'}, ""); 
+    $(ghost).setStyle({height: widget.getHeight()  + 'px'})
+
+    column.insertBefore(ghost, widget);  
+
+    // IE Does not absolutize properly the widget, needs to set width before
+    widget.setStyle({width: widget.getWidth() + "px"});
+    
+    // Absolutize and move widget on body
+    Position.absolutize(widget);  
+    document.body.appendChild(widget);   
+    
+    // Store ghost to drag widget for later use
+    draggable.element.ghost = ghost; 
+    
+    // Store current position
+    this._savePosition = this.serialize();    
+  },   
+
+  endDrag: function(eventName, draggable) {
+    var widget = draggable.element;      
+    if (!this._widgets.find(function(w) {return w == widget.widget}))
+      return;
+    
+    var column = widget.ghost.parentNode;
+    
+    column.insertBefore(draggable.element, widget.ghost); 
+    widget.ghost.remove();   
+    
+    if (Prototype.Browser.Opera)     
+      widget.setStyle({top: 0, left: 0, width: "100%", height: widget._originalHeight, zIndex: null, opacity: null, position: "relative"})
+    else
+      widget.setStyle({top: null, left: null, width: null, height: widget._originalHeight, zIndex: null, opacity: null, position: "relative"})
+    
+    widget.ghost = null;    
+    widget.widget.updateHeight();
+    this._updateColumnsHeight();
+    
+    // Fire events if changed
+    if (this._savePosition != this.serialize()) {
+      if (this.options.url)  
+        new Ajax.Request(this.options.url, {parameters: this.serialize()});
+      
+      if (this.options.onUpdate)
+        this.options.onUpdate(this);
+    }
+  },
+
+  onHover: function(dragWidget, dropon, overlap) {  
+    var offset = Position.cumulativeOffset(dropon);
+    var x = offset[0] + 10;
+    var y = offset[1] + (1 - overlap) * dropon.getHeight();
+
+    // Check over ghost widget
+    if (Position.within(dragWidget.ghost, x, y))
+      return;
+      
+    // Find if it's overlapping a widget
+    var found = false;
+    var moved = false;
+    for (var index = 0, len = this._widgets.length; index < len; ++index) {
+      var w = this._widgets[index].getElement();
+      if (w ==  dragWidget || w.parentNode != dropon)   
+        continue;        
+
+      if (Position.within(w, x, y)) {    
+        var overlap = Position.overlap( 'vertical', w);     
+        // Bottom of the widget
+        if (overlap < 0.5) {         
+          // Check if the ghost widget is not already below this widget
+          if (w.next() != dragWidget.ghost) {
+            w.parentNode.insertBefore(dragWidget.ghost, w.next());   
+            moved = true;
+          }
+        } 
+        // Top of the widget
+        else {       
+          // Check if the ghost widget is not already above this widget
+          if (w.previous() != dragWidget.ghost) {      
+            w.parentNode.insertBefore(dragWidget.ghost, w);   
+            moved = true;
+          }
+        }
+        found = true;
+        break;
+      }
+    }
+    // Not found a widget
+    if (! found) {        
+      // Check if dropon has ghost widget
+      if (dragWidget.ghost.parentNode != dropon) {
+        // Get last widget bottom value
+        var last = dropon.immediateDescendants().last();
+        var yLast = last ? Position.cumulativeOffset(last)[1] + last.getHeight() : 0; 
+        if (y > yLast && last != dragWidget.ghost) {
+          dropon.appendChild(dragWidget.ghost);
+          moved = true;
+        }
+      }
+    }  
+    if (moved && this.options.onChange) 
+      this.options.onChange(this)            
+
+    this._updateColumnsHeight();
+  },                
+  
+  // PRIVATE FUNCTIONS
+  _updateColumnsHeight: function() {      
+    var h = 0;
+    this._columns.each(function(col) {
+      h = Math.max(h, col.immediateDescendants().inject(0, function(sum, element) { 
+        return sum + element.getHeight(); 
+      }));
+    })
+    this._columns.invoke("setStyle", {height: h + 'px'})
+  },
+  
+  _clearTimer: function() {
+    if (this._outTimer) {
+      clearTimeout(this._outTimer);
+      this._outTimer = null;
+    }                        
+  }
+});     

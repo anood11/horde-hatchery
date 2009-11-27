@@ -4,11 +4,12 @@
  */
 class Horde_Date_Parser
 {
-    public static $debug = false;
-
     public static function parse($text, $args = array())
     {
-        return self::factory($args)->parse($text, $args);
+        $factoryArgs = $args;
+        unset($args['locale']);
+
+        return self::factory($factoryArgs)->parse($text, $args);
     }
 
     public static function factory($args = array())
@@ -34,30 +35,21 @@ class Horde_Date_Parser
     }
 
     /**
-     * @TODO this should be an instance method of one of the base classes, and
-     * should already known the locale
+     * Return a list of available locales
      */
-    public static function componentFactory($component, $args = array())
+    public static function getLocales()
     {
-        $locale = isset($args['locale']) ? $args['locale'] : null;
-        if ($locale && strtolower($locale) != 'base') {
-            $locale = str_replace(' ', '_', ucwords(str_replace('_', ' ', strtolower($locale))));
-            $class = 'Horde_Date_Parser_Locale_' . $locale . '_' . $component;
-            if (class_exists($class)) {
-                return new $class($args);
-            }
-
-            $language = array_shift(explode('_', $locale));
-            if ($language != $locale) {
-                $class = 'Horde_Date_Parser_Locale_' . $language . '_' . $component;
-                if (class_exists($class)) {
-                    return new $class($args);
-                }
+        $dir = dirname(__FILE__) . '/Parser/Locale';
+        $locales = array();
+        foreach (new DirectoryIterator($dir) as $f) {
+            if ($f->isFile()) {
+                $locale = str_replace('.php', '', $f->getFilename());
+                $locale = preg_replace_callback('/([A-Z][a-z]*)([A-Z].*)?/', create_function('$m', 'if (!isset($m[2])) { return strtolower($m[1]); } else { return strtolower($m[1]) . "_" . strtoupper($m[2]); }'), $locale);
+                $locales[] = $locale;
             }
         }
 
-        $class = 'Horde_Date_Parser_Locale_Base_' . $component;
-        return new $class($args);
+        return $locales;
     }
 
 }

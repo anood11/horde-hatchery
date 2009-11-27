@@ -16,7 +16,8 @@
  * @package IMP
  */
 
-require_once dirname(__FILE__) . '/lib/base.php';
+require_once dirname(__FILE__) . '/lib/Application.php';
+new IMP_Application(array('init' => true));
 
 /* Redirect back to the mailbox if folder use is not allowed. */
 if (empty($conf['user']['allow_folders'])) {
@@ -29,16 +30,16 @@ if (empty($conf['user']['allow_folders'])) {
 $subscribe = $prefs->getValue('subscribe');
 $showAll = (!$subscribe || $_SESSION['imp']['showunsub']);
 
-/* Initialize the IMP_IMAP_Tree object. */
-$imptree = &IMP_IMAP_Tree::singleton();
-$mask = IMP_IMAP_TREE::NEXT_SHOWCLOSED;
+/* Initialize the IMP_Imap_Tree object. */
+$imptree = IMP_Imap_Tree::singleton();
+$mask = IMP_Imap_Tree::NEXT_SHOWCLOSED;
 
 /* Toggle subscribed view, if necessary. */
-if ($subscribe && Util::getFormData('ts')) {
+if ($subscribe && Horde_Util::getFormData('ts')) {
     $showAll = !$showAll;
     $_SESSION['imp']['showunsub'] = $showAll;
     $imptree->showUnsubscribed($showAll);
-    $mask |= IMP_IMAP_TREE::NEXT_SHOWSUB;
+    $mask |= IMP_Imap_Tree::NEXT_SHOWSUB;
 }
 
 /* Start iterating through the list of mailboxes, displaying them. */
@@ -56,7 +57,7 @@ foreach ($tree_ob[0] as $val) {
 $selfurl = Horde::applicationUrl('folders-mimp.php');
 if ($subscribe) {
     $sub_text = $showAll ? _("Show Subscribed Folders") : _("Show All Folders");
-    $sub_link = Util::addParameter($selfurl, 'ts', 1);
+    $sub_link = Horde_Util::addParameter($selfurl, 'ts', 1);
 }
 
 $title = _("Folders");

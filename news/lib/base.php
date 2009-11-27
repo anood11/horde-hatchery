@@ -2,12 +2,12 @@
 /**
  * News base
  *
- * Copyright 2006 Duck <duck@obala.net>
+ * $Id: base.php 1260 2009-02-01 23:15:50Z duck $
  *
- * See the enclosed file LICENSE for license information (BSD). If you
- * did not receive this file, see http://cvs.horde.org/co.php/news/LICENSE.
+ * Copyright 2009 The Horde Project (http://www.horde.org/)
  *
- * $Id: base.php 1174 2009-01-19 15:11:03Z duck $
+ * See the enclosed file COPYING for license information (GPL). If you
+ * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
  *
  * @author Duck <duck@obala.net>
  * @package News
@@ -19,22 +19,21 @@ if (!defined('HORDE_BASE')) {
     define('HORDE_BASE', dirname(__FILE__) . '/../..');
 }
 
-// Load the Horde Framework core, and set up inclusion paths.
+// Load the Horde Framework core.
 require_once HORDE_BASE . '/lib/core.php';
 
 // Registry.
-$registry = &Registry::singleton();
-if (($pushed = $registry->pushApp('news', !defined('AUTH_HANDLER'))) instanceof PEAR_Error) {
-    if ($pushed->getCode() == 'permission_denied') {
-        Horde::authenticationFailureRedirect();
-    }
-    Horde::fatal($pushed, __FILE__, __LINE__, false);
+$registry = Horde_Registry::singleton();
+try {
+    $registry->pushApp('news', array('check_perms' => (Horde_Util::nonInputVar('news_authentication') != 'none'), 'logintasks' => true));
+} catch (Horde_Exception $e) {
+    Horde_Auth::authenticateFailure('news', $e);
 }
 $conf = &$GLOBALS['conf'];
 define('NEWS_TEMPLATES', $registry->get('templates'));
 
 // Notification system.
-$notification = &Notification::singleton();
+$notification = Horde_Notification::singleton();
 $notification->attach('status');
 
 // Define the base file path of News.
@@ -43,19 +42,14 @@ if (!defined('NEWS_BASE')) {
 }
 
 // Cache
-$GLOBALS['cache'] = &Horde_Cache::singleton($GLOBALS['conf']['cache']['driver'],
-                                            Horde::getDriverConfig('cache', $GLOBALS['conf']['cache']['driver']));
-
-// News base library
-require_once NEWS_BASE . '/lib/News.php';
-require_once NEWS_BASE . '/lib/Categories.php';
-require_once NEWS_BASE . '/lib/View.php';
+$GLOBALS['cache'] = Horde_Cache::singleton($GLOBALS['conf']['cache']['driver'],
+                                           Horde::getDriverConfig('cache', $GLOBALS['conf']['cache']['driver']));
 
 // Set up News drivers.
-$GLOBALS['news'] = new News();
+$GLOBALS['news'] = News_Driver::factory();
 $GLOBALS['news_cat'] = new News_Categories();
 
 // Start compression.
-if (!Util::nonInputVar('no_compress')) {
+if (!Horde_Util::nonInputVar('no_compress')) {
     Horde::compressOutput();
 }

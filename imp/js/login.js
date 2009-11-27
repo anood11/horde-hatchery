@@ -1,1 +1,35 @@
-function setFocus(){if(!$F("imapuser")){$("imapuser").focus()}else{$("pass").focus()}}function imp_reload(){window.top.document.location=autologin_url+$F("server_key")}function submit_login(){if(show_list&&$F("server_key").startsWith("_")){return false}if(!$F("imapuser")){alert(IMP.text.login_username);$("imapuser").focus();return false}else{if(!$F("pass")){alert(IMP.text.login_password);$("pass").focus();return false}else{$("loginButton").disable();if(ie_clientcaps){try{$("ie_version").setValue(objCCaps.getComponentVersion("{89820200-ECBD-11CF-8B85-00AA005B4383}","componentid"))}catch(a){}}$("imp_login").submit();return true}}}function selectLang(){if(!$F("imapuser")&&!$F("pass")){var a={new_lang:$F("new_lang")};if(lang_url!==null){a.url=lang_url}self.location="login.php?"+Object.toQueryString(a)}}function removeHash(a){return(Object.isString(a)&&a.startsWith("#"))?a.substring(1):a}document.observe("dom:loaded",function(){if(imp_auth){if(parent.frames.horde_main){if(nomenu){parent.location=self.location}else{document.imp_login.target="_parent"}}}if(location.hash){$("anchor_string").setValue(removeHash(location.hash))}});
+/**
+ * Provides the javascript for the login.php script.
+ *
+ * See the enclosed file COPYING for license information (GPL). If you
+ * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
+ */
+
+var ImpLogin = {
+    // The following variables are defined in login.php:
+    //  dimp_sel, server_key_error
+
+    submit: function(parentfunc)
+    {
+        if ($('imp_server_key') && $F('imp_server_key').startsWith('_')) {
+            alert(this.server_key_error);
+            $('imp_server_key').focus();
+            return;
+        }
+
+        parentfunc();
+    },
+
+    onDomLoad: function()
+    {
+        /* Activate dynamic view. */
+        var s = $('imp_select_view'),
+            o = s.down('option[value=dimp]').show();
+        if (this.dimp_sel) {
+            s.selectedIndex = o.index;
+        }
+    }
+};
+
+HordeLogin.submit = HordeLogin.submit.wrap(ImpLogin.submit.bind(ImpLogin));
+document.observe('dom:loaded', ImpLogin.onDomLoad.bind(ImpLogin));

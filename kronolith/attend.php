@@ -9,33 +9,32 @@
  * @package Kronolith
  */
 
-@define('AUTH_HANDLER', true);
-@define('KRONOLITH_BASE', dirname(__FILE__));
-require_once KRONOLITH_BASE . '/lib/base.php';
+$kronolith_authentication = 'none';
+require_once dirname(__FILE__) . '/lib/base.php';
 
-$cal = Util::getFormData('c');
-$id = Util::getFormData('e');
-$uid = Util::getFormData('i');
-$user = Util::getFormData('u');
+$cal = Horde_Util::getFormData('c');
+$id = Horde_Util::getFormData('e');
+$uid = Horde_Util::getFormData('i');
+$user = Horde_Util::getFormData('u');
 
-switch (Util::getFormData('a')) {
+switch (Horde_Util::getFormData('a')) {
 case 'accept':
-    $action = KRONOLITH_RESPONSE_ACCEPTED;
+    $action = Kronolith::RESPONSE_ACCEPTED;
     $msg = _("You have successfully accepted attendence to this event.");
     break;
 
 case 'decline':
-    $action = KRONOLITH_RESPONSE_DECLINED;
+    $action = Kronolith::RESPONSE_DECLINED;
     $msg = _("You have successfully declined attendence to this event.");
     break;
 
 case 'tentative':
-    $action = KRONOLITH_RESPONSE_TENTATIVE;
+    $action = Kronolith::RESPONSE_TENTATIVE;
     $msg = _("You have tentatively accepted attendence to this event.");
     break;
 
 default:
-    $action = KRONOLITH_RESPONSE_NONE;
+    $action = Kronolith::RESPONSE_NONE;
     $msg = '';
     break;
 }
@@ -45,10 +44,9 @@ if (((empty($cal) || empty($id)) && empty($uid)) || empty($user)) {
     $title = '';
 } else {
     if (empty($uid)) {
-        $kronolith_driver->open($cal);
-        $event = $kronolith_driver->getEvent($id);
+        $event = Kronolith::getDriver(null, $cal)->getEvent($id);
     } else {
-        $event = $kronolith_driver->getByUID($uid);
+        $event = Kronolith::getDriver()->getByUID($uid);
     }
     if (is_a($event, 'PEAR_Error')) {
         $notification->push($event, 'horde.error');
@@ -57,7 +55,7 @@ if (((empty($cal) || empty($id)) && empty($uid)) || empty($user)) {
         $notification->push(_("You are not an attendee of the specified event."), 'horde.error');
         $title = $event->getTitle();
     } else {
-        $event->addAttendee($user, KRONOLITH_PART_IGNORE, $action);
+        $event->addAttendee($user, Kronolith::PART_IGNORE, $action);
         $result = $event->save();
         if (is_a($result, 'PEAR_Error')) {
             $notification->push($result, 'horde.error');

@@ -1,8 +1,18 @@
 <?php
 /**
- * extend Horde TagCloud to allow complete css font sizes
+ * Extend Horde TagCloud to allow complete css font sizes
+ *
+ * $Id: News.php 1263 2009-02-01 23:25:56Z duck $
+ *
+ * Copyright 2009 The Horde Project (http://www.horde.org/)
+ *
+ * See the enclosed file COPYING for license inion (GPL). If you
+ * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
+ *
+ * @author  Duck <duck@obala.net>
+ * @package News
  */
-class Oscar_TagCloud extends Horde_UI_TagCloud {
+class News_TagCloud extends Horde_Ui_TagCloud {
 
     /**
      * create a Element of HTML part
@@ -11,9 +21,8 @@ class Oscar_TagCloud extends Horde_UI_TagCloud {
      * @param   array  $tag
      * @param   string $type css class of time line param
      * @param   int    $fontsize
-     * @access  private
      */
-    function _createHTMLTag($tag, $type, $fontsize)
+    protected function _createHTMLTag($tag, $type, $fontsize)
     {
         return sprintf("<a class=\"%s\" href=\"%s\">%s</a>\n",
                        $type,
@@ -26,9 +35,8 @@ class Oscar_TagCloud extends Horde_UI_TagCloud {
      *
      * @return  string
      * @param   string $html
-     * @access  private
      */
-    function _wrapDiv($html)
+    protected function _wrapDiv($html)
     {
         return $html;
     }

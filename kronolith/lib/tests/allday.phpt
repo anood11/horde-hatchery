@@ -19,7 +19,6 @@ $prefs = new Prefs;
 
 require 'Date/Calc.php';
 require 'Horde/Date.php';
-require 'Horde/Util.php';
 require 'Horde/iCalendar.php';
 
 $iCal = new Horde_iCalendar();
@@ -29,9 +28,11 @@ $components = $iCal->getComponents();
 define('KRONOLITH_BASE', dirname(__FILE__) . '/../..');
 require KRONOLITH_BASE . '/lib/Kronolith.php';
 require KRONOLITH_BASE . '/lib/Driver.php';
+require KRONOLITH_BASE . '/lib/Event.php';
+require KRONOLITH_BASE . '/lib/Event/Sql.php';
 foreach ($components as $content) {
     if (is_a($content, 'Horde_iCalendar_vevent')) {
-        $event = new Kronolith_Event(new Driver);
+        $event = new Kronolith_Event_Sql(new Driver);
         $event->fromiCalendar($content);
         echo (string)$event->start . "\n";
         echo (string)$event->end . "\n";

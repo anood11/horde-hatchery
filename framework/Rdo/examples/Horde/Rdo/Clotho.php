@@ -2,11 +2,14 @@
 /**
  * @package Horde_Rdo
  * @subpackage UnitTests
- *
- * $Horde: framework/Rdo/examples/Horde/Rdo/Clotho.php,v 1.2 2008/09/02 17:24:59 chuck Exp $
  */
 
 require_once 'Horde/Autoloader.php';
+
+@include './conf.php';
+if (empty($conf['sql'])) {
+    die("No sql configuration found\n");
+}
 
 /* additional things to handle:
 -- clotho_resource_availability has a one to many from resources to availabilities
@@ -28,7 +31,7 @@ class Clotho_Mapper extends Horde_Rdo_Mapper {
 
     public function getAdapter()
     {
-        return Horde_Rdo_Adapter::factory('pdo', $GLOBALS['conf']['sql']);
+        return Horde_Db_Adapter::factory($GLOBALS['conf']['sql']);
     }
 
 }
@@ -45,13 +48,16 @@ class Item extends Horde_Rdo_Base {
 class ItemMapper extends Clotho_Mapper {
 
     protected $_relationships = array(
-        'resources' => array('type' => Horde_Rdo::MANY_TO_MANY,
-                             'mapper' => 'ResourceMapper',
-                             'through' => 'clotho_wbs_resources'),
         'parent' => array('type' => Horde_Rdo::ONE_TO_ONE,
                           'foreignKey' => 'item_parent',
                           'mapper' => 'ItemMapper'),
-        );
+    );
+
+    protected $_lazyRelationships = array(
+        'resources' => array('type' => Horde_Rdo::MANY_TO_MANY,
+                             'mapper' => 'ResourceMapper',
+                             'through' => 'clotho_wbs_resources'),
+    );
 
     protected $_table = 'clotho_wbs_items';
 
@@ -98,7 +104,7 @@ class Resource extends Horde_Rdo_Base {
  */
 class ResourceMapper extends Clotho_Mapper {
 
-    protected $_relationships = array(
+    protected $_lazyRelationships = array(
         'availabilities' => array('type' => Horde_Rdo::ONE_TO_MANY,
                                   'foreignKey' => 'resource_id',
                                   'mapper' => 'ResourceAvailabilityMapper'),

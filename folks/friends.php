@@ -14,14 +14,13 @@
 require_once dirname(__FILE__) . '/lib/base.php';
 require_once FOLKS_BASE . '/lib/Forms/Activity.php';
 
-if (!Auth::isAuthenticated()) {
-    Horde::authenticationFailureRedirect();
+if (!Horde_Auth::isAuthenticated()) {
+    Horde_Auth::authenticateFailure('folks');
 }
 
 $title = _("Friends");
 
-require_once 'Horde/Variables.php';
-$vars = Variables::getDefaultVariables();
+$vars = Horde_Variables::getDefaultVariables();
 $form = new Folks_Activity_Form($vars, _("What are you doing right now?"), 'short');
 if ($form->validate()) {
     $result = $form->execute();
@@ -53,28 +52,21 @@ foreach ($friend_list as $user) {
         continue;
     }
     foreach ($activities as $activity) {
-        $firendActivities[$activity['activity_date']] = array('message' => $activity['activity_message'],
-                                                                'scope' => $activity['activity_scope'],
-                                                                'user' => $user);
+        $firendActivities[$activity['activity_date']] = $activity;
     }
 }
 krsort($firendActivities);
+$firendActivities = array_slice($firendActivities, 0, 30);
 
 // Own activities
-$activities = $folks_driver->getActivity(Auth::getAuth());
+$activities = $folks_driver->getActivity(Horde_Auth::getAuth());
 if ($activities instanceof PEAR_Error) {
     $notification->push($activities);
     header('Location: ' . Folks::getUrlFor('list', 'list'));
     exit;
 }
 
-// Users online
-$online = $folks_driver->getOnlineUsers();
-if ($online instanceof PEAR_Error) {
-    return $online;
-}
-
-Horde::addScriptFile('tables.js', 'horde', true);
+Horde::addScriptFile('stripe.js', 'horde');
 
 require FOLKS_TEMPLATES . '/common-header.inc';
 require FOLKS_TEMPLATES . '/menu.inc';

@@ -2,8 +2,6 @@
 /**
  * Report offensive content
  *
- * $Horde: folks/report.php,v 1.5 2008-08-03 18:32:29 mrubinsk Exp $
- *
  * Copyright 2007-2009 The Horde Project (http://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (GPL). If you
@@ -14,13 +12,8 @@
  */
 
 require_once dirname(__FILE__) . '/lib/base.php';
-require_once 'Horde/Variables.php';
 
-if (!Auth::isAuthenticated()) {
-    Horde::authenticationFailureRedirect();
-}
-
-$user = Util::getFormData('user');
+$user = Horde_Util::getFormData('user');
 if (empty($user)) {
     $notification->push(_("User is not selected"), 'horde.warning');
     header('Location: ' . Folks::getUrlFor('list', 'list'));
@@ -29,7 +22,7 @@ if (empty($user)) {
 
 $title = _("Do you really want to report this user?");
 
-$vars = Variables::getDefaultVariables();
+$vars = Horde_Variables::getDefaultVariables();
 $form = new Horde_Form($vars, $title);
 $form->setButtons(array(_("Report"), _("Cancel")));
 
@@ -45,20 +38,20 @@ $form->addHidden('', 'user', 'text', true, true);
 $form->addVariable(_("Report type"), 'type', 'radio', true, false, null, array($enum));
 $form->addVariable(_("Report reason"), 'reason', 'longtext', true);
 
-$user_id = Util::getFormData('id');
+$user_id = Horde_Util::getFormData('id');
 
 if ($form->validate()) {
-    if (Util::getFormData('submitbutton') == _("Report")) {
-        require FOLKS_BASE . '/lib/Report.php';
-        $report = Folks_Report::factory();
+    if (Horde_Util::getFormData('submitbutton') == _("Report")) {
 
         $body =  _("User") . ': ' . $user . "\n"
             . _("Report type") . ': ' . $enum[$vars->get('type')] . "\n"
             . _("Report reason") . ': ' . $vars->get('reason') . "\n"
-            . $return_url;
+            . Folks::getUrlFor('user', $user);
 
-        $result = $report->report($body);
-        if (is_a($result, 'PEAR_Error')) {
+        require FOLKS_BASE . '/lib/Notification.php';
+        $rn = new Folks_Notification();
+        $result = $rn->notifyAdmins($title, $body);
+        if ($result instanceof PEAR_Error) {
             $notification->push(_("User was not reported.") . ' ' .
                                 $result->getMessage(), 'horde.error');
         } else {
@@ -67,7 +60,7 @@ if ($form->validate()) {
     } else {
         $notification->push(_("User was not reported."), 'horde.warning');
     }
-    header('Location: ' . $return_url);
+    header('Location: ' . Folks::getUrlFor('user', $user));
     exit;
 }
 

@@ -1,7 +1,5 @@
 <?php
 /**
- * $Horde: kronolith/calendars/index.php,v 1.5 2009/01/06 18:01:00 jan Exp $
- *
  * Copyright 2002-2009 The Horde Project (http://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (GPL). If you
@@ -23,33 +21,27 @@ function shorten_url($url, $separator = '...', $first_chunk_length = 35, $last_c
     return $url;
 }
 
-@define('KRONOLITH_BASE', dirname(dirname(__FILE__)));
-require_once KRONOLITH_BASE . '/lib/base.php';
-require_once 'Horde/RPC.php';
-if (@include_once 'HTTP/WebDAV/Server.php') {
-    require_once 'Horde/RPC/webdav.php';
-}
+require_once dirname(__FILE__) . '/../lib/base.php';
 
 // Exit if this isn't an authenticated user.
-if (!Auth::getAuth()) {
+if (!Horde_Auth::getAuth()) {
     header('Location: ' . Horde::applicationUrl($prefs->getValue('defaultview') . '.php'));
     exit;
 }
 
-$webdav = is_callable(array('HTTP_WebDAV_Server_Horde', 'DELETE'));
-$rewrite = isset($conf['urls']['pretty']) &&
-    $conf['urls']['pretty'] == 'rewrite';
 $edit_url_base = Horde::applicationUrl('calendars/edit.php');
 $remote_edit_url_base = Horde::applicationUrl('calendars/remote_edit.php');
 $delete_url_base = Horde::applicationUrl('calendars/delete.php');
 $remote_unsubscribe_url_base = Horde::applicationUrl('calendars/remote_unsubscribe.php');
 $perms_url_base = Horde::applicationUrl('perms.php', true);
 $display_url_base = Horde::applicationUrl('month.php', true, -1);
-$subscribe_url_base = $webdav ?
-    Horde::url($registry->get('webroot', 'horde')
-               . ($rewrite ? '/rpc/kronolith/' : '/rpc.php/kronolith/'),
-               true, -1) :
-    Util::addParameter(Horde::applicationUrl('ics.php', true, -1), 'c', '');
+$subscribe_url_base = $registry->get('webroot', 'horde');
+if (isset($conf['urls']['pretty']) && $conf['urls']['pretty'] == 'rewrite') {
+    $subscribe_url_base .= '/rpc/kronolith/';
+} else {
+    $subscribe_url_base .= '/rpc.php/kronolith/';
+}
+$subscribe_url_base = Horde::url($subscribe_url_base, true, -1);
 
 $calendars = array();
 $sorted_calendars = array();
@@ -69,8 +61,7 @@ $edit_img = Horde::img('edit.png', _("Edit"), null, $registry->getImageDir('hord
 $perms_img = Horde::img('perms.png', _("Change Permissions"), null, $registry->getImageDir('horde'));
 $delete_img = Horde::img('delete.png', _("Delete"), null, $registry->getImageDir('horde'));
 
-Horde::addScriptFile('popup.js', 'horde', true);
-Horde::addScriptFile('tables.js', 'horde', true);
+Horde::addScriptFile('tables.js', 'horde');
 $title = _("Manage Calendars");
 require KRONOLITH_TEMPLATES . '/common-header.inc';
 require KRONOLITH_TEMPLATES . '/menu.inc';

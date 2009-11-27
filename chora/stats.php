@@ -1,5 +1,7 @@
 <?php
 /**
+ * Stats script.
+ *
  * Copyright 2000-2009 The Horde Project (http://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (GPL). If you
@@ -12,26 +14,22 @@
 require_once dirname(__FILE__) . '/lib/base.php';
 
 try {
-    $fl = $VC->getFileObject($where, array('cache' => $cache));
+    $fl = $VC->getFileObject($where);
 } catch (Horde_Vcs_Exception $e) {
     Chora::fatal($e);
 }
 
-$extraLink = Chora::getFileViews();
+$extraLink = Chora::getFileViews($where, 'stats');
 
 $stats = array();
-foreach ($fl->logs as $lg) {
+foreach ($fl->queryLogs() as $lg) {
     $qa = $lg->queryAuthor();
-    if (!isset($stats[$qa])) {
-        $stats[$qa] = 0;
-    }
-    ++$stats[$qa];
+    $stats[$qa] = isset($stats[$qa]) ? ($stats[$qa] + 1) : 1;
 }
 arsort($stats);
 
-$title = sprintf(_("Statistics for %s"), Text::htmlallspaces($where));
-Horde::addScriptFile('prototype.js', 'horde', true);
-Horde::addScriptFile('tables.js', 'horde', true);
+$title = sprintf(_("Statistics for %s"), Horde_Text_Filter::filter($where, 'space2html', array('charset' => Horde_Nls::getCharset(), 'encode' => true, 'encode_all' => true)));
+Horde::addScriptFile('tables.js', 'horde');
 require CHORA_TEMPLATES . '/common-header.inc';
 require CHORA_TEMPLATES . '/menu.inc';
 require CHORA_TEMPLATES . '/headerbar.inc';

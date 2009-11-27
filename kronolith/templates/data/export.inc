@@ -1,5 +1,5 @@
 <form method="post" name="export" action="<?php echo Horde::downloadUrl(_("events.csv"), null, 'data.php') ?>">
-<?php Util::pformInput() ?>
+<?php Horde_Util::pformInput() ?>
 <input type="hidden" name="actionID" value="export" />
 
 <br class="spacer" />
@@ -11,11 +11,11 @@
 <div class="item">
     <?php echo Horde::label('exportID', _("Select the export format:")) ?><br />
     <select id="exportID" name="exportID">
-      <option value="<?php echo EXPORT_CSV ?>">CSV</option>
-      <option value="<?php echo EXPORT_ICALENDAR ?>">iCalendar</option>
+      <option value="<?php echo Horde_Data::EXPORT_CSV ?>">CSV</option>
+      <option value="<?php echo Horde_Data::EXPORT_ICALENDAR ?>">iCalendar</option>
     </select><br /><br />
 
-    <?php if (count($calendars = Kronolith::listCalendars(false, PERMS_READ)) > 1): ?>
+    <?php if (count($calendars = Kronolith::listCalendars(false, Horde_Perms::READ)) > 1): ?>
     <?php echo Horde::label('exportCal', _("Select the calendar(s) to export from")) ?><br />
     <select id="exportCal" name="exportCal[]" multiple="multiple">
       <?php foreach ($calendars as $id => $cal) {
@@ -23,7 +23,7 @@
       } ?>
     </select><br /><br />
     <?php else: ?>
-    <input type="hidden" name="exportCal[]" value="<?php echo htmlspecialchars(Kronolith::getDefaultCalendar(PERMS_READ)) ?>" />
+    <input type="hidden" name="exportCal[]" value="<?php echo htmlspecialchars(Kronolith::getDefaultCalendar(Horde_Perms::READ)) ?>" />
     <?php endif; ?>
 
     <?php echo _("Limit the time span to export:") ?><br />

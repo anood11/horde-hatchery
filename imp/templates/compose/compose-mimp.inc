@@ -10,37 +10,12 @@ $f = &$c->add(new Horde_Mobile_form('compose-mimp.php'));
 
 // Hidden Variables.
 $f->add(new Horde_Mobile_hidden('composeCache', $cacheID));
-$f->add(new Horde_Mobile_hidden('thismailbox', Util::getFormData('thismailbox')));
-$f->add(new Horde_Mobile_hidden('index', Util::getFormData('index')));
-$f->add(new Horde_Mobile_hidden('resume_draft', Util::getFormData('resume_draft', $resume_draft)));
-
-if (Util::getFormData('ctype')) {
-    $f->add(new Horde_Mobile_hidden('ctype', Util::getFormData('ctype')));
-} else {
-    switch ($actionID) {
-    case 'r':
-    case 'ra':
-    case 'rl':
-        $f->add(new Horde_Mobile_hidden('ctype', 'reply'));
-        break;
-
-    case 'f':
-        $f->add(new Horde_Mobile_hidden('ctype', 'forward'));
-        break;
-    }
-}
-
-if ((Util::getFormData('is_reply') == 1) ||
-    (strpos($actionID, 'reply') === 0)) {
-    $f->add(new Horde_Mobile_hidden('is_reply', 1));
-    $f->add(new Horde_Mobile_hidden('in_reply_to', $header['in_reply_to']));
-    $f->add(new Horde_Mobile_hidden('references', $header['references']));
-}
+$f->add(new Horde_Mobile_hidden('resume_draft', Horde_Util::getFormData('resume_draft', $resume_draft)));
 
 if (!$prefs->isLocked('default_identity')) {
-    $ib = &$f->add(new Horde_Mobile_block(new Horde_Mobile_text(_("Identity"))));
+    $ib = &$f->add(new Horde_Mobile_block(new Horde_Mobile_text(_("Identity: "))));
     $ident_sel = &$ib->add(new Horde_Mobile_select('identity'));
-    $default = Util::getFormData('identity', $identity->getDefault());
+    $default = Horde_Util::getFormData('identity', $identity->getDefault());
     foreach ($select_list as $key => $select) {
         $ident_sel->add($select, $key, ($key == $default));
     }
@@ -60,6 +35,10 @@ $f->add(new Horde_Mobile_textarea('message', $msg, _("Message: "), 10, 80));
 if (!$compose_disable) {
     $f->add(new Horde_Mobile_submit(_("Send"), 'a'));
 }
+if ($conf['user']['allow_folders'] && !$readonly_drafts) {
+    $f->add(new Horde_Mobile_submit(_("Save Draft"), 'a'));
+}
+
 $f->add(new Horde_Mobile_submit(_("Expand Names"), 'a'));
 
 $mimp_render->add($menu);

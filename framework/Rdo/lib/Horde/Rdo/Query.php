@@ -38,11 +38,6 @@ class Horde_Rdo_Query
     public $relationships = array();
 
     /**
-     * @var array
-     */
-    protected $_sortby = array();
-
-    /**
      * @var integer
      */
     public $limit;
@@ -51,6 +46,21 @@ class Horde_Rdo_Query
      * @var integer
      */
     public $limitOffset = null;
+
+    /**
+     * @var array
+     */
+    protected $_sortby = array();
+
+    /**
+     * @var integer
+     */
+    protected $_aliasCount = 0;
+
+    /**
+     * @var array
+     */
+    protected $_aliases = array();
 
     /**
      * Turn any of the acceptable query shorthands into a full
@@ -67,7 +77,7 @@ class Horde_Rdo_Query
     {
         if ($query instanceof Horde_Rdo_Query ||
             $query instanceof Horde_Rdo_Query_Literal) {
-            $query = clone($query);
+            $query = clone $query;
             if (!is_null($mapper)) {
                 $query->setMapper($mapper);
             }
@@ -125,7 +135,8 @@ class Horde_Rdo_Query
                 }
 
                 // Add the fields for this relationship to the query.
-                $this->addFields($m->fields, $m->table . '.@');
+                $m->tableAlias = $this->_alias($m->table);
+                $this->addFields($m->fields, $m->tableAlias . '.@');
 
                 switch ($rel['type']) {
                 case Horde_Rdo::ONE_TO_ONE:
@@ -139,6 +150,10 @@ class Horde_Rdo_Query
                                                                 'type' => $rel['type'],
                                                                 'query' => $query));
                     break;
+
+                case Horde_Rdo::ONE_TO_MANY:
+                case Horde_Rdo::MANY_TO_MANY:
+                    //@TODO
                 }
             }
         }
@@ -204,6 +219,13 @@ class Horde_Rdo_Query
         }
         if (!isset($args['table'])) {
             $args['table'] = $args['mapper']->table;
+        }
+        if (!isset($args['tableAlias'])) {
+            if (isset($args['mapper']->tableAlias)) {
+                $args['tableAlias'] = $args['mapper']->tableAlias;
+            } else {
+                $args['tableAlias'] = $this->_alias($args['table']);
+            }
         }
         if (!isset($args['type'])) {
             $args['type'] = Horde_Rdo::MANY_TO_MANY;
@@ -307,7 +329,11 @@ class Horde_Rdo_Query
             if (count($parts) == 1) {
                 $fields[] = $field;
             } else {
-                $fields[] = str_replace('.@', '.', $field) . ' AS ' . $this->mapper->adapter->quoteColumnName($parts[0] . '@' . $parts[1]);
+                list($tableName, $columnName) = $parts;
+                if (isset($this->_aliases[$tableName])) {
+                    $tableName = $this->_aliases[$tableName];
+                }
+                $fields[] = str_replace('.@', '.', $field) . ' AS ' . $this->mapper->adapter->quoteColumnName($tableName . '@' . $columnName);
             }
         }
 
@@ -327,16 +353,18 @@ class Horde_Rdo_Query
     {
         foreach ($this->relationships as $relationship) {
             $relsql = array();
+            $table = $relationship['table'];
+            $tableAlias = $relationship['tableAlias'];
             foreach ($relationship['query'] as $key => $value) {
                 if ($value instanceof Horde_Rdo_Query_Literal) {
-                    $relsql[] = $key . ' = ' . (string)$value;
+                    $relsql[] = $key . ' = ' . str_replace("{$table}.", "{$tableAlias}.", (string)$value);
                 } else {
                     $relsql[] = $key . ' = ?';
                     $bindParams[] = $value;
                 }
             }
 
-            $sql .= ' ' . $relationship['join_type'] . ' ' . $relationship['table'] . ' ON ' . implode(' AND ', $relsql);
+            $sql .= ' ' . $relationship['join_type'] . ' ' . $relationship['table'] . ' AS ' . $tableAlias . ' ON ' . implode(' AND ', $relsql);
         }
     }
 
@@ -351,7 +379,7 @@ class Horde_Rdo_Query
                 if (!isset($this->relationships[$rel])) {
                     continue;
                 }
-                $clause = $this->relationships[$rel]['table'] . '.' . $field . ' ' . $test['test'];
+                $clause = $this->relationships[$rel]['tableAlias'] . '.' . $field . ' ' . $test['test'];
             } else {
                 $clause = $this->mapper->table . '.' . $this->mapper->adapter->quoteColumnName($test['field']) . ' ' . $test['test'];
             }
@@ -386,7 +414,7 @@ class Horde_Rdo_Query
                     if (!isset($this->relationships[$rel])) {
                         continue;
                     }
-                    $sql .= ' ' . $this->relationships[$rel]['table'] . '.' . $field . ',';
+                    $sql .= ' ' . $this->relationships[$rel]['tableAlias'] . '.' . $field . ',';
                 } else {
                     $sql .= " $sort,";
                 }
@@ -416,6 +444,16 @@ class Horde_Rdo_Query
     }
 
     /**
+     * Get a unique table alias
+     */
+    protected function _alias($tableName)
+    {
+        $alias = 't' . ++$this->_aliasCount;
+        $this->_aliases[$alias] = $tableName;
+        return $alias;
+    }
+
+    /**
      * Take a query array and replace @field@ placeholders with values
      * that will match in the load query.
      *
@@ -431,9 +469,9 @@ class Horde_Rdo_Query
         foreach (array_keys($query) as $field) {
             $value = $query[$field];
             if (preg_match('/^@(.*)@$/', $value, $matches)) {
-                $q[$m1->table . '.' . $field] = new Horde_Rdo_Query_Literal($m2->table . '.' . $matches[1]);
+                $q[$m1->tableAlias . '.' . $field] = new Horde_Rdo_Query_Literal($m2->table . '.' . $matches[1]);
             } else {
-                $q[$m1->table . '.' . $field] = $value;
+                $q[$m1->tableAlias . '.' . $field] = $value;
             }
         }
 

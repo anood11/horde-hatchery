@@ -57,11 +57,19 @@ class IMP_UI_Message
     }
 
     /**
-     * TODO
+     * Check if we need to send a MDN, and send if needed.
+     *
+     * @param string $mailbox     The mailbox of the message.
+     * @param integer $uid        The UID of the message.
+     * @param array $headers      The headers of the message.
+     * @param boolean $confirmed  Has the MDN request been confirmed?
+     *
+     * @return boolean  True if the MDN request needs to be confirmed.
      */
-    public function MDNCheck($headers, $confirmed = false)
+    public function MDNCheck($mailbox, $uid, $headers, $confirmed = false)
     {
-        if (!$GLOBALS['prefs']->getValue('disposition_send_mdn')) {
+        if (!$GLOBALS['prefs']->getValue('disposition_send_mdn') ||
+            $GLOBALS['imp_imap']->isReadOnly($mailbox)) {
             return false;
         }
 
@@ -73,24 +81,54 @@ class IMP_UI_Message
         }
 
         $msg_id = $headers->getValue('message-id');
+        $mdn_flag = $mdn_sent = false;
 
         /* See if we have already processed this message. */
-        if (!IMP_Maillog::sentMDN($msg_id, 'displayed')) {
-            /* See if we need to query the user. */
-            if ($mdn->userConfirmationNeeded() && !$confirmed) {
-                return true;
-            } else {
-                /* Send out the MDN now. */
-                $mail_driver = IMP_Compose::getMailDriver();
-                $result = $mdn->generate(false, $confirmed, 'displayed', $mail_driver['driver'], $mail_driver['params']);
-                if (!is_a($result, 'PEAR_Error')) {
-                    IMP_Maillog::log('mdn', $msg_id, 'displayed');
-                }
-                if ($GLOBALS['conf']['sentmail']['driver'] != 'none') {
-                    $sentmail = IMP_Sentmail::factory();
-                    $sentmail->log('mdn', '', $return_addr, !is_a($result, 'PEAR_Error'));
-                }
+        /* 1st test: $MDNSent keyword (RFC 3503 [3.1]). */
+        try {
+            $status = $GLOBALS['imp_imap']->ob()->status($mailbox, Horde_Imap_Client::STATUS_PERMFLAGS);
+            if (in_array('\\*', $status['permflags']) ||
+                in_array('$mdnsent', $status['permflags'])) {
+                $mdn_flag = true;
+                $res = $GLOBALS['imp_imap']->ob()->fetch($mailbox, array(
+                        Horde_Imap_Client::FETCH_FLAGS => true
+                    ), array('ids' => array($uid)));
+                $mdn_sent = in_array('$mdnsent', $res[$uid]['flags']);
             }
+        } catch (Horde_Imap_Client_Exception $e) {}
+
+        if (!$mdn_flag) {
+            /* 2nd test: Use Maillog as a fallback. */
+            $mdn_sent = IMP_Maillog::sentMDN($msg_id, 'displayed');
+        }
+
+        if ($mdn_sent) {
+            return false;
+        }
+
+        /* See if we need to query the user. */
+        if ($mdn->userConfirmationNeeded() && !$confirmed) {
+            return true;
+        }
+
+        /* Send out the MDN now. */
+        try {
+            $mail_driver = IMP_Compose::getMailDriver();
+            $mdn->generate(false, $confirmed, 'displayed', $mail_driver['driver'], $mail_driver['params']);
+            IMP_Maillog::log('mdn', $msg_id, 'displayed');
+            $success = true;
+
+            if ($mdn_flag) {
+                $imp_message = IMP_Message::singleton();
+                $imp_message->flag(array('$MDNSent'), $uid . IMP::IDX_SEP . $mailbox, true);
+            }
+        } catch (Horde_Mime_Exception $e) {
+            $success = false;
+        }
+
+        if ($GLOBALS['conf']['sentmail']['driver'] != 'none') {
+            $sentmail = IMP_Sentmail::factory();
+            $sentmail->log('mdn', '', $return_addr, $success);
         }
 
         return false;
@@ -101,11 +139,9 @@ class IMP_UI_Message
      *
      * @param string $date  The date string.
      *
-     * @return string  The date string with the local time added on. If not
-     *                 in MIMP mode, the output has been run through
-     *                 htmlspecialchars().
+     * @return string  The local formatted time string.
      */
-    public function addLocalTime($date)
+    public function getLocalTime($date)
     {
         if (empty($date)) {
             $ltime = false;
@@ -115,9 +151,7 @@ class IMP_UI_Message
         }
 
         if (($ltime === false) || ($ltime === -1)) {
-            return ($_SESSION['imp']['view'] == 'mimp')
-                ? $date
-                : htmlspecialchars($date);
+            return '';
         }
 
         $time_str = strftime($GLOBALS['prefs']->getValue('time_format'), $ltime);
@@ -128,15 +162,11 @@ class IMP_UI_Message
             (date('d') != @date('d', $ltime))) {
             /* Not today, use the date. */
             $date_str = strftime($GLOBALS['prefs']->getValue('date_format'), $ltime);
-            $local_date = sprintf('[%s %s %s]', $date_str, $time_str, $tz);
-        } else {
-            /* Else, it's today, use the time only. */
-            $local_date = sprintf('[%s %s]', $time_str, $tz);
+            return sprintf('%s %s %s', $date_str, $time_str, $tz);
         }
 
-        return ($_SESSION['imp']['view'] == 'mimp')
-            ? $date . ' ' . $local_date
-            : htmlspecialchars($date) . ' <small>' . htmlspecialchars($local_date) . '</small>';
+        /* Else, it's today, use the time only. */
+        return sprintf(_("Today, %s %s"), $time_str, $tz);
     }
 
     /**
@@ -160,19 +190,23 @@ class IMP_UI_Message
     }
 
     /**
-     * Parse the information in a mailing list headers.
+     * Parse the information in mailing list headers.
      *
      * @param string $data  The header text to process.
-     * @param boolean $raw  Should the raw URL be returned instead of linking
-     *                      the header value?
+     * @param array $opts   Additional options:
+     * <pre>
+     * 'email' - (boolean) Only return e-mail values.
+     *           DEFAULT: false
+     * 'raw' - (boolean) Should the raw URL be returned instead of linking
+     *                   the header value?
+     *                   DEFAULT: false
+     * </pre>
      *
      * @return string  The header value.
      */
-    public function parseListHeaders($data, $raw = false)
+    public function parseListHeaders($data, $opts = array())
     {
         $output = '';
-
-        require_once 'Horde/Text.php';
 
         /* Split the incoming data by the ',' character. */
         foreach (preg_split("/,/", $data) as $entry) {
@@ -192,7 +226,7 @@ class IMP_UI_Message
              * that appears in a header that we can adequately handle. */
             if (stristr($match, 'mailto:') !== false) {
                 $match = substr($match, strpos($match, ':') + 1);
-                if ($raw) {
+                if (!empty($opts['raw'])) {
                     return $match;
                 }
                 $output = Horde::link(IMP::composeLink($match)) . $match . '</a>';
@@ -200,10 +234,9 @@ class IMP_UI_Message
                     $output .= '&nbsp;' . $comments[1];
                 }
                 break;
-            } else {
-                require_once 'Horde/Text/Filter.php';
-                if ($url = Text_Filter::filter($match, 'linkurls', array('callback' => 'Horde::externalUrl'))) {
-                    if ($raw) {
+            } elseif (empty($data['email'])) {
+                if ($url = Horde_Text_Filter::filter($match, 'linkurls', array('callback' => 'Horde::externalUrl'))) {
+                    if (!empty($opts['raw'])) {
                         return $match;
                     }
                     $output = $url;
@@ -257,8 +290,9 @@ class IMP_UI_Message
 
             /* See if the List-Post header provides an e-mail address for the
              * list. */
-            if (($val = $headers->getValue('list-post'))) {
-                $ret['reply_list'] = $this->parseListHeaders($val, true);
+            if (($val = $headers->getValue('list-post')) &&
+                ($val != 'NO')) {
+                $ret['reply_list'] = $this->parseListHeaders($val, array('email' => true, 'raw' => true));
             }
         }
 
@@ -275,7 +309,7 @@ class IMP_UI_Message
      *
      * @return string  String containing the formatted address list.
      */
-    public function buildAddressLinks($addrlist, $addURL = null, $link = false)
+    public function buildAddressLinks($addrlist, $addURL = null, $link = true)
     {
         global $prefs, $registry;
 
@@ -291,12 +325,11 @@ class IMP_UI_Message
         /* Set up the add address icon link if contact manager is
          * available. */
         if (!is_null($addURL) && $link && $prefs->getValue('add_source')) {
-            $add_link = $registry->link('contacts/add', array('source' => $prefs->getValue('add_source')));
-            if (is_a($add_link, 'PEAR_Error')) {
+            try {
                 $add_link = $registry->hasMethod('contacts/import')
-                    ? Util::addParameter($addURL, 'actionID', 'add_address')
+                    ? Horde_Util::addParameter($addURL, 'actionID', 'add_address')
                     : null;
-            }
+            } catch (Horde_Exception $e) {}
         }
 
         foreach (Horde_Mime_Address::getAddressesFromObject($addrlist) as $ob) {
@@ -318,7 +351,7 @@ class IMP_UI_Message
                     /* Append the add address icon to every address if contact
                      * manager is available. */
                     if ($add_link) {
-                        $curr_link = Util::addParameter($add_link, array('name' => $ad['personal'], 'address' => $ad['inner']));
+                        $curr_link = Horde_Util::addParameter($add_link, array('name' => $ad['personal'], 'address' => $ad['inner']));
                         $ret .= Horde::link($curr_link, sprintf(_("Add %s to my Address Book"), $ad['inner'])) .
                             Horde::img('addressbook_add.png', sprintf(_("Add %s to my Address Book"), $ad['inner'])) . '</a>';
                     }
@@ -346,7 +379,7 @@ class IMP_UI_Message
                     /* Append the add address icon to every address if contact
                      * manager is available. */
                     if ($add_link) {
-                        $curr_link = Util::addParameter($add_link, array('name' => $ob['personal'], 'address' => $ob['inner']));
+                        $curr_link = Horde_Util::addParameter($add_link, array('name' => $ob['personal'], 'address' => $ob['inner']));
                         $ret .= Horde::link($curr_link, sprintf(_("Add %s to my Address Book"), $ob['inner'])) .
                             Horde::img('addressbook_add.png', sprintf(_("Add %s to my Address Book"), $ob['inner'])) . '</a>';
                     }
@@ -368,9 +401,7 @@ class IMP_UI_Message
             /* Build the address line. */
             $addr_count = count($addr_array);
             $ret = '<span class="nowrap">' . implode(',</span> <span class="nowrap">', $addr_array) . '</span>';
-            if ($addr_count > 15) {
-                Horde::addScriptFile('prototype.js', 'horde', true);
-
+            if ($link && $addr_count > 15) {
                 $ret = '<span>' .
                     '<span onclick="[ this, this.next(), this.next(1) ].invoke(\'toggle\')" class="widget largeaddrlist">' . sprintf(_("[Show Addresses - %d recipients]"), $addr_count) . '</span>' .
                     '<span onclick="[ this, this.previous(), this.next() ].invoke(\'toggle\')" class="widget largeaddrlist" style="display:none">' . _("[Hide Addresses]") . '</span>' .
@@ -383,7 +414,26 @@ class IMP_UI_Message
     }
 
     /**
-     * Prints out a MIME status message.
+     * Prints out a MIME summary (in HTML).
+     *
+     * @param array $summary  Summary information from
+     *                        IMP_Summary::getSummary().
+     * @param array $display  The fields to display (in this order).
+     * @param boolean $atc    Is this an attachment?
+     *
+     * @return string  The formatted summary string.
+     */
+    public function formatSummary($summary, $display, $atc = false)
+    {
+        $tmp_summary = array();
+        foreach ($display as $val) {
+            $tmp_summary[] = $summary[$val];
+        }
+        return '<div class="mimePartInfo' . ($atc ? ' mimePartInfoAtc' : '') . '"><div>' . implode(' ', $tmp_summary) . '</div></div>';
+    }
+
+    /**
+     * Prints out a MIME status message (in HTML).
      *
      * @param array $data  An array of information (as returned from
                            Horde_Mime_Viewer::render()).
@@ -392,28 +442,172 @@ class IMP_UI_Message
      */
     public function formatStatusMsg($data)
     {
-        if (empty($data) || IMP::$printMode) {
-            return '';
+        $out = '';
+
+        foreach ($data as $val) {
+            if (empty($val)) {
+                continue;
+            }
+
+            $out .= '<div><table class="mimeStatusMessageTable"' . (isset($val['id']) ? (' id="' . $val['id'] . '" ') : '') . '>';
+
+            /* If no image, simply print out the message. */
+            if (empty($val['icon'])) {
+                foreach ($val['text'] as $val) {
+                    $out .= '<tr><td>' . $val . '</td></tr>';
+                }
+            } else {
+                $out .= '<tr><td class="mimeStatusIcon">' . $val['icon'] . '</td><td><table>';
+                foreach ($val['text'] as $val) {
+                    $out .= '<tr><td>' . $val . '</td></tr>';
+                }
+                $out .= '</table></td></tr>';
+            }
+
+            $out .= '</table></div>';
         }
 
-        $class = 'mimeStatusMessage';
+        return $out
+            ? '<div class="mimeStatusMessage">' . $out . '</div>'
+            : '';
+    }
 
-        $out = array('<table ' . (isset($data['id']) ? ('id="' . $data['id'] . '" ') : '') . 'class="' . $class . '">');
+    /**
+     * Output inline message display for the imp and dimp views.
+     *
+     * @param object $imp_contents      The IMP_Contents object containing the
+     *                                  message data.
+     * @param integer $contents_mask    The mask needed for a
+     *                                  IMP_Contents::getSummary() call.
+     * @param array $part_info_display  The list of summary fields to display.
+     * @param string $show_parts        The value of the 'show_parts' pref.
+     *
+     * @return array  An array with the following keys:
+     * <pre>
+     * 'atc_parts' - (array) The list of attachment MIME IDs.
+     * 'display_ids' - (array) The list of display MIME IDs.
+     * 'js_onload' - (array) A list of javascript code to run onload.
+     * 'msgtext' - (string) The rendered HTML code.
+     * </pre>
+     */
+    public function getInlineOutput($imp_contents, $contents_mask,
+                                    $part_info_display, $show_parts)
+    {
+        $atc_parts = $display_ids = $js_onload = $wrap_ids = array();
+        $msgtext = '';
+        $parts_list = $imp_contents->getContentTypeMap();
 
-        /* If no image, simply print out the message. */
-        if (empty($data['icon'])) {
-            foreach ($data['text'] as $val) {
-                $out[] = '<tr><td>' . $val . '</td></tr>';
-            }
-        } else {
-            $out[] = '<tr><td class="mimeStatusIcon">' . $data['icon'] . '</td><td><table>';
-            foreach ($data['text'] as $val) {
-                $out[] = '<tr><td>' . $val . '</td></tr>';
-            }
-            $out[] = '</table></td></tr>';
+        if ($show_parts == 'all') {
+            $atc_parts = array_keys($parts_list);
         }
 
-        return implode("\n", $out) . "\n</table>\n";
+        foreach ($parts_list as $mime_id => $mime_type) {
+            if (in_array($mime_id, $display_ids, true)) {
+                continue;
+            }
+
+            if (!($render_mode = $imp_contents->canDisplay($mime_id, IMP_Contents::RENDER_INLINE | IMP_Contents::RENDER_INFO))) {
+                if ($imp_contents->isAttachment($mime_type)) {
+                    if ($show_parts == 'atc') {
+                        $atc_parts[] = $mime_id;
+                    }
+
+                    if ($GLOBALS['prefs']->getValue('atc_display')) {
+                        $msgtext .= $this->formatSummary($imp_contents->getSummary($mime_id, $contents_mask), $part_info_display, true);
+                    }
+                }
+                continue;
+            }
+
+            $render_part = $imp_contents->renderMIMEPart($mime_id, $render_mode);
+            if (($render_mode & IMP_Contents::RENDER_INLINE) &&
+                empty($render_part)) {
+                /* This meant that nothing was rendered - allow this part to
+                 * appear in the attachment list instead. */
+                if ($show_parts == 'atc') {
+                    $atc_parts[] = $mime_id;
+                }
+                continue;
+            }
+
+            reset($render_part);
+            while (list($id, $info) = each($render_part)) {
+                $display_ids[] = $id;
+
+                if (empty($info)) {
+                    continue;
+                }
+
+                while (count($wrap_ids) &&
+                       !Horde_Mime::isChild(end($wrap_ids), $id)) {
+                    array_pop($wrap_ids);
+                    $msgtext .= '</div>';
+                }
+
+                if (!empty($info['wrap'])) {
+                    $msgtext .= '<div class="' . $info['wrap'] . '">';
+                    $wrap_ids[] = $mime_id;
+                }
+
+                if (empty($info['attach'])) {
+                    $msgtext .= $this->formatSummary($imp_contents->getSummary($id, $contents_mask), $part_info_display) .
+                        $this->formatStatusMsg($info['status']) .
+                        '<div class="mimePartData">' . $info['data'] . '</div>';
+                } else {
+                    if ($show_parts == 'atc') {
+                        $atc_parts[] = $id;
+                    }
+
+                    if ($GLOBALS['prefs']->getValue('atc_display')) {
+                        $msgtext .= $this->formatSummary($imp_contents->getSummary($id, $contents_mask), $part_info_display, true);
+                    }
+                }
+
+                if (isset($info['js'])) {
+                    $js_onload = array_merge($js_onload, $info['js']);
+                }
+            }
+        }
+
+        while (count($wrap_ids)) {
+            $msgtext .= '</div>';
+            array_pop($wrap_ids);
+        }
+
+        if (!strlen($msgtext)) {
+            $msgtext = $this->formatStatusMsg(array(array('text' => array(_("There are no parts that can be shown inline.")))));
+        }
+
+        return array(
+            'atc_parts' => $atc_parts,
+            'display_ids' => $display_ids,
+            'js_onload' => $js_onload,
+            'msgtext' => $msgtext
+        );
+    }
+
+    /**
+     * Get the display subject (filtered, formatted, and linked).
+     *
+     * @param string $subject  The subject text.
+     *
+     * @return string  The display subject string.
+     */
+    public function getDisplaySubject($subject)
+    {
+        return Horde_Text_Filter::filter(IMP::filterText($subject), 'text2html', array('parselevel' => Horde_Text_Filter_Text2html::MICRO, 'class' => null, 'callback' => null));
+    }
+
+    /**
+     * Redirect to mailbox after deleting a message?
+     *
+     * @return boolean  Return to mailbox?
+     */
+    public function moveAfterAction()
+    {
+        return (($_SESSION['imp']['protocol'] != 'pop') &&
+                !IMP::hideDeletedMsgs($GLOBALS['imp_mbox']['mailbox']) &&
+                !$GLOBALS['prefs']->getValue('use_trash'));
     }
 
 }

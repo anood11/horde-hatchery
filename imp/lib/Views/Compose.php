@@ -37,23 +37,17 @@ class IMP_Views_Compose
         );
 
         /* Load Identity. */
-        require_once 'Horde/Identity.php';
-        $identity = &Identity::singleton(array('imp', 'imp'));
+        $identity = Horde_Prefs_Identity::singleton(array('imp', 'imp'));
         $selected_identity = $identity->getDefault();
-        $sent_mail_folder = $identity->getValue('sent_mail_folder');
-        if (!empty($sent_mail_folder)) {
-            $sent_mail_folder = htmlspecialchars('"' . IMP::displayFolder($sent_mail_folder) . '"');
-        }
 
         /* Get user identities. */
-        require_once 'Horde/Text/Filter.php';
         $all_sigs = $identity->getAllSignatures();
         foreach ($all_sigs as $ident => $sig) {
             $identities[] = array(
                 // 0 = Plain text signature
                 $sig,
                 // 1 = HTML signature
-                str_replace(' target="_blank"', '', Text_Filter::filter($sig, 'text2html', array('parselevel' => TEXT_HTML_MICRO_LINKURL, 'class' => null, 'callback' => null))),
+                str_replace(' target="_blank"', '', Horde_Text_Filter::filter($sig, 'text2html', array('parselevel' => Horde_Text_Filter_Text2html::MICRO_LINKURL, 'class' => null, 'callback' => null))),
                 // 2 = Signature location
                 (bool)$identity->getValue('sig_first', $ident),
                 // 3 = Sent mail folder name
@@ -67,10 +61,9 @@ class IMP_Views_Compose
             );
         }
 
-        $draft_index = $composeCache = null;
+        $composeCache = null;
         if (!empty($args['composeCache'])) {
-            $imp_compose = &IMP_Compose::singleton($args['composeCache']);
-            $draft_index = intval($imp_compose->saveDraftIndex());
+            $imp_compose = IMP_Compose::singleton($args['composeCache']);
             $composeCache = $args['composeCache'];
 
             if ($imp_compose->numberOfAttachments()) {
@@ -82,10 +75,12 @@ class IMP_Views_Compose
         }
 
         $result['js'] = array(
-            'DIMP.conf_compose.auto_save_interval_val = ' . intval($GLOBALS['prefs']->getValue('auto_save_drafts')),
-            'DIMP.conf_compose.identities = ' . Horde_Serialize::serialize($identities, SERIALIZE_JSON),
-            'DIMP.conf_compose.qreply = ' . intval(!empty($args['qreply'])),
+            'DIMP.conf_compose.identities = ' . Horde_Serialize::serialize($identities, Horde_Serialize::JSON)
         );
+
+        if (!empty($args['qreply'])) {
+            $result['js'][] = 'DIMP.conf_compose.qreply = 1';
+        }
 
         $compose_html = $rte = false;
         if ($_SESSION['imp']['rteavail']) {
@@ -93,7 +88,32 @@ class IMP_Views_Compose
             $rte = true;
 
             $imp_ui = new IMP_UI_Compose();
-            $result['jsappend'] .= $imp_ui->initRTE('dimp');
+            $imp_ui->initRTE(!$compose_html);
+        }
+
+        /* Create list for sent-mail selection. */
+        if (!empty($GLOBALS['conf']['user']['select_sentmail_folder']) &&
+            !$GLOBALS['prefs']->isLocked('sent_mail_folder')) {
+            $imp_folder = IMP_Folder::singleton();
+
+            /* Check to make sure the sent-mail folders are created - they
+             * need to exist to show up in drop-down list. */
+            foreach ($identities as $val) {
+                if (!$imp_folder->exists($val[3])) {
+                    $imp_folder->create($val[3], true);
+                }
+            }
+
+            $flist = array();
+            foreach ($imp_folder->flist() as $val) {
+                $tmp = array('l' => $val['abbrev'], 'v' => $val['val']);
+                $tmp2 = IMP::displayFolder($val['val']);
+                if ($val['val'] != $tmp2) {
+                    $tmp['f'] = $tmp2;
+                }
+                $flist[] = $tmp;
+            }
+            $result['js'][] = 'DIMP.conf_compose.flist = ' . Horde_Serialize::serialize($flist, Horde_Serialize::JSON);
         }
 
         // Buffer output so that we can return a string from this function

@@ -16,7 +16,7 @@ require_once dirname(__FILE__) . '/lib/base.php';
 
 // Exit if cvsgraph isn't active or it's not supported.
 if (empty($conf['paths']['cvsgraph']) || !$VC->hasFeature('branches')) {
-    header('Location: ' . Chora::url('', $where));
+    header('Location: ' . Chora::url('browsefile', $where));
     exit;
 }
 
@@ -27,7 +27,7 @@ if (!is_file($fullname . ',v')) {
 $root = escapeShellCmd($VC->sourceroot());
 $file = escapeShellCmd($where . ',v');
 
-if (Util::getFormData('show_image')) {
+if (Horde_Util::getFormData('show_image')) {
     // Pipe out the actual image.
     $args = array('c' => $conf['paths']['cvsgraph_conf'],
                   'r' => $root);
@@ -48,8 +48,8 @@ if (Util::getFormData('show_image')) {
     passthru($conf['paths']['cvsgraph'] . ' ' . $argstr . ' ' . $file);
 } else {
     // Display the wrapper page for the image.
-    $title = sprintf(_("Graph for %s"), Text::htmlAllSpaces($where));
-    $extraLink = Chora::getFileViews();
+    $title = sprintf(_("Graph for %s"), Horde_Text_Filter::filter($where, 'space2html', array('charset' => Horde_Nls::getCharset(), 'encode' => true, 'encode_all' => true)));
+    $extraLink = Chora::getFileViews($where, 'cvsgraph');
 
     require CHORA_TEMPLATES . '/common-header.inc';
     require CHORA_TEMPLATES . '/menu.inc';
@@ -61,7 +61,7 @@ if (Util::getFormData('show_image')) {
                   'M' => 'graphMap',
                   'r' => $root,
                   '0' => '&amp;',
-                  '1' => Chora::url('', $where, array('dummy' => 'true')),
+                  '1' => Chora::url('browsefile', $where, array('dummy' => 'true')),
                   '2' => Chora::url('diff', $where, array('dummy' =>'true')),
                   '3' => Chora::url('co', $where, array('dummy' => 'true')),
     );

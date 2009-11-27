@@ -4,14 +4,18 @@
  *
  * $Id: mail.php 1174 2009-01-19 15:11:03Z duck $
  *
- * Copyright Obala d.o.o. (www.obala.si)
+ * Copyright 2009 The Horde Project (http://www.horde.org/)
+ *
+ * See the enclosed file COPYING for license information (GPL). If you
+ * did not receive this file, see http://www.fsf.org/copyleft/gpl.html.
  *
  * @author  Duck <duck@obala.net>
  * @package News
  */
+
 require_once dirname(__FILE__) . '/lib/base.php';
 
-$id = Util::getFormData('id');
+$id = Horde_Util::getFormData('id');
 $row = $news->get($id);
 if ($row instanceof PEAR_Error) {
     $notification->push($row);
@@ -27,11 +31,11 @@ function _error($msg)
     exit;
 }
 
-if (!Auth::isAuthenticated()) {
+if (!Horde_Auth::isAuthenticated()) {
     _error(_("Only authenticated users can send mails."));
 }
 
-$to = Util::getFormData('email');
+$to = Horde_Util::getFormData('email');
 if (empty($to)) {
     _error(_("No mail entered."));
     exit;
@@ -44,12 +48,12 @@ if (empty($from)) {
 }
 
 $body = sprintf(_("%s would you like to invite you to read the news\n Title: %s\n\n Published: %s \nLink: %s"),
-                Auth::getAuth(),
+                Horde_Auth::getAuth(),
                 $row['title'],
                 $row['publish'],
                 News::getUrlFor('news', $id, true, -1));
 
-$mail = new Horde_Mime_Mail($row['title'], $body, $to, $from, NLS::getCharset());
+$mail = new Horde_Mime_Mail(array('subject' => $row['title'], 'body' => $body, 'to' => $to, 'from' => $from, 'charset' => Horde_Nls::getCharset()));
 $result = $mail->send($conf['mailer']['type'], $conf['mailer']['params']);
 if ($result instanceof PEAR_Error) {
     $notification->push($result);

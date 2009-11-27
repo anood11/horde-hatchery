@@ -1,5 +1,7 @@
 --TEST--
 Bug #6031: Recurring events are not displayed in Kolab.
+--SKIPIF--
+skip Kolab_Test is gone.
 --FILE--
 <?php
 // Pretend that we are kronolith
@@ -30,7 +32,7 @@ $GLOBALS['registry']->pushApp('kronolith');
 $test->prepareNewFolder($world['storage'], 'Calendar', 'event', true);
 
 /* Pretend that we are kronolith */
-$kolab = &new Kolab();
+$kolab = new Kolab();
 
 /* Open our calendar */
 $kolab->open('INBOX/Calendar', 1);
@@ -56,35 +58,32 @@ $object = array(
 var_dump($kolab->_storage->save($object));
                           
 // Check that the driver can be created
-$kron = Kronolith_Driver::factory('kolab');
-$kron->open('wrobel@example.org');
+$kron = Kronolith::getDriver('Kolab', 'wrobel@example.org');
 
-$start = &new Horde_Date(86400);
-$end   = &new Horde_Date(172800);
+$start = new Horde_Date(86400);
+$end   = new Horde_Date(172800);
 
 // List the events of tomorrow (none, since recurrence has exception)
 $a = $kron->listEvents($start, $end);
 if (is_a($a, 'PEAR_Error')) {
-  var_dump($a->getMessage());
+    var_dump($a->getMessage());
 } else {
-  var_dump($a);
+    var_dump($a);
 }
 
-$start = &new Horde_Date(259200);
-$end   = &new Horde_Date(345600);
+$start = new Horde_Date(259200);
+$end   = new Horde_Date(345600);
 
 // List the events in three days (recurring event)
 $a = $kron->listEvents($start, $end);
 if (is_a($a, 'PEAR_Error')) {
-  var_dump($a->getMessage());
+    var_dump($a->getMessage());
 } else {
-  var_dump($a);
+    $events = reset($a);
+    var_dump($events[0]->getId());
 }
 --EXPECT--
 bool(true)
 array(0) {
 }
-array(1) {
-  [1]=>
-  string(1) "1"
-}
+string(1) "1"

@@ -11,37 +11,42 @@
  * hostspec: (string) The hostname/IP address of the mail server to connect to.
  *
  * hordeauth: (mixed) One of the following values:
- *            true - IMP will attempt to use the user's existing credentials
- *                   (the username/password they used to log in to Horde) to
- *                   login to this source.
- *            false - Everything after and including the first @ in the
- *                    username will be stripped off before attempting
- *                    authentication. (DEFAULT)
- *            'full' - The username will be used unmodified.
+ *              true - IMP will attempt to use the user's existing credentials
+ *                     (the username/password they used to log in to Horde) to
+ *                     login to this source.
+ *              false - Everything after and including the first @ in the
+ *                      username will be stripped off before attempting
+ *                      authentication. (DEFAULT)
+ *              'full' - The username will be used unmodified.
  *
- * protocol: (string) Either 'pop' or 'imap' (DEFAULT).
+ * protocol: (string) The server protocol. Either 'pop' or 'imap' (DEFAULT).
  *
- *           If using 'pop' you will connect to a POP3 mail server and all
- *           folder options will be automatically turned off (POP3 does
- *           not support folders).  If you want folders (and for much
- *           improved performance) it is HIGHLY RECOMMENDED that IMAP should
- *           be used instead.  The PHP imap module must be built into PHP in
- *           order to use a POP3 server.
+ *           'imap' requires a IMAP4rev1 (RFC 3501) compliant server.
  *
- * secure: (mixed) One of the following values:
- *         'ssl' - Use SSL to connect to the server.
- *         'tls' - Use TLS to connect to the server.
- *         false - Do not use any encryption (DEFAULT).
+ *           'pop' requires a POP3 (RFC 1939) compliant server. All folder
+ *           options will be automatically turned off (POP3 does
+ *           not support folders).  Other advanced functions will also be
+ *           disabled (e.g. caching, searching, sorting).
+ *
+ * secure: (mixed) Transport security used for connection to the server. One
+ *         of the following values:
+ *           'ssl' - Use SSL to connect to the server.
+ *           'tls' - Use TLS to connect to the server.
+ *           false - Do not use any encryption (DEFAULT).
  *
  *         The 'ssl' and 'tls' options will only work if you've compiled PHP
  *         with SSL support and the mail server supports secure connections.
  *
+ *         The use of 'ssl' is STRONGLY DISCOURAGED. If a secure connection
+ *         is needed, 'tls' should be used and  connection should be made
+ *         to the base protocol port (110 for POP3, 143 for IMAP).
+ *
  * port: (integer) The port that the mail service/protocol you selected runs
  *       on. Default values:
- *         pop (unsecure or w/TLS):   110
- *         pop (w/SSL):               995
  *         imap (unsecure or w/TLS):  143
- *         imap (w/SSL):              993
+ *         imap (w/SSL):              993 (DISCOURAGED - use TLS on port 143)
+ *         pop (unsecure or w/TLS):   110
+ *         pop (w/SSL):               995 (DISCOURAGED - use TLS on port 110)
  *
  * maildomain: (string) What to put after the @ when sending mail. This setting
  *             is generally useful when the sending host is different from the
@@ -59,29 +64,6 @@
  *           'smtp', IMP will use this port for outbound SMTP connections.
  *           This value overrides any existing
  *           $conf['mailer']['params']['port'] value at runtime.
- *
- * realm: (string) ONLY USE REALM IF YOU ARE USING IMP FOR HORDE
- *        AUTHENTICATION AND YOU HAVE MULTIPLE SERVERS AND USERNAMES OVERLAP
- *        BETWEEN THOSE SERVERS.
- *
- *        If you only have one server, or have multiple servers with no
- *        username clashes, or have full user@example.com usernames, you DO
- *        NOT need a realm setting. If you set one, a '@' symbol plus the
- *        realm value will be appended to the username that users login to
- *        IMP with to create the username that Horde treats the user as.
- *
- *        Example: with a realm of 'example.com', the username 'jane' would
- *        be treated by Horde (NOT your IMAP/POP server) as 'jane@example.com',
- *        and the username 'jane@example.com' would be treated as
- *        'jane@example.com@example.com' - an occasion where you probably
- *        don't need a realm setting.
- *
- * preferred: (string) Only useful if you want to use the same servers.php file
- *            for different machines: if the hostname of the IMP machine is
- *            identical to one of those in the preferred list, then the
- *            corresponding option in the select box will include SELECTED
- *            (i.e. it is selected per default). Otherwise the first entry
- *            in the list is selected.
  *
  * quota: (array) Use this if you want to display a user's quota status on
  *        various IMP pages. Set 'driver' equal to the mailserver and 'params'
@@ -113,7 +95,8 @@
  *
  *        Currently available drivers:
  *          'command'    --  Use the UNIX quota command to handle quotas.
- *          'hook'       --  Use the _imp_hook_quota function to handle quotas.
+ *          'hook'       --  Use the quota hook to handle quotas (see
+ *                           imp/config/hooks.php).
  *          'imap'       --  Use the IMAP QUOTA extension to handle quotas.
  *                           You must be connecting to a IMAP server capable
  *                           of the QUOTAROOT command to use this driver.
@@ -133,31 +116,36 @@
  *        IMAP server needs to support mailbox management via IMAP commands.
  *        Do not define this value if you do not want mailbox management.
  *
+ *        The following paramaeters are available (defined in 'params'):
+ *        'admin_user' - The admin user.
+ *        'admin_password' - The admin user.
+ *        'userhierarchy' - The hierarchy where user mailboxes are stored.
+ *
  * acl: (boolean) Set to true if you want to use Access Control Lists (folder
  *      sharing). Set to false to disable (DEFAULT). Not all IMAP servers
  *      support this feature.
  *
- * cache: (mixed) Enables caching for the the server. This requires
- *        configuration of a Horde_Cache driver in Horde. Will be disabled on
- *        any empty value and enabled on any non-false value.
+ * cache: (mixed) Enables caching for the server. This requires configuration
+ *        of a Horde_Cache driver in Horde. Will be disabled on any empty
+ *        value and enabled on any non-false value.
  *
  *        The following optional configuration items are available:
- *        'compress' - (string) Should the contents of the cache files be
- *                     compressed before they are stored? This results in
- *                     reduced memory usage when retrieving the data at the
- *                     expense of slightly increased CPU usage. Either
- *                     false (no compression - DEFAULT), 'gzip' or 'lzf'.
- *                     'gzip' provides greater compression, and is generally
- *                     built into PHP, but is slower. 'lzf' requires
- *                     installation of a separate PECL module and provides
- *                     less compression but is extremely fast (within 5% of
- *                     regular string operations).  If available, 'lzf' is
- *                     recommended.
- *        'lifetime' - (integer) The lifetime, in seconds, of the cached
- *                     data.
- *        'slicesize' - (integer) The number of messages stored in each
- *                      cache slice.  The default should be fine for most
- *                      everyone.
+ *          'compress' - (string) Should the contents of the cache files be
+ *                       compressed before they are stored? This results in
+ *                       reduced memory usage when retrieving the data at the
+ *                       expense of slightly increased CPU usage. Either
+ *                       false (no compression - DEFAULT), 'gzip' or 'lzf'.
+ *                       'gzip' provides greater compression, and is generally
+ *                       built into PHP, but is slower. 'lzf' requires
+ *                       installation of a separate PECL module and provides
+ *                       less compression but is extremely fast (within 5% of
+ *                       regular string operations).  If available, 'lzf' is
+ *                       highly recommended.
+ *          'lifetime' - (integer) The lifetime, in seconds, of the cached
+ *                       data.
+ *          'slicesize' - (integer) The number of messages stored in each
+ *                        cache slice.  The default should be fine for most
+ *                        everyone.
  *
  * 'debug' - (string) If set, will output debug information from the IMAP
  *                    library.  The value can be any PHP supported wrapper
@@ -177,7 +165,7 @@
  *            to namespaces that may not be publicly advertised by the IMAP
  *            server (see RFC 2342 [3]). These additional namespaces will be
  *            added to the list of available namespaces returned by the
- *            server.  This entry is only pertinent for IMAP servers.
+ *            server.  (IMAP only)
  *
  * timeout: (integer) Set the server timeout (in seconds).
  *
@@ -185,19 +173,29 @@
  *             IMAP server comparator. See RFC 4790 [3.1] - "collation-id" -
  *             for the format. Your IMAP server must support the I18NLEVEL
  *             extension for this setting to have an effect. By default,
- *             the server default comparator is used.
+ *             the server default comparator is used. (IMAP only)
  *
  * id: (array) Send ID information to the IMAP server. This must be a an array
  *     with the keys being the fields to send and the values being the
  *     associated values. Your IMAP server must support the ID extension for
  *     this setting to have an effect. See RFC 2971 [3.3] for a list of
- *     defined field values.
+ *     defined field values. (IMAP only)
  *
  * lang: (array) A list of languages (in priority order) to be used to display
  *       display human readable messages returned by the IMAP server. Your
  *       IMAP server must support the LANGUAGE extensions for this setting to
  *       have an effect. By default, IMAP messages are output in the IMAP
- *       server default language.
+ *       server default language. (IMAP only)
+ *
+ * preferred: (string) Only useful if you want to use the same servers.php file
+ *            for different machines: if the hostname of the IMP machine is
+ *            identical to one of those in the preferred list, then the
+ *            corresponding option in the select box will include SELECTED
+ *            (i.e. it is selected per default). Otherwise the first entry
+ *            in the list is selected.
+ *
+ *
+ * $Id$
  */
 
 /* Any entries whose key value ('foo' in $servers['foo']) begin with '_'
@@ -220,8 +218,6 @@ $servers['imap'] = array(
     'maildomain' => 'example.com',
     'smtphost' => 'smtp.example.com',
     'smtpport' => 25,
-    'realm' => '',
-    'preferred' => '',
     'cache' => false,
 );
 
@@ -235,23 +231,12 @@ $servers['cyrus'] = array(
     'maildomain' => 'example.com',
     'smtphost' => 'smtp.example.com',
     'smtpport' => 25,
-    'realm' => '',
-    'preferred' => '',
     'admin' => array(
         'params' => array(
-            'login' => 'cyrus',
-            'password' => 'cyrus_pass',
-            // The 'userhierarchy' parameter defaults to 'user.'
-            // If you are using a nonstandard hierarchy for personal
-            // mailboxes, you will need to set it here.
-            'userhierarchy' => 'user.',
-            // Although these defaults are normally all that is required,
-            // you can modify the following parameters from their default
-            // values.
-            'protocol' => 'imap',
-            'hostspec' => 'localhost',
-            'port' => 143
-        )
+            'admin_user' => 'cyrus',
+            'admin_password' => 'cyrus_pass',
+            'userhierarchy' => 'user.'
+        ),
     ),
     'quota' => array(
         'driver' => 'imap',
@@ -266,7 +251,7 @@ $servers['cyrus'] = array(
 
 $servers['pop'] = array(
     'name' => 'POP3 Server',
-    'server' => 'pop.example.com',
+    'hostspec' => 'pop.example.com',
     'hordeauth' => false,
     'protocol' => 'pop3',
     'port' => 110,
@@ -274,8 +259,6 @@ $servers['pop'] = array(
     'maildomain' => 'example.com',
     'smtphost' => 'smtp.example.com',
     'smtpport' => 25,
-    'realm' => '',
-    'preferred' => '',
     'cache' => false,
 );
 
@@ -284,13 +267,11 @@ $servers['secure-imap'] = array(
     'hostspec' => 'imap.example.com',
     'hordeauth' => false,
     'protocol' => 'imap',
-    'port' => 993,
-    'secure' => 'ssl',
+    'port' => 143,
+    'secure' => 'tls',
     'maildomain' => 'example.com',
     'smtphost' => 'smtp.example.com',
     'smtpport' => 25,
-    'realm' => '',
-    'preferred' => '',
     'acl' => false,
     'cache' => false,
 );
@@ -305,8 +286,6 @@ if ($GLOBALS['conf']['kolab']['enabled']) {
         'port' => $GLOBALS['conf']['kolab']['imap']['port'],
         'secure' => false,
         'maildomain' => $GLOBALS['conf']['kolab']['imap']['maildomain'],
-        'realm' => '',
-        'preferred' => '',
         'quota' => array(
             'driver' => 'imap',
             'params' => array(

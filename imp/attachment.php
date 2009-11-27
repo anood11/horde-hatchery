@@ -16,30 +16,28 @@
 
 // We do not need to be authenticated to get the file. Most users won't send
 // linked attachments just to other IMP users.
-@define('AUTH_HANDLER', true);
-$authentication = 'none';
-$session_control = 'none';
-require_once dirname(__FILE__) . '/lib/base.php';
+require_once dirname(__FILE__) . '/lib/Application.php';
+new IMP_Application(array('init' => array('authentication' => 'none', 'session_control' => 'none')));
 
 $self_url = Horde::selfUrl(false, true, true);
 
 // Lets see if we are even able to send the user an attachment.
 if (!$conf['compose']['link_attachments']) {
-    Horde::fatal(_("Linked attachments are forbidden."), $self_url, __LINE__);
+    throw new Horde_Exception(_("Linked attachments are forbidden."));
 }
 
 // Gather required form variables.
-$mail_user = Util::getFormData('u', null);
-$time_stamp = Util::getFormData('t', null);
-$file_name = Util::getFormData('f', null);
+$mail_user = Horde_Util::getFormData('u');
+$time_stamp = Horde_Util::getFormData('t');
+$file_name = Horde_Util::getFormData('f');
 if (is_null($mail_user) || is_null($time_stamp) || is_null($file_name)) {
-    Horde::fatal(_("The attachment was not found."), $self_url, __LINE__);
+    throw new Horde_Exception(_("The attachment was not found."));
 }
 
 // Initialize the VFS.
-$vfsroot = &VFS::singleton($conf['vfs']['type'], Horde::getDriverConfig('vfs', $conf['vfs']['type']));
-if (is_a($vfsroot, 'PEAR_Error')) {
-    Horde::fatal(sprintf(_("Could not create the VFS backend: %s"), $vfsroot->getMessage()), $self_url, __LINE__);
+$vfsroot = VFS::singleton($conf['vfs']['type'], Horde::getDriverConfig('vfs', $conf['vfs']['type']));
+if ($vfsroot instanceof PEAR_Error) {
+    throw new Horde_Exception(sprintf(_("Could not create the VFS backend: %s"), $vfsroot->getMessage()));
 }
 
 // Check if the file exists.
@@ -48,15 +46,15 @@ $time_stamp = basename($time_stamp);
 $file_name = escapeshellcmd(basename($file_name));
 $full_path = sprintf(IMP_Compose::VFS_LINK_ATTACH_PATH . '/%s/%d', $mail_user, $time_stamp);
 if (!$vfsroot->exists($full_path, $file_name)) {
-    Horde::fatal(_("The specified attachment does not exist. It may have been deleted by the original sender."), $self_url, __LINE__);
+    throw new Horde_Exception(_("The specified attachment does not exist. It may have been deleted by the original sender."));
 }
 
 // Check to see if we need to send a verification message.
 if ($conf['compose']['link_attachments_notify']) {
     if ($vfsroot->exists($full_path, $file_name . '.notify')) {
-        $delete_id = Util::getFormData('d');
+        $delete_id = Horde_Util::getFormData('d');
         $read_id = $vfsroot->read($full_path, $file_name . '.notify');
-        if (is_a($read_id, 'PEAR_Error')) {
+        if ($read_id instanceof PEAR_Error) {
             Horde::logMessage($read_id, __FILE__, __LINE__, PEAR_LOG_ERR);
         } elseif ($delete_id == $read_id) {
             $vfsroot->deleteFile($full_path, $file_name);
@@ -67,25 +65,23 @@ if ($conf['compose']['link_attachments_notify']) {
     } else {
         /* Create a random identifier for this file. */
         $id = uniqid(mt_rand());
-        $res = $vfsroot->writeData($full_path, $file_name . '.notify' , $id, true);
-        if (is_a($res, 'PEAR_Error')) {
+        $res = $vfsroot->writeData($full_path, $file_name . '.notify', $id, true);
+        if ($res instanceof PEAR_Error) {
             Horde::logMessage($res, __FILE__, __LINE__, PEAR_LOG_ERR);
         } else {
             /* Load $mail_user's preferences so that we can use their
              * locale information for the notification message. */
-            include_once 'Horde/Prefs.php';
-            $prefs = &Prefs::singleton($conf['prefs']['driver'], 'horde', $mail_user);
+            $prefs = Horde_Prefs::singleton($conf['prefs']['driver'], 'horde', $mail_user);
             $prefs->retrieve();
 
-            include_once 'Horde/Identity.php';
-            $mail_identity = &Identity::singleton('none', $mail_user);
+            $mail_identity = Horde_Prefs_Identity::singleton('none', $mail_user);
             $mail_address = $mail_identity->getDefaultFromAddress();
 
             /* Ignore missing addresses, which are returned as <>. */
             if (strlen($mail_address) > 2) {
                 $mail_address_full = $mail_identity->getDefaultFromAddress(true);
-                NLS::setTimeZone();
-                NLS::setLanguageEnvironment();
+                Horde_Nls::setTimeZone();
+                Horde_Nls::setLanguageEnvironment();
 
                 /* Set up the mail headers and read the log file. */
                 $msg_headers = new Horde_Mime_Headers();
@@ -99,8 +95,8 @@ if ($conf['compose']['link_attachments_notify']) {
 
                 $msg = new Horde_Mime_Part();
                 $msg->setType('text/plain');
-                $msg->setCharset(NLS::getCharset());
-                $msg->setContents(String::wrap(sprintf(_("Your linked attachment has been downloaded by at least one user.\n\nAttachment name: %s\nAttachment date: %s\n\nClick on the following link to permanently delete the attachment:\n%s"), $file_name, date('r', $time_stamp), Util::addParameter(Horde::selfUrl(true, false, true), 'd', $id))));
+                $msg->setCharset(Horde_Nls::getCharset());
+                $msg->setContents(Horde_String::wrap(sprintf(_("Your linked attachment has been downloaded by at least one user.\n\nAttachment name: %s\nAttachment date: %s\n\nClick on the following link to permanently delete the attachment:\n%s"), $file_name, date('r', $time_stamp), Horde_Util::addParameter(Horde::selfUrl(true, false, true), 'd', $id))));
 
                 $msg->send($mail_address, $msg_headers);
             }
@@ -110,9 +106,9 @@ if ($conf['compose']['link_attachments_notify']) {
 
 // Find the file's mime-type.
 $file_data = $vfsroot->read($full_path, $file_name);
-if (is_a($file_data, 'PEAR_Error')) {
+if ($file_data instanceof PEAR_Error) {
     Horde::logMessage($file_data, __FILE__, __LINE__, PEAR_LOG_ERR);
-    Horde::fatal(_("The specified file cannot be read."), $self_url, __LINE__);
+    throw new Horde_Exception(_("The specified file cannot be read."));
 }
 $mime_type = Horde_Mime_Magic::analyzeData($file_data, isset($conf['mime']['magic_db']) ? $conf['mime']['magic_db'] : null);
 if ($mime_type === false) {
@@ -121,7 +117,7 @@ if ($mime_type === false) {
 
 // Prevent 'jar:' attacks on Firefox.  See Ticket #5892.
 if ($browser->isBrowser('mozilla')) {
-    if (in_array(String::lower($mime_type), array('application/java-archive', 'application/x-jar'))) {
+    if (in_array(Horde_String::lower($mime_type), array('application/java-archive', 'application/x-jar'))) {
         $mime_type = 'application/octet-stream';
     }
 }

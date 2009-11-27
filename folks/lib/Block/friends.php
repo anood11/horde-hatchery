@@ -29,7 +29,7 @@ class Horde_Block_Folks_friends extends Horde_Block {
      */
     function _params()
     {
-        $params = array('display' => array('name' => _("Show friends that are"),
+        return array('display' => array('name' => _("Show friends that are"),
                                             'type' => 'enum',
                                             'default' => 'online',
                                             'values' => array('all' => _("All"),
@@ -45,8 +45,10 @@ class Horde_Block_Folks_friends extends Horde_Block {
     function _content()
     {
         require_once dirname(__FILE__) . '/../base.php';
+        require_once FOLKS_BASE . '/lib/Friends.php';
 
-        $friends = $GLOBALS['folks_driver']->getFriends(Auth::getAuth());
+        $friends_driver = Folks_Friends::singleton();
+        $friends = $friends_driver->getFriends();
         if ($friends instanceof PEAR_Error) {
             return $friends;
         }
@@ -56,30 +58,38 @@ class Horde_Block_Folks_friends extends Horde_Block {
             return $users;
         }
 
-        $online = '';
-        $offline = '';
-
-        foreach ($friends as $friend) {
-            if (array_key_exists($friend, $users)) {
-                $online .= '<a href="' . Folks::getUrlFor('user', $friend) . '">' . $friend . '</a> ';
-            } else {
-                $offline .= '<a href="' . Folks::getUrlFor('user', $friend) . '">' . $friend . '</a> ';
+        if (empty($this->_params['display']) || $this->_params['display'] == 'all') {
+            $list = $friends;
+        } else {
+            $list = array();
+            foreach ($friends as $friend) {
+                if ($this->_params['display'] == 'online') {
+                    if (array_key_exists($friend, $users)) {
+                        $list[] = $friend;
+                    }
+                } elseif ($this->_params['display'] == 'offline') {
+                    if (!array_key_exists($friend, $users)) {
+                        $list[] = $friend;
+                    }
+                }
             }
         }
 
-        switch ($this->_params['display']) {
-
-        case 'online':
-            return $online;
-            break;
-
-        case 'offline':
-            return $offline;
-            break;
-
-        default:
-            return $online . $offline;
-            break;
+        // Prepare actions
+        $actions = array(
+            array('url' => Horde::applicationUrl('user.php'),
+                'id' => 'user',
+                'name' => _("View profile")));
+        if ($GLOBALS['registry']->hasInterface('letter')) {
+            $actions[] = array('url' => $GLOBALS['registry']->callByPackage('letter', 'compose', ''),
+                                'id' => 'user_to',
+                                'name' => _("Send message"));
         }
+
+        Horde::addScriptFile('stripe.js', 'horde');
+
+        ob_start();
+        require FOLKS_TEMPLATES . '/block/users.php';
+        return ob_get_clean();
     }
 }

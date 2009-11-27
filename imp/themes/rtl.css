@@ -30,18 +30,7 @@
     clear: right;
 }
 
-/* Based on the Mozilla default defintions */
-#html-message blockquote[type="cite"] {
-    padding-left: 0;
-    padding-right: 1em;
-}
-
 /* Pad the addressbook icon in header compose links. */
 .msgheader img {
     padding: 1px 2px 1px 1px;
-}
-
-/* Redbox styles. */
-#RB_window {
-    text-align: right;
 }

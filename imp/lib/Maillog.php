@@ -11,8 +11,8 @@
  * @author  Michael Slusarz <slusarz@horde.org>
  * @package IMP
  */
-class IMP_Maillog {
-
+class IMP_Maillog
+{
     /**
      * Create a log entry.
      *
@@ -24,9 +24,9 @@ class IMP_Maillog {
      *                        message was sent to. For 'mdn' this is the
      *                        MDN-type of the message that was sent.
      */
-    function log($type, $msg_ids, $data = null)
+    static public function log($type, $msg_ids, $data = null)
     {
-        $history = &Horde_History::singleton();
+        $history = Horde_History::singleton();
 
         if (!is_array($msg_ids)) {
             $msg_ids = array($msg_ids);
@@ -51,13 +51,13 @@ class IMP_Maillog {
                 break;
             }
 
-            $r = $history->log(IMP_Maillog::_getUniqueHistoryId($val), $params);
+            $r = $history->log(self::_getUniqueHistoryId($val), $params);
 
             /* On error, log the error message only since informing the user
              * is just a waste of time and a potential point of confusion,
              * especially since they most likely don't even know the message
              * is being logged. */
-            if (is_a($r, 'PEAR_Error')) {
+            if ($r instanceof PEAR_Error) {
                 $entry = sprintf('Could not log message details to Horde_History. Error returned: %s', $r->getMessage());
                 Horde::logMessage($entry, __FILE__, __LINE__, PEAR_LOG_ERR);
             }
@@ -70,13 +70,19 @@ class IMP_Maillog {
      * @param string $msg_id  The Message-ID of the message.
      *
      * @return DataTreeObject  The DataTreeObject object containing the log
-     *                         information, or PEAR_Error on error.
+     *                         information.
+     * @throws Horde_Exception
      */
-    function &getLog($msg_id)
+    static public function getLog($msg_id)
     {
-        $history = &Horde_History::singleton();
-        $log = &$history->getHistory(IMP_Maillog::_getUniqueHistoryId($msg_id));
-        return $log;
+        $history = Horde_History::singleton();
+
+        $res = $history->getHistory(self::_getUniqueHistoryId($msg_id));
+        if ($res instanceof PEAR_Error) {
+            throw new Horde_Exception($res);
+        }
+
+        return $res;
     }
 
     /**
@@ -89,10 +95,15 @@ class IMP_Maillog {
      * @return boolean  True if a MDN has been sent for this message with
      *                  the given type.
      */
-    function sentMDN($msg_id, $type)
+    static public function sentMDN($msg_id, $type)
     {
-        $msg_history = IMP_Maillog::getLog($msg_id);
-        if ($msg_history && !is_a($msg_history, 'PEAR_Error')) {
+        try {
+            $msg_history = self::getLog($msg_id);
+        } catch (Horde_Exception $e) {
+            return false;
+        }
+
+        if ($msg_history) {
             foreach ($msg_history->getData() as $entry) {
                 if (($entry['action'] == 'mdn') && ($entry['type'] == $type)) {
                     return true;
@@ -104,45 +115,69 @@ class IMP_Maillog {
     }
 
     /**
-     * Retrieve any history for the given Message-ID and display via the
-     * Horde notification system.
+     * Retrieve any history for the given Message-ID and (optionally) display
+     * via the Horde notification system.
      *
      * @param string $msg_id  The Message-ID of the message.
      */
-    function displayLog($msg_id)
+    static public function displayLog($msg_id)
     {
-        global $notification, $prefs;
+        foreach (self::parseLog($msg_id) as $entry) {
+            $GLOBALS['notification']->push($entry['msg'], 'imp.' . $entry['action']);
+        }
+    }
 
-        $msg_history = IMP_Maillog::getLog($msg_id);
-        if ($msg_history && !is_a($msg_history, 'PEAR_Error')) {
-            foreach ($msg_history->getData() as $entry) {
-                $msg = null;
-                if (isset($entry['desc'])) {
-                    $msg = $entry['desc'];
-                } else {
-                    switch ($entry['action']) {
-                    case 'forward':
-                        $msg = sprintf(_("You forwarded this message on %%s to the following recipients: %s."), $entry['recipients']);
-                        break;
+    /**
+     * TODO
+     */
+    static public function parseLog($msg_id)
+    {
+        try {
+            if (!$msg_history = self::getLog($msg_id)) {
+                return array();
+            }
+        } catch (Horde_Exception $e) {
+            return array();
+        }
 
-                    case 'mdn':
-                        /* We don't display 'mdn' log entries. */
-                        break;
+        $df = $GLOBALS['prefs']->getValue('date_format');
+        $tf = $GLOBALS['prefs']->getValue('time_format');
+        $ret = array();
 
-                    case 'redirect':
-                        $msg = sprintf(_("You redirected this message to %s on %%s."), $entry['recipients']);
-                        break;
+        foreach ($msg_history->getData() as $entry) {
+            $msg = null;
 
-                    case 'reply':
-                        $msg = _("You replied to this message on %s.");
-                        break;
-                    }
-                }
-                if ($msg) {
-                    $notification->push(htmlspecialchars(@sprintf($msg, strftime($prefs->getValue('date_format') . ' ' . $prefs->getValue('time_format'), $entry['ts']))), 'imp.' . $entry['action']);
+            if (isset($entry['desc'])) {
+                $msg = $entry['desc'];
+            } else {
+                switch ($entry['action']) {
+                case 'forward':
+                    $msg = sprintf(_("You forwarded this message on %%s to: %s."), $entry['recipients']);
+                    break;
+
+                case 'mdn':
+                    /* We don't display 'mdn' log entries. */
+                    break;
+
+                case 'redirect':
+                    $msg = sprintf(_("You redirected this message to %s on %%s."), $entry['recipients']);
+                    break;
+
+                case 'reply':
+                    $msg = _("You replied to this message on %s.");
+                    break;
                 }
             }
+
+            if ($msg) {
+                $ret[] = array(
+                    'action' => $entry['action'],
+                    'msg' => @sprintf($msg, strftime($df . ' ' . $tf, $entry['ts']))
+                );
+            }
         }
+
+        return $ret;
     }
 
     /**
@@ -151,33 +186,31 @@ class IMP_Maillog {
      * @param mixed $msg_ids  Either a single Message-ID or an array
      *                        of Message-IDs to delete.
      */
-    function deleteLog($msg_ids)
+    static public function deleteLog($msg_ids)
     {
         if (!is_array($msg_ids)) {
             $msg_ids = array($msg_ids);
         }
         $msg_ids = array_map(array('IMP_Maillog', '_getUniqueHistoryId'), $msg_ids);
 
-        $history = &Horde_History::singleton();
+        $history = Horde_History::singleton();
         return $history->removeByNames($msg_ids);
     }
 
     /**
      * Generate the unique log ID for a forward/reply/redirect event.
      *
-     * @access private
-     *
      * @param string $msgid  The Message-ID of the original message.
      *
      * @return string  The unique log ID to use with Horde_History::.
      */
-    function _getUniqueHistoryId($msgid)
+    static protected function _getUniqueHistoryId($msgid)
     {
         if (is_array($msgid)) {
             return '';
         }
 
-        return implode('.', array('imp', str_replace('.', '*', Auth::getAuth()), $msgid));
+        return implode('.', array('imp', str_replace('.', '*', Horde_Auth::getAuth()), $msgid));
     }
 
 }

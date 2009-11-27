@@ -14,6 +14,13 @@
 class IMP_Sentmail
 {
     /**
+     * Hash containing configuration parameters.
+     *
+     * @var array
+     */
+    protected $_params = array();
+
+    /**
      * Attempts to return a concrete IMP_Sentmail instance based on $driver.
      *
      * @param string $driver  The type of the concrete IMP_Sentmail subclass
@@ -36,21 +43,25 @@ class IMP_Sentmail
             $params = Horde::getDriverConfig('sentmail', $driver);
         }
 
-        $driver = basename($driver);
-        $class = 'IMP_Sentmail_' . $driver;
-        if (!class_exists($class)) {
-            @include dirname(__FILE__) . '/Sentmail/' . $driver . '.php';
-        }
+        $class = 'IMP_Sentmail_' . ucfirst(basename($driver));
 
         if (class_exists($class)) {
-            $sentmail = new $class($params);
-            $result = $sentmail->initialize();
-            if (!is_a($result, 'PEAR_Error')) {
-                return $sentmail;
-            }
+            try {
+                return new $class($params);
+            } catch (Horde_Exception $e) {}
         }
 
-        return new IMP_Sentmail();
+        return new IMP_Sentmail($params);
+    }
+
+    /**
+     * Constructor.
+     *
+     * @throws Horde_Exception
+     */
+    protected function __construct($params = array())
+    {
+        $this->_params = $params;
     }
 
     /**
@@ -74,8 +85,6 @@ class IMP_Sentmail
                 $this->_log($action, $message_id, $recipient, $success);
             }
         }
-
-        $this->gc();
     }
 
     /**
@@ -99,6 +108,7 @@ class IMP_Sentmail
      *                        A value of null returns all message types.
      *
      * @return array  A list with the $limit most favourite recipients.
+     * @throws Horde_Exception
      */
     public function favouriteRecipients($limit,
                                         $filter = array('new', 'forward', 'reply', 'redirect'))
@@ -114,6 +124,7 @@ class IMP_Sentmail
      *                        user?
      *
      * @return integer  The number of recipients in the given time period.
+     * @throws Horde_Exception
      */
     public function numberOfRecipients($hours, $user = false)
     {
@@ -121,14 +132,11 @@ class IMP_Sentmail
     }
 
     /**
-     * Garbage collect log entries with a probability of 1%.
+     * Garbage collect log entries.
      */
     public function gc()
     {
-        /* A 1% chance we will run garbage collection during a call. */
-        if (rand(0, 99) == 0) {
-            $this->_deleteOldEntries(time() - $this->_params['threshold'] * 86400);
-        }
+        $this->_deleteOldEntries(time() - ((isset($this->_params['threshold']) ? $this->_params['threshold'] : 0) * 86400));
     }
 
     /**

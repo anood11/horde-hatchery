@@ -5,8 +5,6 @@
  * The data is read from standard input, the calendar and user name passed as
  * parameters.
  *
- * $Horde: kronolith/scripts/import_icals.php,v 1.9 2009/01/06 18:01:04 jan Exp $
- *
  * Copyright 2005-2009 The Horde Project (http://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (GPL). If you
@@ -15,21 +13,20 @@
  * @author Jan Schneider <jan@horde.org>
  */
 
-@define('AUTH_HANDLER', true);
+$kronolith_authentication = 'none';
 @define('HORDE_BASE', dirname(__FILE__) . '/../..');
 
 // Do CLI checks and environment setup first.
 require_once HORDE_BASE . '/lib/core.php';
-require_once 'Horde/CLI.php';
 
 // Make sure no one runs this from the web.
-if (!Horde_CLI::runningFromCLI()) {
+if (!Horde_Cli::runningFromCLI()) {
     exit("Must be run from the command line\n");
 }
 
 // Load the CLI environment - make sure there's no time limit, init some
 // variables, etc.
-$cli = &Horde_CLI::singleton();
+$cli = Horde_Cli::singleton();
 $cli->init();
 
 // Read command line parameters.
@@ -48,17 +45,16 @@ if (empty($ical)) {
 }
 
 // Registry.
-$registry = &Registry::singleton();
+$registry = Horde_Registry::singleton();
 
 // Set user.
-$auth = &Auth::singleton($conf['auth']['driver']);
-$auth->setAuth($user, array());
+Horde_Auth::setAuth($user, array());
 
 // Import data.
-$result = $registry->call('calendar/import',
-                          array($ical, 'text/calendar', $cal));
-if (is_a($result, 'PEAR_Error')) {
-    $cli->fatal($result->toString());
+try {
+    $result = $registry->call('calendar/import', array($ical, 'text/calendar', $cal));
+} catch (Horde_Exception $e) {
+    $cli->fatal($e->toString());
 }
 
 $cli->message('Imported successfully ' . count($result) . ' events', 'cli.success');

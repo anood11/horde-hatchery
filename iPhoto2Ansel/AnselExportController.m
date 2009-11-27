@@ -1,19 +1,21 @@
-//
-//  AnselExportController.m
-//  iPhoto2Ansel
-//
-//  Created by Michael Rubinsky on 10/23/08.
-//  Copyright 2008 __MyCompanyName__. All rights reserved.
-//
-#import "TURAnsel.h";
-#import "TURAnselGallery.h";
+/**
+ * AnselExportController.m
+ *
+ * Copyright 2008 The Horde Project (http://www.horde.org)
+ * 
+ * @license http://opensource.org/licenses/bsd-license.php
+ * @author  Michael J. Rubinsky <mrubinsk@horde.org>
+ */
+#import "TURAnselKit.h"
 #import "AnselExportController.h";
-#import "TURAnselGalleryPanelController.h";
 #import "FBProgressController.h";
-#import "ImageResizer.h";
+#import "NSStringAdditions.h";
+#import "NSDataAdditions.h";
 
 @interface AnselExportController (PrivateAPI)
 - (void)showNewServerSheet;
+- (void)showServerListPanel;
+- (void)updateServersPopupMenu;
 - (void)doConnect;
 - (void)connect;
 - (void)disconnect;
@@ -28,6 +30,7 @@
 // User default keys
 NSString * const TURAnselServersKey = @"AnselServers";
 NSString * const TURAnselExportSize = @"AnselExportSize";
+NSString * const TURAnselDefaultServerKey = @"AnselDefaultServer";
 
 // Server property keys
 NSString * const TURAnselServerNickKey = @"nickname";
@@ -35,12 +38,12 @@ NSString * const TURAnselServerEndpointKey = @"endpoint";
 NSString * const TURAnselServerUsernameKey = @"username";
 NSString * const TURAnselServerPasswordKey = @"password";
 
-
 @implementation AnselExportController
 
 @synthesize currentGallery;
 
-#pragma mark Overrides
+#pragma mark -
+#pragma mark init/dealloc
 /**
  * Set up UI defaults
  */
@@ -50,10 +53,15 @@ NSString * const TURAnselServerPasswordKey = @"password";
     NSMutableDictionary *defaultValues = [NSMutableDictionary dictionary];
     [defaultValues setObject: [NSNumber numberWithInt: 2]
                       forKey: TURAnselExportSize];    
-    [defaultValues setObject: [[NSMutableArray alloc] init] forKey: TURAnselServersKey];
+    
+    [defaultValues setObject: [[NSArray alloc] init] forKey: TURAnselServersKey];
+    
+    [defaultValues setObject: [[NSDictionary alloc] init]
+                      forKey: TURAnselDefaultServerKey];
+    
     NSUserDefaults *userPrefs = [NSUserDefaults standardUserDefaults];
     [userPrefs registerDefaults: defaultValues];
-        
+
     // UI Defaults
     [mSizePopUp selectItemWithTag: [userPrefs integerForKey:TURAnselExportSize]];
     [self setStatusText: @"Not Connected" withColor: [NSColor redColor]];
@@ -74,22 +82,71 @@ NSString * const TURAnselServerPasswordKey = @"password";
                                              selector: @selector(exportWindowDidBecomeKey:)
                                                  name: NSWindowDidBecomeKeyNotification 
                                                object :nil];
+    
+    // Holds gallery's images info for the gallery preview 
+    browserData = [[NSMutableArray alloc] init];
 }
 -(void)dealloc
 {
     //anselController is released from the AnselController delegate method.
+    NSLog(@"dealloc");
     [progressController release];
     [anselServers release];
     [currentServer release];
+    [browserData release];
     [super dealloc];
 }
-
-#pragma mark Getter Setters
 - (NSWindow *)window {
     return [mExportMgr window];
 }
 
+#pragma mark -
 #pragma mark Actions
+- (IBAction)clickViewGallery: (id)sender
+{
+    [spinner startAnimation: self];
+    [self setStatusText: @"Getting image list..."];
+    NSMutableArray *images = [currentGallery listImages];
+    if ([images count] == 0) {
+        [spinner stopAnimation: self];
+        [self setStatusText: @"Connected" withColor: [NSColor greenColor]];
+        return;
+    }
+
+    for (NSDictionary *image in images) {
+        NSString *caption = [image objectForKey:@"caption"];
+        if (caption == (NSString *)[NSNull null] || [caption length] == 0) {
+            caption = [image objectForKey:@"filename"];
+        }
+
+        NSDate *theDate = [NSDate dateWithTimeIntervalSince1970: [[image objectForKey:@"original_date"] doubleValue]];
+        AnselGalleryViewItem *item = [[AnselGalleryViewItem alloc] initWithURL: [NSURL URLWithString: [image objectForKey:@"url"]]
+                                                                     withTitle: caption
+                                                                      withDate: theDate];
+        [browserData addObject: item];
+    }
+
+    [NSApp beginSheet: mviewGallerySheet
+       modalForWindow: [self window]
+        modalDelegate: nil
+       didEndSelector: nil
+          contextInfo: nil];
+
+    [spinner stopAnimation: self];
+    [self setStatusText: @"Connected" withColor: [NSColor greenColor]];
+
+    [browserView reloadData];
+    
+}
+
+- (IBAction) closeGalleryView: (id)sender
+{
+    [NSApp endSheet: mviewGallerySheet];
+    [mviewGallerySheet orderOut: nil];
+    [browserData removeAllObjects];
+    [browserView reloadData];
+}
+
 // Put up the newGallerySheet NSPanel
 - (IBAction)showNewGallery: (id)sender
 {
@@ -98,8 +155,7 @@ NSString * const TURAnselServerPasswordKey = @"password";
     
     // Make sure we're not doing this for nothing
     if ([anselController state] == TURAnselStateConnected) {
-        
-        // It *looks* like index 0 is the first selected album?
+
         albumName = [mExportMgr albumNameAtIndex: 0];
         newGalleryController = [[TURAnselGalleryPanelController alloc] initWithController: anselController
                                                                           withGalleryName: albumName];
@@ -108,56 +164,128 @@ NSString * const TURAnselServerPasswordKey = @"password";
     }
 }
 
+// Remove the selected server from the saved list.
+- (IBAction)removeServer: (id)sender
+{
+    NSTableColumn *theCol = [serverTable tableColumnWithIdentifier:@"nickname"];
+    
+    // We are deleting the entry for the currently selected server - make sure 
+    // we disconnect.
+    if ([currentServer objectForKey:TURAnselServerNickKey] == [[theCol dataCell] stringValue]) {
+        [self disconnect];
+    }
+
+    NSUserDefaults *userPrefs = [NSUserDefaults standardUserDefaults]; 
+
+    // See if the removed server is the current default.
+    if ([[userPrefs objectForKey:TURAnselDefaultServerKey] objectForKey: TURAnselServerNickKey] == [[theCol dataCell] stringValue]) {
+        [userPrefs setObject: nil forKey:TURAnselDefaultServerKey];
+    }
+
+    // Remove it from the servers dictionary
+    [anselServers removeObjectAtIndex: [serverTable selectedRow]];
+    [userPrefs setObject:anselServers forKey:TURAnselServersKey];
+
+    [userPrefs synchronize];
+    [serverTable reloadData];
+    [self updateServersPopupMenu];
+}
+
+// Action sent by the server pop up menu
 - (IBAction)clickServer: (id)sender
 {
-      // Servers list
-//    if ([mServersPopUp indexOfSelectedItem] == [mServersPopUp numberOfItems] - 1) {
-//        [galleryListTable reloadData];
-//        [NSApp beginSheet:galleryListPanel modalForWindow:[exportManager window] modalDelegate:self didEndSelector:@selector(sheetDidEnd:returnCode:contextInfo:) contextInfo:NULL];
-//    }
-    
-    // Add new server
-    if ([mServersPopUp indexOfSelectedItem] == [mServersPopUp numberOfItems] - 1) {
+    NSLog(@"clickServer");
+    // Are we set to "none" now?
+    if ([mServersPopUp indexOfSelectedItem] == 0) {
+        [self disconnect];
+    } else if ([mServersPopUp indexOfSelectedItem] == [mServersPopUp numberOfItems] - 1) {
+        // Server list
+        [self showServerListPanel];
+    } else if ([mServersPopUp indexOfSelectedItem] == [mServersPopUp numberOfItems] - 2) {
+        // New Server
         [self showNewServerSheet];
     } else if (![[[mServersPopUp selectedItem] title] isEqual:@"(None)"]) {
-            
-        if (currentServer == [[mServersPopUp selectedItem] representedObject]) {
-            return;
+        // Connect to a server
+        if (currentServer != nil) {
+            [self disconnect];
         }
-        [self disconnect];
         currentServer = [[mServersPopUp selectedItem] representedObject];
         [self doConnect];
     }
+}
+- (void)clickGallery
+{
+    [self setStatusText: @"Loading gallery data..."];
+    [[self window] flushWindow];
+    
+    [spinner startAnimation: self];
+    int row = [galleryCombo indexOfSelectedItem];
+    [currentGallery setDelegate:nil];
+    [currentGallery autorelease];
+    currentGallery = [[anselController getGalleryByIndex:row] retain];
+    [currentGallery setDelegate: self];
+    [mImageCountLabel setStringValue:[NSString stringWithFormat: @"Image Count: %d", [currentGallery galleryImageCount]]];
+    
+    // Obtain and properly size the image for screen
+    NSImage *theImage = [[NSImage alloc] initWithContentsOfURL: [currentGallery galleryKeyImageURL]];
+    NSSize imageSize;
+#if MAC_OS_X_VERSION_MIN_REQUIRED > MAC_OS_X_VERSION_10_5
+    imageSize.width = [[theImage bestRepresentationForRect:[defaultImageView bounds] context:nil hints:nil] pixelsWide];
+    imageSize.height = [[theImage bestRepresentationForRect:[defaultImageView bounds] context:nil hints:nil] pixelsHigh];
+#else
+    imageSize.width = [[theImage bestRepresentationForDevice:nil] pixelsWide];
+    imageSize.height = [[theImage bestRepresentationForDevice:nil] pixelsHigh];
+#endif
+    [theImage setScalesWhenResized:YES];
+    [theImage setSize:imageSize];
+    [self doSwapImage: theImage];
+    [theImage autorelease];
+}
+
+- (void)doSwapImage: (id)theImage
+{
+    [self setStatusText: @"Connected" withColor: [NSColor greenColor]];  
+    [defaultImageView setImage: theImage];
+    [self canExport];
+    [viewGallery setEnabled: YES];
+    [spinner stopAnimation: self];
+}
+
+- (IBAction) closeServerList: (id)sender
+{
+    [serverTable setDelegate: nil];
+    [NSApp endSheet: serverListPanel];
+    [serverListPanel orderOut: nil];
 }
 
 // Server setup sheet
 -(IBAction)doAddServer: (id)sender
 {
-    // Sanity Checking
-    // TODO - make sure we don't have more than one gallery with the same nick??
-//    if (![[serverNickName stringValue] length]) {
-//        // TODO: Errors - for now, just silently fail, yea, I know....
-//        return;
-//    }
-
     NSDictionary *newServer = [[NSDictionary alloc] initWithObjectsAndKeys:
-                               [serverNickName stringValue], TURAnselServerNickKey,
-                               [anselHostURL stringValue], TURAnselServerEndpointKey,
-                               [username stringValue], TURAnselServerUsernameKey,
-                               [password stringValue], TURAnselServerPasswordKey,
+                               [mServerSheetServerNickName stringValue], TURAnselServerNickKey,
+                               [mServerSheetHostURL stringValue], TURAnselServerEndpointKey,
+                               [mServerSheetUsername stringValue], TURAnselServerUsernameKey,
+                               [mServerSheetPassword stringValue], TURAnselServerPasswordKey,
                                 nil];
     [anselServers addObject: newServer];
     [NSApp endSheet: newServerSheet];
     [newServerSheet orderOut: nil];
-    
-    [self disconnect];
     currentServer = [newServer retain];
     [self doConnect];
     
     // Save it to the userdefaults
     NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
-    [prefs setObject:anselServers  forKey:TURAnselServersKey];
-    [mServers reloadData];
+    [prefs setObject:anselServers  forKey:TURAnselServersKey];   
+    
+    int defaultState = [mMakeNewServerDefault state];
+    if (defaultState == NSOnState) {
+        [prefs setObject: currentServer forKey: TURAnselDefaultServerKey];
+    }
+
+    [prefs synchronize];
+
+    [self updateServersPopupMenu];
+    
     [newServer release];
 }
 
@@ -167,6 +295,7 @@ NSString * const TURAnselServerPasswordKey = @"password";
     [newServerSheet orderOut: nil];
 }
 
+#pragma mark -
 #pragma mark ExportPluginProtocol
 // Initialize
 - (id)initWithExportImageObj:(id <ExportImageProtocol>)obj
@@ -190,7 +319,8 @@ NSString * const TURAnselServerPasswordKey = @"password";
 }
 
 // These seem to be called when the plugin panel is actived/deactivated while
-// export screen is open, not when the plugin is finished.
+// export screen is open, not when the plugin is finished or the export window
+// is clsoed from the Cancel button
 - (void)viewWillBeActivated
 {
     [self canExport];
@@ -242,7 +372,6 @@ NSString * const TURAnselServerPasswordKey = @"password";
 {
 }
 
-
 // Export was clicked in the UI
 // Do any preperations/validations and call our own privatePerformExport
 // (We don't want the iPhoto progress controller).
@@ -256,6 +385,7 @@ NSString * const TURAnselServerPasswordKey = @"password";
 {
 }
 
+#pragma mark -
 #pragma mark Progress (We don't use these)
 - (ExportPluginProgress *)progress
 {
@@ -280,10 +410,26 @@ NSString * const TURAnselServerPasswordKey = @"password";
     return @"iPhoto2Ansel Export Plugin v1.0";
 }
 
+#pragma mark -
 #pragma mark PrivateAPI
 - (void) showNewServerSheet
 {
     [NSApp beginSheet: newServerSheet
+       modalForWindow: [self window]
+        modalDelegate: nil
+       didEndSelector: nil
+          contextInfo: nil];
+    
+    // Make sure these are cleared.
+    [mServerSheetHostURL setStringValue: @""];
+    [mServerSheetUsername setStringValue: @""];
+    [mServerSheetPassword setStringValue: @""];
+    [mServerSheetServerNickName setStringValue: @""];
+}
+
+- (void) showServerListPanel
+{
+    [NSApp beginSheet: serverListPanel
        modalForWindow: [self window]
         modalDelegate: nil
        didEndSelector: nil
@@ -294,21 +440,24 @@ NSString * const TURAnselServerPasswordKey = @"password";
 - (void)canExport
 {
     if ([anselController state] == TURAnselStateConnected) {
-        [newGalleryButton setEnabled: YES];
+        [mNewGalleryButton setEnabled: YES];
         [galleryCombo setEnabled: YES];
         if (currentGallery != nil) {
             [mExportMgr enableControls];
         }
     } else {
-        [newGalleryButton setEnabled: NO];
+        [mNewGalleryButton setEnabled: NO];
         [mExportMgr disableControls];   
-        [galleryCombo setEnabled: YES];
+        [galleryCombo setEnabled: NO];
+        [viewGallery setEnabled: NO];
     }
 }
 
 - (void)updateServersPopupMenu
 {
+    NSLog(@"updateServersPopupMenu");
     [mServersPopUp removeAllItems];
+    [mServersPopUp addItemWithTitle:@"(None)"];
     for (NSDictionary *server in anselServers) {
         NSMenuItem *menuItem = [[NSMenuItem alloc] initWithTitle: [server objectForKey: TURAnselServerNickKey]
                                                           action: nil
@@ -316,17 +465,13 @@ NSString * const TURAnselServerPasswordKey = @"password";
         [menuItem setRepresentedObject: server];
         [[mServersPopUp menu] addItem: menuItem];
     }
-    if ([anselServers count] == 0) {
-        [mServersPopUp addItemWithTitle:@"(None)"];
-       //[mainStatusString setStringValue:@"No galleries configured"];
-    }
     
     // add separator
     [[mServersPopUp menu] addItem:[NSMenuItem separatorItem]];
     
     // add Add Gallery... and Edit List... options
     [mServersPopUp addItemWithTitle:@"Add Server..."];
-    //[mServersPopUp addItemWithTitle:@"Edit Server List..."];
+    [mServersPopUp addItemWithTitle:@"Edit Server List..."];
     
     // fix selection
     [mServersPopUp selectItemAtIndex:0];
@@ -335,9 +480,18 @@ NSString * const TURAnselServerPasswordKey = @"password";
 // Make sure we clean up from any previous connection
 -(void)disconnect
 {
+    NSLog(@"Disconnect");
+    NSLog(@"%d", [galleryCombo indexOfSelectedItem]);
     [galleryCombo setDelegate: nil];
+    if ([galleryCombo indexOfSelectedItem] >= 0) {
+        [galleryCombo deselectItemAtIndex: [galleryCombo indexOfSelectedItem]];
+    }
     [galleryCombo setDataSource: nil];
-
+    [galleryCombo reloadData];
+    [galleryCombo setEnabled: NO];
+    [mNewGalleryButton setEnabled: NO];
+    [viewGallery setEnabled: NO];
+    [defaultImageView setImage: nil];
     [currentServer release];
     currentServer = nil;
     [anselController release];
@@ -348,20 +502,24 @@ NSString * const TURAnselServerPasswordKey = @"password";
 // Start the connection process.
 -(void)doConnect
 {
+    [galleryCombo deselectItemAtIndex: [galleryCombo indexOfSelectedItem]];
+    [mServersPopUp setEnabled: NO];
+    [mNewGalleryButton setEnabled: NO];
+    [viewGallery setEnabled: NO];
     [self setStatusText: @"Connecting..."];
     [spinner startAnimation: self];
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
     NSDictionary *p = [[NSDictionary alloc] initWithObjects: [NSArray arrayWithObjects:
                                                               [currentServer objectForKey:TURAnselServerEndpointKey],
                                                               [currentServer objectForKey:TURAnselServerUsernameKey],
-                                                              [currentServer objectForKey:TURAnselServerPasswordKey]]
+                                                              [currentServer objectForKey:TURAnselServerPasswordKey],
+                                                              nil]
                                                     forKeys: [NSArray arrayWithObjects:@"endpoint", @"username", @"password", nil]];
     // Create our controller
     anselController = [[TURAnsel alloc] initWithConnectionParameters:p];
     [anselController setDelegate:self];
     
     // Set up the galleryCombo
-    [galleryCombo setUsesDataSource:YES];
     [galleryCombo setDataSource:anselController];
     [galleryCombo setDelegate:self];
     [spinner startAnimation:self];
@@ -370,13 +528,15 @@ NSString * const TURAnselServerPasswordKey = @"password";
                               toTarget: self 
                             withObject: nil];
     [p release];
-    [pool release];
+    [pool drain];
 }
 
 // Runs in a new thread.
 - (void)connect
 {
+    NSAutoreleasePool *threadPool = [[NSAutoreleasePool alloc] init];
     [anselController connect];
+    [threadPool drain];
 }
 
 // Update our progress controller. Always update on the main thread.
@@ -406,6 +566,7 @@ NSString * const TURAnselServerPasswordKey = @"password";
 // Runs the actual export (This is run in it's own thread)
 - (void) runExport
 {   
+    NSAutoreleasePool *threadPool = [[NSAutoreleasePool alloc] init];
     // Init the progress bar and image counts.
     int count = [mExportMgr imageCount];
     currentImageCount = 0;   
@@ -422,10 +583,65 @@ NSString * const TURAnselServerPasswordKey = @"password";
                                              withObject: [NSNumber numberWithDouble: progressPercent]
                                           waitUntilDone: NO];
         
-        // Prepare the image data
-        NSData *theImage = [[NSData alloc] initWithContentsOfFile: [mExportMgr imagePathAtIndex:i]];
+        /*** Pull out (and generate) all desired metadata before rescaling the image ***/
+        CGImageSourceRef source;
         
-        CGFloat imageSize;
+        // Dictionary to hold all metadata
+        NSMutableDictionary *metadata;
+        
+        // Read the image into ImageIO (the only API that supports more then just EXIF metadata)
+        // Read it into a NSData object first, since we'll need that later on anyway...
+        NSData *theImageData = [[NSData alloc] initWithContentsOfFile: [mExportMgr imagePathAtIndex:i]];
+        
+        if (!theImageData) {
+            i++;
+            [theImageData release];
+            continue;
+        }
+        source = CGImageSourceCreateWithData((CFDataRef)theImageData, NULL);
+        
+        // Get the metadata dictionary, cast it to NSDictionary the get a mutable copy of it
+        CFDictionaryRef metadataRef = CGImageSourceCopyPropertiesAtIndex(source, 0, NULL);
+        NSDictionary *immutableMetadata = (NSDictionary *)metadataRef;
+        metadata = [immutableMetadata mutableCopy];
+        
+        // Clean up some stuff we own that we don't need anymore
+        immutableMetadata = nil;
+        CFRelease(metadataRef);
+        CFRelease(source);
+        
+        // Get a mutable copy of the IPTC Dictionary for the image...create a 
+        // new one if one doesn't exist in the image.
+        NSDictionary *iptcData = [metadata objectForKey:(NSString *)kCGImagePropertyIPTCDictionary];
+        NSMutableDictionary *iptcDict = [iptcData mutableCopy];
+        if (!iptcDict) {
+            iptcDict = [[NSMutableDictionary alloc] init];
+        }
+        iptcData = nil;
+        
+        // Get the keywords from the image and put it into the dictionary...
+        // TODO: should we check for any existing keywords first?
+        NSArray *keywords = [mExportMgr imageKeywordsAtIndex: i];
+        if (keywords) {
+            [iptcDict setObject:keywords  forKey:(NSString *)kCGImagePropertyIPTCKeywords];
+        }    
+        
+        // Add the title to the ObjectName field
+        NSString *imageDescription = [mExportMgr imageTitleAtIndex:i];
+        [iptcDict setObject:imageDescription forKey:(NSString *)kCGImagePropertyIPTCObjectName];
+        
+        // Add any ratings...not sure what Ansel will do with them yet, but no harm in including them
+        // eh...seems like quartz mistakenly puts this value into the keywords field???
+        //NSNumber *imageRating = [NSNumber numberWithInt: [mExportMgr imageRatingAtIndex:i]];
+        //[iptcDict setObject:imageRating forKey:(NSString *)kCGImagePropertyIPTCStarRating];
+        
+        // Add the IPTC Dictionary back into the metadata dictionary....we use this
+        // after the image is scaled.
+        [metadata setObject:iptcDict forKey:(NSString *)kCGImagePropertyIPTCDictionary];
+        
+        
+        // Prepare to scale the image now that we have the metadata out of it
+        float imageSize;
         switch([mSizePopUp selectedTag])
         {
             case 0:
@@ -445,24 +661,87 @@ NSString * const TURAnselServerPasswordKey = @"password";
                 break;
         }
         
-        
         [self postProgressStatus: [NSString stringWithFormat: @"Resizing image %d out of %d", (i+1), count]];
-        NSData *scaledData = [ImageResizer getScaledImageFromData: theImage
-                                                           toSize: NSMakeSize(imageSize, imageSize)];
+        
+        // Don't even touch this code if we are uploading the original image
+        NSData *scaledData;
+        if ([mSizePopUp selectedTag] != 3) {
+            
+            // Put the image data into CIImage
+            CIImage *im = [CIImage imageWithData: theImageData];
+            
+            // Calculate the scale factor and the actual dimensions.
+            float yscale;
+            if([im extent].size.height > [im extent].size.width) {
+                yscale = imageSize / [im extent].size.height;
+            }  else {
+                yscale = imageSize / [im extent].size.width;
+            }
+            float finalW = ceilf(yscale * [im extent].size.width);
+            float finalH = ceilf(yscale * [im extent].size.height);
+            
+            // Do an affine clamp (This essentially makes the image extent
+            // infinite but removes problems with certain image sizes causing
+            // edge artifacts.
+            CIFilter *clamp = [CIFilter filterWithName:@"CIAffineClamp"];
+            [clamp setValue:[NSAffineTransform transform] forKey:@"inputTransform"];
+            [clamp setValue:im forKey:@"inputImage"];
+            im = [clamp valueForKey:@"outputImage"];
+            
+            // Now perform the scale
+            CIFilter *f = [CIFilter filterWithName: @"CILanczosScaleTransform"];
+            [f setDefaults];
+            [f setValue:[NSNumber numberWithFloat:yscale]
+                 forKey:@"inputScale"];
+            [f setValue:[NSNumber numberWithFloat:1.0]
+                 forKey:@"inputAspectRatio"];
+            [f setValue:im forKey:@"inputImage"];
+            im = [f valueForKey:@"outputImage"];
+            
+            // Crop back to finite dimensions
+            CIFilter *crop = [CIFilter filterWithName:@"CICrop"];
+            [crop setValue:[CIVector vectorWithX:0.0
+                                               Y:0.0                                               
+                                               Z: finalW
+                                               W: finalH]
+                    forKey:@"inputRectangle"];
+            
+            [crop setValue: im forKey:@"inputImage"];
+            im = [crop valueForKey:@"outputImage"];
+   
+            // Now get the image back out into a NSData object
+            NSBitmapImageRep *bitmap = [[NSBitmapImageRep alloc] initWithCIImage: im];
+            NSDictionary *properties = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithFloat: 1.0], NSImageCompressionFactor, nil];
+            scaledData = [bitmap representationUsingType:NSPNGFileType properties:properties];	
+            [bitmap release];
 
+        } else {
+            scaledData = theImageData;
+        }
+        
+        // Now we have resized image data, put back the metadata...
+        source = CGImageSourceCreateWithData((CFDataRef)scaledData, NULL);
+        NSData *newData = [[NSMutableData alloc] init];
+        CGImageDestinationRef destination = CGImageDestinationCreateWithData((CFMutableDataRef)newData, (CFStringRef)@"public.jpeg", 1, NULL);
+        NSDictionary *destProps = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithFloat: 1.0], (NSString *)kCGImageDestinationLossyCompressionQuality, nil];
+        CGImageDestinationSetProperties(destination, (CFDictionaryRef)destProps);
+        
+        // Get the data out of quartz (image data is in the NSData *newData object now.
+        CGImageDestinationAddImageFromSource(destination, source, 0, (CFDictionaryRef)metadata);
+        CGImageDestinationFinalize(destination);
+        CFRelease(source);
         [self postProgressStatus: [NSString stringWithFormat: @"Encoding image %d out of %d", (i+1), count]];
-        NSString *base64ImageData = [NSString base64StringFromData: scaledData  
-                                                            length: [scaledData length]];
+        NSString *base64ImageData = [NSString base64StringFromData: newData  
+                                                            length: [newData length]];
+        CFRelease(destination);
+        [newData release];
+        [theImageData release];
         
         // Get the filename/path for this image. This returns either the most
         // recent version of the image, the original, or (if RAW) the jpeg 
-        // version of the original. Still need to figure out how to modify
-        // the image size/quality etc... when not doing a file export.
+        // version of the original.
         NSString *filename = [mExportMgr imageFileNameAtIndex:i];
-        NSString *imageDescription = [mExportMgr imageTitleAtIndex:i];
-        NSArray *keywords = [mExportMgr imageKeywordsAtIndex: i];
         
-        NSLog(@"Keywords: %@", keywords);
         NSArray *keys = [[NSArray alloc] initWithObjects:
                          @"filename", @"description", @"data", @"type", @"tags", nil];
         
@@ -475,10 +754,10 @@ NSString * const TURAnselServerPasswordKey = @"password";
                            keywords,
                            nil];
         
-        NSDictionary *imageData = [[NSDictionary alloc] initWithObjects:values
-                                                                forKeys:keys];
+        NSDictionary *imageDataDict = [[NSDictionary alloc] initWithObjects:values
+                                                                    forKeys:keys];
         NSDictionary *params = [[NSDictionary alloc] initWithObjectsAndKeys:
-                                imageData, @"data", 
+                                imageDataDict, @"data", 
                                 [NSNumber numberWithBool:NO], @"default",
                                 nil];
         
@@ -487,9 +766,11 @@ NSString * const TURAnselServerPasswordKey = @"password";
         [currentGallery uploadImageObject: params];
         [keys release];
         [values release];
-        [imageData release];
+        [imageDataDict release];
+        [metadata release];
         [params release];
-        [pool release];
+        [iptcDict release];
+        [pool drain];
         i++;
     }
     
@@ -508,7 +789,10 @@ NSString * const TURAnselServerPasswordKey = @"password";
     // Need to do this ourselves since we aren't using iPhoto's progress bar.
     // Not really cancelling the export, but all this method does is close
     // the export interface and notify iPhoto that we are done.
+    [mServersPopUp selectItemAtIndex: 0];
+    [self disconnect];
     [mExportMgr cancelExportBeforeBeginning];
+    [threadPool drain];
 }
 
 - (void)setStatusText: (NSString *)message withColor:(NSColor *)theColor
@@ -522,6 +806,7 @@ NSString * const TURAnselServerPasswordKey = @"password";
     [statusLabel setTextColor: [NSColor blackColor]];
 }
 
+#pragma mark -
 #pragma mark TURAnselDelegate
 
 // The ansel controller is initialized, populate the gallery data
@@ -529,16 +814,21 @@ NSString * const TURAnselServerPasswordKey = @"password";
 - (void)TURAnselDidInitialize
 {   
     [galleryCombo reloadData];
+    [galleryCombo setEnabled: true];
+    [mNewGalleryButton setEnabled: true];
     [self setStatusText: @"Connected" withColor: [NSColor greenColor]];
     [self canExport];
     [spinner stopAnimation: self];
+    [mServersPopUp setEnabled: true];
 }
 
 - (void)TURAnselHadError: (NSError *)error
 {
     // Stop the spinner
+    NSLog(@"TURAnselHadError");
     [spinner stopAnimation: self];
     [self disconnect];
+    [mServersPopUp setEnabled: true];
     
     NSAlert *alert;
     // For some reason, this method doesn't pick up our userInfo dictionary...
@@ -562,8 +852,9 @@ NSString * const TURAnselServerPasswordKey = @"password";
     [alert release];
 }
 
+#pragma mark -
 #pragma mark TURAnselGalleryDelegate
-- (void)TURAnselGalleryDidUploadImage: (TURAnselGallery *)gallery {
+- (void)TURAnselGalleryDidUploadImage: (id *)gallery {
     if (++currentImageCount == [mExportMgr imageCount] || cancelExport == YES) {
         [currentGallery setDelegate:nil];
         [currentGallery release];
@@ -571,27 +862,30 @@ NSString * const TURAnselServerPasswordKey = @"password";
         [anselController release];
         [galleryCombo setDelegate:nil];
     }
-}
+} 
 
+#pragma mark -
 #pragma mark comboBoxDelegate
-// Probably should have a seperate controller for each combobox, but this is
-// pretty small stuff...
 - (void)comboBoxSelectionDidChange:(NSNotification *)notification
-{    
-    // Yes, I'm comparing the pointers here on purpose
-    if ([notification object] == galleryCombo) {
-        int row = [galleryCombo indexOfSelectedItem];
-        [currentGallery setDelegate:nil];
-        [currentGallery autorelease];
-        currentGallery = [[anselController getGalleryByIndex:row] retain];
-        [currentGallery setDelegate: self];
-        NSImage *theImage = [[NSImage alloc] initWithContentsOfURL: [currentGallery galleryDefaultImageURL]];
-        [defaultImageView setImage: theImage];
-        [theImage release];
-        [self canExport];
-    }
+{   
+    NSLog(@"comboBoxSelectionDidChange");
+    [self clickGallery];    
 }
 
+#pragma mark NSTableView Datasource
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)aTableView
+{
+    return [anselServers count];
+}
+
+- (id)tableView:(NSTableView *)aTableView
+    objectValueForTableColumn:(NSTableColumn *)aTableColumn
+                          row:(NSInteger)rowIndex
+{
+    return [[anselServers objectAtIndex: rowIndex] objectForKey: [aTableColumn identifier]];
+}
+
+#pragma mark -
 #pragma mark TURAnselGalleryPanel Notifications
 - (void)TURAnselGalleryPanelDidAddGallery
 {
@@ -600,20 +894,55 @@ NSString * const TURAnselServerPasswordKey = @"password";
     [galleryCombo selectItemAtIndex: [galleryCombo numberOfItems] - 1];
 }
 
-#pragma mark export notifications
+#pragma mark -
+#pragma mark ExportController notifications
+- (void)exportWindowWillClose: (NSNotification *)notification
+{
+    NSLog(@"exportWindowWIllClose");
+    [self disconnect];
+    [mServersPopUp selectItemAtIndex: 0];
+    [[NSNotificationCenter defaultCenter] removeObserver: self
+                                                    name: NSWindowWillCloseNotification
+                                                  object: nil];
+}
 - (void)exportWindowDidBecomeKey: (NSNotification *)notification
 {
-    // We only want to do this once...
+    NSLog(@"exportWindowDidBecomeKey");
+    // Register for the close notification
+    [[NSNotificationCenter defaultCenter] addObserver: self
+                                             selector: @selector(exportWindowWillClose:)
+                                                 name: NSWindowWillCloseNotification
+                                              object :nil];
+
+    // Only do this once
     [[NSNotificationCenter defaultCenter] removeObserver: self
-                                                    name: NSWindowDidBecomeKeyNotification 
+                                                    name: NSWindowDidBecomeKeyNotification
                                                   object: nil];
+
     [self updateServersPopupMenu];
+
     if ([anselServers count] == 0) {
         [self showNewServerSheet];
     } else {
-        // Autoconnect to default server. For now, just make it the first one.
-        currentServer = [[mServersPopUp selectedItem] representedObject];
-        [self doConnect];
+        // Try to autoconnect and select the proper server in the popup.
+        NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
+        NSDictionary *defaultServer = [prefs objectForKey:TURAnselDefaultServerKey];
+        if ([defaultServer count]) {
+            currentServer = [defaultServer retain];
+            int itemCount = [mServersPopUp numberOfItems];
+
+            // C99 mode is off by default in Apple's gcc.
+            int i;
+            for (i = 0; i < itemCount; i++) {
+                NSDictionary *menuItem = [[mServersPopUp itemAtIndex: i] representedObject];
+                if ([[menuItem objectForKey: TURAnselServerNickKey] isEqual: [currentServer objectForKey:TURAnselServerNickKey]]) {
+                    [mServersPopUp selectItemAtIndex: i];
+                    break;
+                }
+            }
+
+            [self doConnect];
+        }
     }
 }
 - (void)sizeChoiceWillChange: (NSNotification *)notification
@@ -624,14 +953,14 @@ NSString * const TURAnselServerPasswordKey = @"password";
     [userPrefs synchronize];
 }
 
-#pragma mark NSComboBoxDatasource delegates (used for server list)
-- (id)comboBox: (NSComboBox *)aComboBox objectValueForItemAtIndex: (NSInteger)index
-{
-    NSDictionary *server = [anselServers objectAtIndex: index];
-    return [server objectForKey:TURAnselServerNickKey];
+#pragma mark -
+#pragma mark IKImageBrowserView Datasource methods
+- (NSUInteger)numberOfItemsInImageBrowser:(IKImageBrowserView *) aBrowser
+{	
+	return [browserData count];
 }
-- (NSInteger)numberOfItemsInComboBox: (NSComboBox *)aComboBox
+- (id)imageBrowser:(IKImageBrowserView *) aBrowser itemAtIndex:(NSUInteger)index
 {
-    return [anselServers count];
+	return [browserData objectAtIndex:index];
 }
 @end

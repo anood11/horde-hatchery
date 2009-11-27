@@ -15,20 +15,17 @@
 
 exit;
 
-define('AUTH_HANDLER', true);
+$folks_authentication = 'none';
 require_once dirname(__FILE__) . '/../lib/base.php';
 
-// Do CLI checks and environment setup first.
-require_once 'Horde/CLI.php';
-
 // Make sure no one runs this from the web.
-if (!Horde_CLI::runningFromCLI()) {
+if (!Horde_Cli::runningFromCLI()) {
     exit("Must be run from the command line\n");
 }
 
 // Load the CLI environment.
-Horde_CLI::init();
-$cli = &Horde_CLI::singleton();
+Horde_Cli::init();
+$cli = &Horde_Cli::singleton();
 
 $db = DB::connect($conf['sql']);
 if ($db instanceof PEAR_Error) {

@@ -3,8 +3,6 @@
 $block_name = _("Last news blogged");
 
 /**
- * $Horde: news/lib/Block/category.php,v 1.40 2004/06/01 14:46:58 chuck Exp $
- *
  * @package Horde_Block
 */
 
@@ -35,7 +33,7 @@ class Horde_Block_News_last_blogs extends Horde_Block {
                  'ORDER BY n.publish DESC ' .
                  'LIMIT 0, ' . $this->_params['limit'];
 
-        $params = array(News::CONFIRMED, 0, NLS::select());
+        $params = array(News::CONFIRMED, 0, Horde_Nls::select());
         $rows = $GLOBALS['news']->db->getAll($query, $params, DB_FETCHMODE_ASSOC);
         if ($rows instanceof PEAR_Error) {
             return $rows->getDebugInfo();

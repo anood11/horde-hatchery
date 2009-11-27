@@ -6,8 +6,6 @@ $block_name = _("Prior Events");
  * Horde_Block_Kronolith_monthlist:: Implementation of the Horde_Block
  * API to display a list of previous calendar items grouped by month.
  *
- * $Horde: kronolith/lib/Block/prevmonthlist.php,v 1.37 2008/10/13 23:00:17 jan Exp $
- *
  * @package Horde_Block
  */
 class Horde_Block_Kronolith_prevmonthlist extends Horde_Block {
@@ -23,7 +21,10 @@ class Horde_Block_Kronolith_prevmonthlist extends Horde_Block {
                                             'default' => '__all'),
                         'months' => array('name' => _("Months Before"),
                                           'type' => 'int',
-                                          'default' => 2));
+                                          'default' => 2),
+                        'alarms' => array('name' => _("Show only events that have an alarm set?"),
+                                          'type' => 'checkbox',
+                                          'default' => 0));
         $params['calendar']['values']['__all'] = _("All Visible");
         foreach (Kronolith::listCalendars() as $id => $cal) {
             $params['calendar']['values'][$id] = $cal->get('name');
@@ -44,7 +45,7 @@ class Horde_Block_Kronolith_prevmonthlist extends Horde_Block {
         } else {
             $url_params = array();
         }
-        return Horde::link(Horde::url(Util::addParameter($GLOBALS['registry']->getInitialPage(), $url_params), true)) . _("Prior Events") . '</a>';
+        return Horde::link(Horde::url(Horde_Util::addParameter($GLOBALS['registry']->getInitialPage(), $url_params), true)) . _("Prior Events") . '</a>';
     }
 
     /**
@@ -54,23 +55,24 @@ class Horde_Block_Kronolith_prevmonthlist extends Horde_Block {
      */
     function _content()
     {
+        // @TODO Remove this hack when maintenance is refactored.
+        $no_maint = true;
         require_once dirname(__FILE__) . '/../base.php';
-        require_once KRONOLITH_BASE . '/lib/Day.php';
 
         global $registry, $prefs;
 
-        Horde::addScriptFile('tooltip.js', 'horde', true);
+        $GLOBALS['from_block'] = true;
+
+        Horde::addScriptFile('tooltips.js', 'horde');
 
         $startDate = new Horde_Date(array('year' => date('Y'), 'month' => date('n') - $this->_params['months'], 'mday' => date('j')));
-        $startDate->correct();
         $endDate = new Horde_Date(array('year' => date('Y'), 'month' => date('n'), 'mday' => date('j') - 1));
-        $endDate->correct();
 
         $current_month = '';
 
         if (isset($this->_params['calendar']) && $this->_params['calendar'] != '__all') {
             $calendar = $GLOBALS['kronolith_shares']->getShare($this->_params['calendar']);
-            if (!is_a($calendar, 'PEAR_Error') && !$calendar->hasPermission(Auth::getAuth(), PERMS_SHOW)) {
+            if (!is_a($calendar, 'PEAR_Error') && !$calendar->hasPermission(Horde_Auth::getAuth(), Horde_Perms::SHOW)) {
                 return _("Permission Denied");
             }
             $all_events = Kronolith::listEvents($startDate, $endDate, array($this->_params['calendar']), true, false, false);
@@ -81,7 +83,7 @@ class Horde_Block_Kronolith_prevmonthlist extends Horde_Block {
             return '<em>' . $all_events->getMessage() . '</em>';
         }
 
-        $html = '<link href="' . Horde::applicationUrl('themes/categoryCSS.php', true) . '" rel="stylesheet" type="text/css" />';
+        $html = '';
 
         /* How many days do we need to check. */
         $days = Date_Calc::dateDiff($startDate->mday, $startDate->month, $startDate->year,
@@ -115,7 +117,7 @@ class Horde_Block_Kronolith_prevmonthlist extends Horde_Block {
                     continue;
                 }
 
-                if ($prefs->getValue('summary_alarms') && !$event->alarm) {
+                if ($this->_params['alarms'] && !$event->alarm) {
                     continue;
                 }
                 if ($firstevent) {
@@ -140,9 +142,6 @@ class Horde_Block_Kronolith_prevmonthlist extends Horde_Block {
                 } else {
                     $html .= $event->getLocation();
                 }
-
-                $html .= '</td><td class="text">&nbsp;&nbsp;&nbsp;</td>' .
-                    '<td class="block-eventbox category' . hash('md5', $event->getCategory()) . '" valign="top">';
 
                 if ($event->start->compareDate($startDate) < 0 &&
                     $event->end->compareDate($startDate) > 0) {

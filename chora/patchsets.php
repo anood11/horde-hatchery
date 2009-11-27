@@ -1,5 +1,7 @@
 <?php
 /**
+ * Patchsets script.
+ *
  * Copyright 1999-2009 The Horde Project (http://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (GPL). If you
@@ -7,84 +9,120 @@
  *
  * @author  Anil Madhavapeddy <anil@recoil.org>
  * @author  Chuck Hagenbuch <chuck@horde.org>
+ * @author  Michael Slusarz <slusarz@horde.org>
  * @package Chora
  */
 
 require_once dirname(__FILE__) . '/lib/base.php';
 
-// Exit if cvsps isn't active or it's not a subversion repository.
-if (empty($conf['paths']['cvsps']) &&
-    !$GLOBALS['VC']->hasFeature('patchsets')) {
-    header('Location: ' . Chora::url('', $where));
+// Exit if patchset feature is not available.
+if (!$GLOBALS['VC']->hasFeature('patchsets')) {
+    header('Location: ' . Chora::url('browsefile', $where));
     exit;
 }
 
-if (!$VC->isFile($fullname)) {
-    Chora::fatal(sprintf(_("%s: no such file or directory"), $where), '404 Not Found');
+$ps_opts = array();
+if ($ps_id = Horde_Util::getFormData('ps')) {
+    $ps_opts['range'] = array($ps_id);
+    $title = sprintf(_("Patchset %s"), $ps_id);
+}
+
+if ($where) {
+    $ps_opts['file'] = $where;
+    if (!isset($title)) {
+        $title = sprintf(_("Patchsets for %s"), $where);
+    }
 }
 
 try {
-    $ps = $VC->getPatchsetObject($where, $cache);
+    $ps = $VC->getPatchsetObject($ps_opts);
+    $patchsets = $ps->getPatchsets();
 } catch (Horde_Vcs_Exception $e) {
     Chora::fatal($e);
 }
 
-$title = sprintf(_("Patchsets for %s"), $where);
-$extraLink = Chora::getFileViews();
+if (empty($patchsets)) {
+    Chora::fatal(_("Patchset Not Found"), '400 Bad Request');
+}
 
-Horde::addScriptFile('prototype.js', 'horde', true);
-Horde::addScriptFile('tables.js', 'horde', true);
-Horde::addScriptFile('QuickFinder.js', 'horde', true);
+$extraLink = Chora::getFileViews($where, 'patchsets');
+
+Horde::addScriptFile('tables.js', 'horde');
+
+// JS search not needed if showing a single patchset
+if ($ps_id) {
+    Horde::addScriptFile('QuickFinder.js', 'horde');
+}
+
 require CHORA_TEMPLATES . '/common-header.inc';
 require CHORA_TEMPLATES . '/menu.inc';
-require CHORA_TEMPLATES . '/headerbar.inc';
-require CHORA_TEMPLATES . '/patchsets/header.inc';
 
-$patchsets = $ps->_patchsets;
-krsort($patchsets);
-foreach ($patchsets as $id => $patchset) {
-    $commitDate = Chora::formatDate($patchset['date']);
-    $readableDate = Chora::readableTime($patchset['date'], true);
-    $author = Chora::showAuthorName($patchset['author'], true);
-    if ($VC->hasFeature('patchsets')) {
-        // The diff should be from the top of the source tree so as to
-        // get all files.
-        $topDir = substr($where, 0, strpos($where, '/', 1));
 
-        // Subversion supports patchset diffs natively.
-        $patchset_link = Horde::link(Chora::url('diff', $topDir, array('r1' => $id - 1, 'r2' => $id, 't' => 'unified'))) .
-            $id . '</a>';
-    } else {
-        // Not supported in any other VC systems yet.
-        $patchset_link = $id;
-    }
+if ($ps_id) {
+    require CHORA_TEMPLATES . '/patchsets/header.inc';
+} else {
+    require CHORA_TEMPLATES . '/headerbar.inc';
+    require CHORA_TEMPLATES . '/patchsets/header.inc';
+    require CHORA_TEMPLATES . '/patchsets/header_table.inc';
+}
 
-    $files = array();
-    $dir = dirname($where);
+$diff_img = Horde::img('diff.png', _("Diff"));
+
+reset($patchsets);
+while (list($id, $patchset) = each($patchsets)) {
+    $patchset_link = Horde::link(Chora::url('patchsets', $where, array('ps' => $id)), sprintf("Patchset for %s", $id)) . htmlspecialchars($VC->abbrev($id)) . '</a>';
+
+    $files = $tags = array();
+
     foreach ($patchset['members'] as $member) {
         $file = array();
-        $mywhere = ($VC->hasFeature('patchsets')) ? $member['file'] : $dir . '/' . $member['file'];
-        $file['file'] = Horde::link(Chora::url('patchsets', $mywhere)) . htmlspecialchars($member['file']) . '</a>';
-        if ($member['from'] == 'INITIAL') {
+
+        $file['file'] = Horde::link(Chora::url('co', $member['file'])) . htmlspecialchars($member['file']) . '</a>';
+
+        if ($member['status'] == Horde_Vcs_Patchset::ADDED) {
             $file['from'] = '<ins>' . _("New File") . '</ins>';
             $file['diff'] = '';
         } else {
-            $file['from'] = Horde::link(Chora::url('co', $mywhere, array('r' => $member['from']))) . htmlspecialchars($member['from']) . '</a>';
-            $file['diff'] = Horde::link(Chora::url('diff', $mywhere, array('r1' => $member['from'], 'r2' => $member['to'], 't' => 'unified'))) . ' ' . Horde::img('diff.png', _("Diff")) . '</a>';
+            $file['from'] = Horde::link(Chora::url('co', $member['file'], array('r' => $member['from'])), $member['from']) . htmlspecialchars($VC->abbrev($member['from'])) . '</a>';
+            $file['diff'] = Horde::link(Chora::url('diff', $member['file'], array('r1' => $member['from'], 'r2' => $member['to'])), _("Diff")) . ' ' . $diff_img . '</a>';
         }
-        if (substr($member['to'], -6) == '(DEAD)') {
+
+        if ($member['status'] == Horde_Vcs_Patchset::DELETED) {
             $file['to'] = '<del>' . _("Deleted") . '</del>';
             $file['diff'] = '';
         } else {
-            $file['to'] = Horde::link(Chora::url('co', $mywhere, array('r' => $member['to']))) . htmlspecialchars($member['to']) . '</a>';
+            $file['to'] = Horde::link(Chora::url('co', $member['file'], array('r' => $member['to'])), $member['to']) . htmlspecialchars($VC->abbrev($member['to'])) . '</a>';
+        }
+
+        if (isset($member['added'])) {
+            $file['added'] = $member['added'];
+            $file['deleted'] = $member['deleted'];
         }
 
         $files[] = $file;
     }
 
+    $commitDate = Chora::formatDate($patchset['date']);
+    $readableDate = Chora::readableTime($patchset['date'], true);
+    $author = Chora::showAuthorName($patchset['author'], true);
     $logMessage = Chora::formatLogMessage($patchset['log']);
-    require CHORA_TEMPLATES . '/patchsets/ps.inc';
+
+    if (!empty($patchset['branch'])) {
+        $tags = $patchset['branch'];
+    }
+
+    if (!empty($patchset['tag'])) {
+        $tags = array_merge($tags, $patchset['tag']);
+    }
+
+    if ($ps_id) {
+        require CHORA_TEMPLATES . '/patchsets/ps_single.inc';
+    } else {
+        require CHORA_TEMPLATES . '/patchsets/ps.inc';
+    }
 }
 
-require CHORA_TEMPLATES . '/patchsets/footer.inc';
+if (!$ps_id) {
+    require CHORA_TEMPLATES . '/patchsets/footer.inc';
+}
 require $registry->get('templates', 'horde') . '/common-footer.inc';
