@@ -258,8 +258,8 @@ abstract class Kronolith_Event
 
         if ($eventObject !== null) {
             $this->fromDriver($eventObject);
-            $tagger = Kronolith::getTagger();
-            $this->tags = $tagger->getTags($this->getUID(), 'event');
+/*             $tagger = Kronolith::getTagger(); */
+/*             $this->tags = $tagger->getTags($this->getUID(), 'event'); */
         }
     }
 

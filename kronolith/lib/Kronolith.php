@@ -872,6 +872,7 @@ class Kronolith
                 $GLOBALS['display_calendars'][] = $id;
             }
         }
+        $GLOBALS['display_calendars'] = array_keys($GLOBALS['all_calendars']);
 
         /* Make sure all the remote calendars still exist. */
         $_temp = $GLOBALS['display_remote_calendars'];
